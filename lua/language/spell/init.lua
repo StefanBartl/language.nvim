@@ -217,19 +217,22 @@ function M.run(lang, scope)
   local use_trouble = cfg().ui and cfg().ui.view ~= "quickfix"
   local scope_label = require("language.scope").label(scope)
 
-  -- Wide scopes: one-shot overview (no per-buffer session toggling).
+  -- Wide scopes: one-shot overview (no per-buffer session toggling). Collection
+  -- is async-capable (external CLI provider for cwd/path), so publish/open the
+  -- list in the callback.
   if scope.kind == "cwd" or scope.kind == "path" then
-    local issues = collect.scan(scope, cfg())
-    if #issues == 0 then
-      notify.info(("No spelling errors found (%s)"):format(scope_label))
-      return
-    end
-    touched = list.publish(issues, SOURCE, cfg().max_highlights)
-    list.open(
-      issues,
-      { use_trouble = use_trouble, source = SOURCE, title = "Spellcheck: " .. scope_label }
-    )
-    notify.info(("%d spelling issue(s) across %s"):format(#issues, scope_label))
+    collect.gather(scope, cfg(), function(issues)
+      if #issues == 0 then
+        notify.info(("No spelling errors found (%s)"):format(scope_label))
+        return
+      end
+      touched = list.publish(issues, SOURCE, cfg().max_highlights)
+      list.open(
+        issues,
+        { use_trouble = use_trouble, source = SOURCE, title = "Spellcheck: " .. scope_label }
+      )
+      notify.info(("%d spelling issue(s) across %s"):format(#issues, scope_label))
+    end)
     return
   end
 

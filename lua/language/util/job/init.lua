@@ -43,7 +43,7 @@ function M.run(argv, opts)
   end
 
   if vim.system then
-    local proc = vim.system(argv, { text = true }, function(o)
+    local proc = vim.system(argv, { text = true, cwd = opts.cwd }, function(o)
       finish(o.code == 0, o.stdout, o.stderr)
     end)
     job.cancel = function()
@@ -73,6 +73,7 @@ function M.run(argv, opts)
   -- Legacy fallback: jobstart with a list command (no shell).
   local stdout, stderr = {}, {}
   local jid = vim.fn.jobstart(argv, {
+    cwd = opts.cwd,
     stdout_buffered = true,
     stderr_buffered = true,
     on_stdout = function(_, data)

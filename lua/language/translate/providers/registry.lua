@@ -1,9 +1,10 @@
 ---@module 'language.translate.providers.registry'
 ---@brief Resolves the active translate provider from config, with fallback.
 ---@description
---- Phase-3 ships the keyless `google` provider. `deepl`, `shell` and a
---- user-defined `custom` engine are registered in a later phase; the registry
---- shape is already in place so adding them is a one-line change.
+--- Registered engines: `google` (keyless default), `deepl` (official API, key
+--- from config/env), `shell` (translate-shell `trans`), and `custom` (any CLI
+--- via a user-supplied cmd/parse). `resolve` tries the configured engine, then
+--- the fallback chain, returning the first whose `available()` is true.
 
 require("language.translate.@types")
 
@@ -12,6 +13,9 @@ local M = {}
 ---@type table<string, LanguageTranslateProvider>
 local PROVIDERS = {
   google = require("language.translate.providers.google"),
+  deepl = require("language.translate.providers.deepl"),
+  shell = require("language.translate.providers.shell"),
+  custom = require("language.translate.providers.custom"),
 }
 
 ---Return a provider by name (or nil if unknown).

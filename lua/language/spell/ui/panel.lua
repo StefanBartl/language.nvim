@@ -38,13 +38,24 @@ local function format_row(issue, multi_file)
   return ("%-22s [%s]%s%s"):format(issue.word, issue.kind, occ, where)
 end
 
----Open (or re-open) the review panel for `scope`.
+---Open (or re-open) the review panel for `scope`. Issue collection is
+---async-capable (cwd/path may run an external CLI provider), so rendering
+---happens in the gather callback.
 ---@param scope LanguageScope
 ---@param cfg LanguageSpellCfg
 ---@return nil
 function M.open(scope, cfg)
-  local issues = collect.scan(scope, cfg)
+  collect.gather(scope, cfg, function(issues)
+    M._render(scope, cfg, issues)
+  end)
+end
 
+---Render the panel for already-collected issues.
+---@param scope LanguageScope
+---@param cfg LanguageSpellCfg
+---@param issues LanguageSpellIssue[]
+---@return nil
+function M._render(scope, cfg, issues)
   if #issues == 0 then
     notify.info("No spelling issues — nothing to review")
     list.clear()

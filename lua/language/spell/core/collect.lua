@@ -1,12 +1,22 @@
 ---@module 'language.spell.core.collect'
----@brief Scan a scope and post-process (ignore filter + dedupe) in one place.
+---@brief Runs the configured providers for a scope, then post-processes.
 ---@description
---- Shared by the session flow (`language.spell`) and the review panel
---- (`language.spell.ui.panel`) so both apply the exact same filtering and
---- deduplication. Currently backed by the native provider; the multi-provider
---- registry is wired in a later phase.
+--- Central place both the session flow and the review panel go through, so
+--- filtering and deduplication are identical everywhere.
+---
+--- Two entry points:
+---   • `scan`   — synchronous. Native spelling (+ LSP grammar harvest for
+---     single-buffer scopes). Used by the buffer session flow.
+---   • `gather` — async-capable. For cwd/path scopes it prefers an external CLI
+---     provider (typos) when configured and available, falling back to the
+---     synchronous native scan. Delivers issues via callback. Used by wide
+---     scopes and the panel.
+
+require("language.@types")
+require("language.spell.@types")
 
 local native = require("language.spell.providers.native")
+local lsp = require("language.spell.providers.lsp")
 local ignore = require("language.spell.core.ignore")
 
 local M = {}
@@ -33,17 +43,80 @@ local function dedupe(issues)
   return out
 end
 
----Scan a scope and return post-processed issues.
----@param scope LanguageScope
+---Apply ignore filter and (optional) dedupe.
+---@param issues LanguageSpellIssue[]
 ---@param cfg LanguageSpellCfg
 ---@return LanguageSpellIssue[]
-function M.scan(scope, cfg)
-  local issues = native.scan_scope(scope, cfg)
+local function post(issues, cfg)
   issues = ignore.filter(issues)
   if cfg.ui and cfg.ui.dedupe then
     issues = dedupe(issues)
   end
   return issues
+end
+
+---@param cfg LanguageSpellCfg
+---@param list string[]|nil
+---@param name string
+---@return boolean
+local function provider_enabled(cfg, list, name)
+  for _, n in ipairs(list or {}) do
+    if n == name then
+      return true
+    end
+  end
+  return false
+end
+
+---Synchronous scan: native spelling plus LSP grammar harvest for single-buffer
+---scopes. For cwd/path this uses the native loaded-buffer scan.
+---@param scope LanguageScope
+---@param cfg LanguageSpellCfg
+---@return LanguageSpellIssue[]
+function M.scan(scope, cfg)
+  local issues = native.scan_scope(scope, cfg)
+
+  local single_buffer = scope.kind == "buffer"
+    or scope.kind == "visible"
+    or scope.kind == "selection"
+  local buffer_providers = cfg.providers and cfg.providers.buffer
+  if single_buffer and provider_enabled(cfg, buffer_providers, "lsp") and lsp.available() then
+    vim.list_extend(issues, lsp.scan_scope(scope, cfg))
+  end
+
+  return post(issues, cfg)
+end
+
+---Async-capable scan. For cwd/path, prefers the first available external CLI
+---provider in `providers.cwd`, else falls back to the synchronous native scan.
+---Always delivers via `cb`.
+---@param scope LanguageScope
+---@param cfg LanguageSpellCfg
+---@param cb fun(issues: LanguageSpellIssue[])
+---@return Language.Job|nil
+function M.gather(scope, cfg, cb)
+  if scope.kind ~= "cwd" and scope.kind ~= "path" then
+    cb(M.scan(scope, cfg))
+    return nil
+  end
+
+  for _, name in ipairs((cfg.providers and cfg.providers.cwd) or { "native" }) do
+    if name == "typos" then
+      local typos = require("language.spell.providers.typos")
+      if typos.available() then
+        return typos.scan_async(scope, cfg, function(issues)
+          cb(post(issues, cfg))
+        end)
+      end
+    elseif name == "native" then
+      cb(M.scan(scope, cfg))
+      return nil
+    end
+  end
+
+  -- Nothing matched: native fallback.
+  cb(M.scan(scope, cfg))
+  return nil
 end
 
 return M
