@@ -1,0 +1,202 @@
+*language.txt*                     Spell, grammar and translation tooling
+
+                         language.nvim manual~
+
+Author:  Stefan Bartl
+License: MIT
+
+==============================================================================
+CONTENTS                                                    *language-contents*
+
+    1. Introduction ......................... |language-introduction|
+    2. Requirements ......................... |language-requirements|
+    3. Setup ................................ |language-setup|
+    4. Commands ............................. |language-commands|
+    5. Scoping .............................. |language-scoping|
+    6. Spell providers ...................... |language-spell-providers|
+    7. Translate engines .................... |language-translate-engines|
+    8. The review panel ..................... |language-panel|
+    9. Configuration ........................ |language-config|
+   10. Health ............................... |language-health|
+
+==============================================================================
+1. INTRODUCTION                                         *language-introduction*
+
+language.nvim bundles three text-language tools behind two commands:
+
+    :Spellcheck   spelling + grammar review, worked through in one place
+    :Translate    translate a range/selection (in-place or to a popup)
+
+It is built on lib.nvim as a shared dependency. Translation is native — no
+external Neovim plugin is required; only `curl` (the default Google engine is
+keyless and works out of the box).
+
+Both domains share one explicit scope model (|language-scoping|) and run
+long/blocking work asynchronously with cancellation and timeouts.
+
+==============================================================================
+2. REQUIREMENTS                                         *language-requirements*
+
+    - Neovim >= 0.9 (0.10+ recommended for `vim.system`)
+    - StefanBartl/lib.nvim
+    - curl (for translation)
+    - Optional: folke/trouble.nvim (nicer list; pcall-guarded)
+    - Optional spell CLIs: typos, cspell, codespell
+    - Optional grammar LSP: harper_ls, ltex
+    - Optional: trans (translate-shell) for the "shell" engine
+
+==============================================================================
+3. SETUP                                                       *language-setup*
+
+>lua
+    require("language").setup({})
+<
+Call once. See |language-config| for the full option tree. With lazy.nvim: >lua
+    {
+      "StefanBartl/language.nvim",
+      dependencies = { "StefanBartl/lib.nvim", "folke/trouble.nvim" },
+      event = "VeryLazy",
+      config = function() require("language").setup({}) end,
+    }
+<
+==============================================================================
+4. COMMANDS                                                 *language-commands*
+
+                                                                   *:Spellcheck*
+:Spellcheck [lang] [scope|verb]
+    Run a spell/grammar review. Optional first argument is a language code
+    (e.g. `en`, `de`, `en,de`). The scope/verb may be one of:
+        buffer      current buffer (default)
+        visible     the visible window range only
+        cwd         recursively across the working directory
+        path=<p>    a file or directory
+        clear       end the session, remove diagnostics
+        refresh     re-scan the current buffer session
+    Examples: >
+        :Spellcheck
+        :Spellcheck en cwd
+        :Spellcheck de path=~/notes
+        :Spellcheck clear
+<
+                                                                    *:Translate*
+:[range]Translate <lang> [--nocode] [--output=<mode>] [scope]
+    Translate the given range/selection to <lang>. Options:
+        --nocode            skip fenced code blocks and inline-code lines
+        --output=<mode>     replace (default) | float | notify | clipboard
+                            | insert
+        scope               selection (default with a range) | buffer
+                            | path=<p>
+    Examples: >
+        :'<,'>Translate DE
+        :Translate EN --nocode
+        :Translate FR --output=float
+<
+==============================================================================
+5. SCOPING                                                   *language-scoping*
+
+Every action operates over an explicit scope, parsed once from the command
+arguments:
+
+    buffer      whole current buffer
+    visible     only the visible window range (fast; good for live scanning)
+    cwd         recursively across the working directory (always async)
+    path=<p>    a file OR a directory (recursive)
+    selection   a visual/line range (mainly for :Translate)
+
+For cwd/path scopes with many files, an external CLI spell provider is
+preferred (one process over the tree); otherwise the native scanner is used
+and yields between chunks so the editor never freezes.
+
+==============================================================================
+6. SPELL PROVIDERS                                   *language-spell-providers*
+
+    native      Neovim's own `vim.spell` (always available). Respects
+                'spelllang'. Splits CamelCase/snake_case identifiers and only
+                reports genuinely misspelled subwords; restricts checking to
+                Treesitter @spell regions (comments/strings/prose) and skips
+                URLs/emails.
+    typos       fast tree-wide scanning via the `typos` CLI (async), used for
+                cwd/path scopes when available.
+    cspell,     external CLIs (opt-in).
+    codespell
+    harper/ltex grammar diagnostics from a running language server are
+                harvested and shown alongside spelling issues (kind = grammar).
+
+Which providers run per scope is controlled by `spell.providers` (see
+|language-config|).
+
+==============================================================================
+7. TRANSLATE ENGINES                             *language-translate-engines*
+
+    google      default, keyless (only curl). Modern gtx endpoint.
+    deepl       official DeepL API. Key from `translate.deepl.api_key` or the
+                DEEPL_API_KEY environment variable. Free keys (suffix ":fx")
+                use api-free.deepl.com automatically.
+    shell       the `trans` CLI (translate-shell).
+    custom      any CLI: provide `translate.custom = { cmd = fun(lines,
+                target, source) -> argv, parse = fun(stdout) -> lines }`.
+
+`translate.engine` selects the engine; `translate.fallback` is a chain tried
+when the chosen engine is unavailable (e.g. deepl without a key -> google).
+
+==============================================================================
+8. THE REVIEW PANEL                                            *language-panel*
+
+With `spell.ui.view = "picker"` (default), :Spellcheck opens an interactive
+panel listing every issue. Select an item to open its action menu:
+
+    Choose suggestion…     pick a replacement (fuzzy)
+    Replace all in buffer… apply a replacement to every occurrence
+    Add to dictionary      zg-equivalent (persistent or session)
+    Ignore (session)       drop this word for the session
+    Ignore (persistent)    drop this word permanently (ignore file)
+    Jump to location       go to the issue
+
+After each action the panel re-scans and re-opens. Set `view = "quickfix"` for
+the classic diagnostics + quickfix/Trouble session flow with z= fixing.
+
+==============================================================================
+9. CONFIGURATION                                              *language-config*
+
+Defaults (abridged; see lua/language/config/DEFAULTS.lua): >lua
+    require("language").setup({
+      spell = {
+        providers = {
+          buffer = { "native", "lsp" },
+          cwd    = { "typos", "native" },
+          lsp    = { enable = true, servers = { "harper_ls", "ltex" } },
+        },
+        filetypes = { "markdown","text","gitcommit","tex","rst","asciidoc","help" },
+        default_scope = "buffer",
+        live = false, live_scope = "visible", scan_debounce_ms = 400,
+        word_split = { enable = true, min_length = 4 },
+        regions = { treesitter_spell = true, skip_urls = true, skip_emails = true },
+        programming_dict = false,
+        max_highlights = 100, max_file_lines = 20000, skip_readonly = true,
+        ui = { view = "picker", preview = true, group_by = "file", dedupe = true },
+        dictionary = {
+          ignore_file = vim.fn.stdpath("state") .. "/language/spell_ignore.txt",
+          use_spellfile = true, replace_all = true,
+        },
+        keymaps = { panel = "<leader>ss", next = "]s",
+                    fix = "<leader>z=", fix1 = "<leader>z1" },
+      },
+      translate = {
+        engine = "google", fallback = { "google" },
+        default_output = "replace", default_input = "selection",
+        nocode_default = false, timeout_ms = 8000,
+        deepl = { api_key = nil },
+      },
+      commands = true,
+    })
+<
+==============================================================================
+10. HEALTH                                                    *language-health*
+
+>vim
+    :checkhealth language
+<
+Reports Neovim/lib.nvim availability, spell provider tools, grammar LSP
+clients, curl and DeepL key status, and 'spelllang'.
+
+vim:tw=78:ts=8:ft=help:norl:

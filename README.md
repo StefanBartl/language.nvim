@@ -9,8 +9,9 @@ Gebaut auf [lib.nvim](https://github.com/StefanBartl/lib.nvim) als bewusst
 geteilte Abhängigkeit. Für Übersetzung wird **kein** externes Neovim-Plugin
 benötigt — nur `curl` (Google-Engine, keyless, funktioniert ohne Konfiguration).
 
-> Status: **Beta** — Kern (Spell-Session + Google-Übersetzung) funktioniert;
-> Multi-Provider-Panel, weitere Engines und Grammatik-LSP folgen (siehe Roadmap).
+> Status: **Beta** — Spell-Panel, Grammatik (LSP), Mehrfach-Provider und
+> mehrere Übersetzungs-Engines funktionieren. Weitere Ideen: siehe
+> [ROADMAP](docs/ROADMAP/ROADMAP.md).
 
 ---
 
@@ -20,9 +21,15 @@ benötigt — nur `curl` (Google-Engine, keyless, funktioniert ohne Konfiguratio
   Ausgabe als Diagnostics + [Trouble](https://github.com/folke/trouble.nvim)
   oder Quickfix-Fallback. `z=`-Fix mit automatischem Weitersprung, Session-State
   pro Buffer, spelllang-Wiederherstellung.
+- **Grammatik & Provider** — Grammatik-Diagnostics von `harper_ls`/`ltex`
+  erscheinen im selben Panel; optionale externe Spell-CLIs (`typos` für
+  cwd/path-Scans). Native Erkennung splittet CamelCase/snake_case und prüft nur
+  Treesitter-`@spell`-Regionen (Kommentare/Strings/Prosa), keine Identifier-
+  Fehlalarme.
 - **`:Translate`** — Range/Auswahl übersetzen; Default ersetzt den Text in place
   (`--output=replace`), alternativ `float`/`notify`/`clipboard`/`insert`.
-  `--nocode` überspringt Fenced- und Inline-Code.
+  `--nocode` überspringt Fenced- und Inline-Code. Engines: Google (keyless),
+  DeepL, translate-shell, eigenes CLI — mit Fallback-Kette.
 - **Scoping** — jede Aktion kennt einen Scope: `buffer` (Default), `visible`,
   `cwd`, `path=<datei|ordner>`, `selection`.
 - **Asynchron & abbrechbar** — externe Prozesse (curl u. a.) laufen non-blocking
@@ -91,10 +98,13 @@ require("language").setup({
     keymaps = { panel = "<leader>ss", next = "]s", fix = "<leader>z=", fix1 = "<leader>z1" },
   },
   translate = {
-    engine = "google",          -- keyless Default
-    default_output = "replace",
+    engine = "google",           -- "google" (keyless) | "deepl" | "shell" | "custom"
+    fallback = { "google" },     -- Engine-Kette, wenn die gewählte nicht verfügbar ist
+    default_output = "replace",  -- replace | float | notify | clipboard | insert
     timeout_ms = 8000,
-    deepl = { api_key = nil },   -- oder $DEEPL_API_KEY (deepl-Engine folgt)
+    deepl = { api_key = nil },   -- oder $DEEPL_API_KEY
+    -- custom = { cmd = function(lines, target) return { "trans", "-b", ... } end,
+    --           parse = function(out) return vim.split(out, "\n") end },
   },
 })
 ```
