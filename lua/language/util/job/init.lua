@@ -12,12 +12,40 @@ local M = {}
 ---@class Language.Job
 ---@field cancel fun(): nil    -- kill the process and drop the callback
 
+---Windows can't spawn `.cmd`/`.bat` shims (e.g. npm-installed `cspell`) directly
+---via libuv — they must go through `cmd.exe /c`. Real executables (curl.exe …)
+---are spawned unchanged. Returns the argv to actually spawn.
+---@param argv string[]
+---@return string[]
+local function resolve_argv(argv)
+  if vim.fn.has("win32") ~= 1 then
+    return argv
+  end
+  local path = vim.fn.exepath(argv[1])
+  if path == "" then
+    return argv
+  end
+  -- Real executables (curl.exe, typos.exe, …) spawn directly. Anything else —
+  -- npm shims (extensionless / .cmd / .bat / .ps1) — must go through cmd.exe,
+  -- which resolves it via PATHEXT.
+  local lower = path:lower()
+  if lower:sub(-4) == ".exe" or lower:sub(-4) == ".com" then
+    return argv
+  end
+  local out = { "cmd.exe", "/c", path }
+  for i = 2, #argv do
+    out[#out + 1] = argv[i]
+  end
+  return out
+end
+
 ---Run `argv` and deliver the captured result to `on_done` exactly once.
 ---@param argv string[]                              command + arguments
 ---@param opts { timeout_ms?: integer, cwd?: string, on_done: fun(ok: boolean, out: string, err: string) }
 ---@return Language.Job
 function M.run(argv, opts)
   opts = opts or {}
+  argv = resolve_argv(argv)
   local on_done = opts.on_done or function() end
   local finished = false
   local timer
