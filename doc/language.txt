@@ -143,14 +143,19 @@ when the chosen engine is unavailable (e.g. deepl without a key -> google).
 8. THE REVIEW PANEL                                            *language-panel*
 
 With `spell.ui.view = "picker"` (default), :Spellcheck opens an interactive
-panel listing every issue. Select an item to open its action menu:
+panel listing every issue. Select an item to open its action menu.
 
+Spelling issues:
     Choose suggestion…     pick a replacement (fuzzy)
     Replace all in buffer… apply a replacement to every occurrence
     Add to dictionary      zg-equivalent (persistent or session)
     Ignore (session)       drop this word for the session
     Ignore (persistent)    drop this word permanently (ignore file)
     Jump to location       go to the issue
+
+Grammar/style issues (harper_ls/ltex):
+    Apply LSP fix…         run the language server's code actions at the issue
+    Ignore (session/persistent), Jump to location
 
 After each action the panel re-scans and re-opens. Set `view = "quickfix"` for
 the classic diagnostics + quickfix/Trouble session flow with z= fixing.

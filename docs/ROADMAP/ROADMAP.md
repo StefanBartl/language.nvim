@@ -25,6 +25,9 @@ Status of the phased build. ✅ done · 🔜 planned.
 - ✅ **cspell & codespell adapters**: async CLI spell providers for cwd/path,
   dispatched generically via `collect.gather` (`spell/providers/{cspell,
   codespell,util}`).
+- ✅ **Grammar fixes in the panel**: grammar/style issues (harper/ltex) offer
+  an "Apply LSP fix…" action that runs the language server's code actions at the
+  issue location; suggestion-based actions are reserved for spelling issues.
 - ✅ **Phase 7 — Config integration**: replaced the in-config
   `config/trouble/spell` and `config/translate` modules with the standalone
   plugin.
@@ -34,8 +37,6 @@ Status of the phased build. ✅ done · 🔜 planned.
 
 - 🔜 **cspell long-lived process**: keep a persistent cspell server (à la
   fastspell) for ~instant buffer-scope checks instead of a per-scan spawn.
-- 🔜 **Grammar fixes**: apply LSP code actions from the panel (add-to-dict,
-  disable-rule) instead of only surfacing/jumping.
 - 🔜 **Live scan**: opt-in debounced scanning wired end-to-end with the
   `visible` scope default.
 - 🔜 **Translate UX**: interactive floating window with live translation and
