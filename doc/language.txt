@@ -139,6 +139,21 @@ Which providers run per scope is controlled by `spell.providers` (see
 `translate.engine` selects the engine; `translate.fallback` is a chain tried
 when the chosen engine is unavailable (e.g. deepl without a key -> google).
 
+                                                        *language-translate-maps*
+Motion / visual mappings (opt-in via `translate.keymaps`):
+    operator   `<lhs>{motion}` translates the moved-over text object, e.g.
+               `<lhs>ip` for a paragraph or `<lhs>iw` for a word.
+    visual     `<lhs>` translates the current visual selection.
+The target language is `translate.default_target` when set, otherwise chosen
+from `translate.default_langs` via a picker. Results use `default_output`. >lua
+    require("language").setup({
+      translate = {
+        default_target = "DE",             -- skip the picker
+        keymaps = { operator = "gtr", visual = "gtr" },
+      },
+    })
+<
+
 ==============================================================================
 8. THE REVIEW PANEL                                            *language-panel*
 

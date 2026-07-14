@@ -32,6 +32,10 @@ Status of the phased build. ✅ done · 🔜 planned.
   from the panel/session; scans configured filetypes and, by default, only the
   visible range (`live_scope = "visible"`, follows the viewport on scroll),
   honouring the filetype/`max_file_lines`/readonly/`max_highlights` gates.
+- ✅ **Translate motion/visual maps** (`translate/motion`): a `g@` operator
+  translates the moved-over text object and an x-mode map translates the visual
+  selection; target is `translate.default_target` or a quick picker. Opt-in via
+  `translate.keymaps.{operator,visual}`.
 - ✅ **Phase 7 — Config integration**: replaced the in-config
   `config/trouble/spell` and `config/translate` modules with the standalone
   plugin.
@@ -41,8 +45,8 @@ Status of the phased build. ✅ done · 🔜 planned.
 
 - 🔜 **cspell long-lived process**: keep a persistent cspell server (à la
   fastspell) for ~instant buffer-scope checks instead of a per-scan spawn.
-- 🔜 **Translate UX**: interactive floating window with live translation and
-  motion mappings (pantran-style); reverse translation; query history.
+- 🔜 **Translate UX**: interactive floating window with live translation
+  (pantran-style); reverse translation; query history.
 - 🔜 **Fine-grained selection**: column-precise word/visual-block translation
   with UTF-8 handling (currently line-range based).
 - 🔜 **Thesaurus/synonym** action in the item menu (vim-lexical-style).

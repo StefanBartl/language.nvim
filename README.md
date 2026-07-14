@@ -104,8 +104,13 @@ require("language").setup({
     engine = "google",           -- "google" (keyless) | "deepl" | "shell" | "custom"
     fallback = { "google" },     -- Engine-Kette, wenn die gewählte nicht verfügbar ist
     default_output = "replace",  -- replace | float | notify | clipboard | insert
+    default_target = nil,        -- feste Zielsprache für Motion/Visual-Maps; nil = Auswahl
     timeout_ms = 8000,
     deepl = { api_key = nil },   -- oder $DEEPL_API_KEY
+    -- Opt-in Motion/Visual-Keymaps (Default aus, um Tasten nicht zu belegen):
+    --   operator: <lhs>{motion} übersetzt das Textobjekt (z. B. gtrip)
+    --   visual:   <lhs> übersetzt die Auswahl
+    keymaps = { operator = false, visual = false },
     -- custom = { cmd = function(lines, target) return { "trans", "-b", ... } end,
     --           parse = function(out) return vim.split(out, "\n") end },
   },

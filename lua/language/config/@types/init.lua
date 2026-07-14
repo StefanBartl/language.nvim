@@ -68,10 +68,12 @@
 ---@field default_output LanguageTranslateOutput
 ---@field default_input  LanguageTranslateInput
 ---@field default_langs  string[]
+---@field default_target string|nil              -- fixed target for motion/visual maps; nil = prompt
 ---@field nocode_default boolean
 ---@field timeout_ms     integer
 ---@field deepl          { api_key: string|nil }
 ---@field custom         { cmd: fun(text: string[], target: string): string[], parse: fun(out: string): string[] }|nil
+---@field keymaps        { operator: string|false, visual: string|false }
 
 -- #####################################################################
 -- Root

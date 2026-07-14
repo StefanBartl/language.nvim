@@ -53,10 +53,15 @@ local defaults = {
     default_output = "replace", -- "replace"|"float"|"notify"|"clipboard"|"insert"
     default_input = "selection", -- selection|clipboard|input
     default_langs = { "EN", "DE", "FR", "ZH", "JA" },
+    default_target = nil, -- fixed target for motion/visual maps; nil = prompt
     nocode_default = false,
     timeout_ms = 8000, -- network timeout per job
     deepl = { api_key = nil }, -- or ENV "DEEPL_API_KEY"
     custom = nil, -- { cmd = function(text, target) ... end, parse = function(out) ... end }
+    -- Opt-in motion/visual keymaps (off by default to avoid clobbering keys):
+    --   operator: `<lhs>{motion}` translates the moved-over text (e.g. gtrip)
+    --   visual:   `<lhs>` translates the visual selection
+    keymaps = { operator = false, visual = false },
   },
 
   commands = true,
