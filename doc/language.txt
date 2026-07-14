@@ -91,6 +91,12 @@ Call once. See |language-config| for the full option tree. With lazy.nvim: >lua
         :Translate EN --nocode
         :Translate FR --output=float
 <
+                                                                   *:Translate!*
+:[range]Translate![lang]
+    Open the interactive translation window (|language-translate-window|),
+    prefilled from the range if given. The target is [lang], else
+    `translate.default_target`, else a picker.
+
 ==============================================================================
 5. SCOPING                                                   *language-scoping*
 
@@ -171,6 +177,15 @@ Spelling issues:
 Grammar/style issues (harper_ls/ltex):
     Apply LSP fix…         run the language server's code actions at the issue
     Ignore (session/persistent), Jump to location
+
+                                                       *language-translate-window*
+Interactive translation window~
+`:Translate!` opens two stacked floats: an editable input (top) and a read-only
+output (bottom) that translates as you type (debounced). Keys in the input:
+    <C-l>   change target language
+    <C-y>   copy the translation to the clipboard
+    q,<Esc> (normal) / <C-c> (insert)   close
+The window uses the configured engine/fallback like every other translation.
 
 Live scanning~
 Set `spell.live = true` for always-on inline diagnostics that update as you

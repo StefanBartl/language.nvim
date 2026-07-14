@@ -51,6 +51,13 @@ function M.translate(lang, opts)
   require("language.translate").run(lang, opts)
 end
 
+---Open the interactive translation window.
+---@param opts table|nil  { target?, source_lines? }
+---@return nil
+function M.translate_window(opts)
+  require("language.translate.window").open(opts)
+end
+
 ---Open the spell review panel.
 ---@param scope? string
 ---@return nil

@@ -68,6 +68,8 @@ benötigt — nur `curl` (Google-Engine, keyless, funktioniert ohne Konfiguratio
 :'<,'>Translate DE          " Auswahl nach Deutsch, ersetzt den Text
 :Translate EN --nocode      " Range übersetzen, Code auslassen
 :Translate FR --output=float " Übersetzung im Float statt Ersetzen
+:Translate!                 " interaktives Fenster (live übersetzen beim Tippen)
+:'<,'>Translate! DE         " Fenster mit Auswahl vorbefüllt, Ziel DE
 ```
 
 Standard-Keymap: `<leader>ss` schaltet die Spell-Session im aktuellen Buffer um

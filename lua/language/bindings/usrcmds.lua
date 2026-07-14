@@ -82,8 +82,8 @@ function M.setup()
   })
 
   -- :Translate <lang> [--nocode] [--output=<mode>] [selection|buffer|cwd|path=<p>]
+  -- :Translate![lang]  opens the interactive translation window.
   usercmd("Translate", function(o)
-    local translate = require("language.translate")
     local tokens = vim.split(o.args or "", "%s+", { trimempty = true })
 
     local nocode = false
@@ -99,6 +99,16 @@ function M.setup()
       end
     end
 
+    -- Bang → interactive window (prefilled from a range if given).
+    if o.bang then
+      local source_lines = nil
+      if o.range and o.range > 0 then
+        source_lines = vim.api.nvim_buf_get_lines(0, o.line1 - 1, o.line2, false)
+      end
+      require("language.translate.window").open({ target = kept[1], source_lines = source_lines })
+      return
+    end
+
     local scope, rest = require("language.scope").parse(kept, {
       bufnr = vim.api.nvim_get_current_buf(),
       line1 = o.line1,
@@ -106,12 +116,13 @@ function M.setup()
       has_range = o.range and o.range > 0,
     })
 
-    translate.run(rest[1], { nocode = nocode, output = output, scope = scope })
+    require("language.translate").run(rest[1], { nocode = nocode, output = output, scope = scope })
   end, {
-    nargs = "+",
+    nargs = "*",
     range = true,
+    bang = true,
     force = true,
-    desc = "Translate range  <lang> [--nocode] [--output=<mode>] [selection|buffer|cwd|path=<p>]",
+    desc = "Translate range  <lang> [--nocode] [--output=<mode>] [scope]  (! = window)",
     complete = function(arglead, line, _)
       local parts = vim.split(line, "%s+", { trimempty = true })
       local editing = line:sub(-1) ~= " "
