@@ -58,6 +58,17 @@ function M.translate_window(opts)
   require("language.translate.window").open(opts)
 end
 
+---Open the translation-history picker; the chosen entry opens in the window.
+---@return nil
+function M.translate_history()
+  require("language.translate.history").pick(function(entry)
+    require("language.translate.window").open({
+      target = entry.target,
+      source_lines = entry.input,
+    })
+  end)
+end
+
 ---Open the spell review panel.
 ---@param scope? string
 ---@return nil

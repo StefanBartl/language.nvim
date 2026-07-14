@@ -50,8 +50,9 @@ Status of the phased build. ✅ done · 🔜 planned.
   fastspell) for ~instant buffer-scope checks instead of a per-scan spawn.
 - ✅ **Reverse / round-trip** (window `<C-r>`): promotes the translation to the
   input and picks a new target, so a result can be translated back or onward.
-
-- 🔜 **Translate UX**: query history (recall previous translations).
+- ✅ **Query history** (`translate/history`): records `:Translate` results and
+  window copies (newest-first ring, optional JSON persistence); recall via the
+  window `<C-h>` picker or `require("language").translate_history()`.
 - 🔜 **Fine-grained selection**: column-precise word/visual-block translation
   with UTF-8 handling (currently line-range based).
 - 🔜 **Thesaurus/synonym** action in the item menu (vim-lexical-style).

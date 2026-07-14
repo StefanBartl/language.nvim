@@ -181,12 +181,14 @@ Grammar/style issues (harper_ls/ltex):
                                                        *language-translate-window*
 Interactive translation window~
 `:Translate!` opens two stacked floats: an editable input (top) and a read-only
-output (bottom) that translates as you type (debounced). Keys in the input:
+output (bottom) that translates as you type (debounced). Actions are NORMAL-mode
+keys (press <Esc> first) so insert-mode typing keeps its native keys:
     <C-l>   change target language
     <C-r>   reverse: use the translation as the new input, then pick a target
             (round-trip / translate onward)
-    <C-y>   copy the translation to the clipboard
-    q,<Esc> (normal) / <C-c> (insert)   close
+    <C-h>   open the translation-history picker
+    <C-y>   copy the translation to the clipboard (also records to history)
+    q,<Esc> close  (also <C-c> in insert mode)
 The window uses the configured engine/fallback like every other translation.
 
 Live scanning~

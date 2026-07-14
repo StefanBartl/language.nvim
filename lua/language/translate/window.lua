@@ -5,8 +5,9 @@
 --- (bottom). Typing debounces a translation via the configured engine and fills
 --- the output. Idea from pantran.nvim.
 ---
---- Keys (input window): <C-y> copy translation, <C-l> change target language,
---- q / <Esc> (normal) or <C-c> (insert) close.
+--- Actions are NORMAL-mode keys (press <Esc> first) so insert-mode typing keeps
+--- its native keys: <C-l> retarget, <C-r> reverse/round-trip, <C-h> history,
+--- <C-y> copy. Close with q / <Esc> (normal) or <C-c> (insert).
 
 local api = vim.api
 
@@ -165,6 +166,18 @@ function M.reverse()
   pick_retarget()
 end
 
+---Open the translation-history picker; load the chosen entry into the window.
+---@return nil
+function M.history()
+  require("language.translate.history").pick(function(entry)
+    if not (state.input_buf and api.nvim_buf_is_valid(state.input_buf)) then
+      return
+    end
+    api.nvim_buf_set_lines(state.input_buf, 0, -1, false, entry.input or {})
+    M.retarget(entry.target)
+  end)
+end
+
 ---Create the two floating windows for `target`, prefilled with `source_lines`.
 ---@param target string
 ---@param source_lines string[]|nil
@@ -207,17 +220,26 @@ local function launch(target, source_lines)
     zindex = 51,
   })
 
+  -- Actions live in NORMAL mode so insert-mode typing keeps its native keys
+  -- (backspace <C-h>, register <C-r>, …). Press <Esc> first, then the action.
   local mo = { buffer = state.input_buf, nowait = true, silent = true }
   vim.keymap.set("n", "q", M.close, mo)
   vim.keymap.set("n", "<Esc>", M.close, mo)
   vim.keymap.set("i", "<C-c>", M.close, mo)
-  vim.keymap.set({ "n", "i" }, "<C-l>", pick_retarget, mo)
-  vim.keymap.set({ "n", "i" }, "<C-r>", M.reverse, mo)
-  vim.keymap.set({ "n", "i" }, "<C-y>", function()
+  vim.keymap.set("n", "<C-l>", pick_retarget, mo)
+  vim.keymap.set("n", "<C-r>", M.reverse, mo)
+  vim.keymap.set("n", "<C-h>", M.history, mo)
+  vim.keymap.set("n", "<C-y>", function()
+    local input = api.nvim_buf_get_lines(state.input_buf, 0, -1, false)
     local out = api.nvim_buf_get_lines(state.output_buf, 0, -1, false)
     local text = table.concat(out, "\n")
     pcall(vim.fn.setreg, "+", text)
     pcall(vim.fn.setreg, '"', text)
+    require("language.translate.history").record({
+      input = input,
+      output = out,
+      target = state.target,
+    })
     require("lib.nvim.notify").create("[language.translate]").info("Translation copied")
   end, mo)
 

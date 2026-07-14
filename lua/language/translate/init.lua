@@ -69,6 +69,7 @@ local function translate_range(provider, bufnr, s, e, target, mode)
     end
     ---@cast result string[]
     output.apply(mode, result, { bufnr = bufnr, s = s, e = e })
+    require("language.translate.history").record({ input = lines, output = result, target = target })
   end)
   if jobref then
     active[#active + 1] = jobref

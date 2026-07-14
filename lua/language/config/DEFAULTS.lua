@@ -58,6 +58,13 @@ local defaults = {
     timeout_ms = 8000, -- network timeout per job
     deepl = { api_key = nil }, -- or ENV "DEEPL_API_KEY"
     custom = nil, -- { cmd = function(text, target) ... end, parse = function(out) ... end }
+    -- Recall previous translations (:Translate history picker / window <C-h>).
+    history = {
+      enable = true,
+      max = 50, -- ring size
+      persist = false, -- also save to disk (JSON) across sessions
+      file = vim.fn.stdpath("state") .. "/language/translate_history.json",
+    },
     -- Opt-in motion/visual keymaps (off by default to avoid clobbering keys):
     --   operator: `<lhs>{motion}` translates the moved-over text (e.g. gtrip)
     --   visual:   `<lhs>` translates the visual selection

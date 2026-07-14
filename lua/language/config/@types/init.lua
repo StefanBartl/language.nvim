@@ -74,6 +74,7 @@
 ---@field deepl          { api_key: string|nil }
 ---@field custom         { cmd: fun(text: string[], target: string): string[], parse: fun(out: string): string[] }|nil
 ---@field keymaps        { operator: string|false, visual: string|false }
+---@field history        { enable: boolean, max: integer, persist: boolean, file: string }
 
 -- #####################################################################
 -- Root
