@@ -28,6 +28,10 @@ Status of the phased build. ✅ done · 🔜 planned.
 - ✅ **Grammar fixes in the panel**: grammar/style issues (harper/ltex) offer
   an "Apply LSP fix…" action that runs the language server's code actions at the
   issue location; suggestion-based actions are reserved for spelling issues.
+- ✅ **Live scan** (`spell/live`): opt-in (`spell.live`), debounced, decoupled
+  from the panel/session; scans configured filetypes and, by default, only the
+  visible range (`live_scope = "visible"`, follows the viewport on scroll),
+  honouring the filetype/`max_file_lines`/readonly/`max_highlights` gates.
 - ✅ **Phase 7 — Config integration**: replaced the in-config
   `config/trouble/spell` and `config/translate` modules with the standalone
   plugin.
@@ -37,8 +41,6 @@ Status of the phased build. ✅ done · 🔜 planned.
 
 - 🔜 **cspell long-lived process**: keep a persistent cspell server (à la
   fastspell) for ~instant buffer-scope checks instead of a per-scan spawn.
-- 🔜 **Live scan**: opt-in debounced scanning wired end-to-end with the
-  `visible` scope default.
 - 🔜 **Translate UX**: interactive floating window with live translation and
   motion mappings (pantran-style); reverse translation; query history.
 - 🔜 **Fine-grained selection**: column-precise word/visual-block translation

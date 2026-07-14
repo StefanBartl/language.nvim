@@ -83,6 +83,9 @@ Auszug:
 require("language").setup({
   spell = {
     default_scope = "buffer",
+    live = false,                -- true = fortlaufende Inline-Diagnostics beim Tippen
+    live_scope = "visible",      -- "visible" (nur Sichtbereich) | "buffer"
+    scan_debounce_ms = 400,
     ui = { view = "picker", preview = true }, -- "quickfix" erzwingt den qf-Fallback
 
     -- Code-Features

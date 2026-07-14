@@ -31,10 +31,6 @@ local sessions = {}
 ---@type table<integer, true>
 local touched = {}
 
----Debounce timers per buffer (live scan).
----@type table<integer, uv.uv_timer_t>
-local timers = {}
-
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 
 ---@return LanguageSpellCfg
@@ -316,46 +312,12 @@ function M.open_panel(scope)
   require("language.spell.ui.panel").open(scope, cfg())
 end
 
----GC hook: drop state for a deleted buffer.
+---GC hook: drop per-buffer session state for a deleted buffer. (Live-scan
+---timers are owned and cleaned up by `language.spell.live`.)
 ---@param bufnr integer
 ---@return nil
 function M.on_buf_delete(bufnr)
   sessions[bufnr] = nil
-  if timers[bufnr] then
-    pcall(function()
-      timers[bufnr]:stop()
-      timers[bufnr]:close()
-    end)
-    timers[bufnr] = nil
-  end
-end
-
----Debounced live-scan hook (only armed when spell.live = true).
----@param bufnr integer
----@return nil
-function M.on_text_changed(bufnr)
-  if not sessions[bufnr] then
-    return
-  end
-  -- Perf cap: skip live scanning of very large files (explicit scans still run).
-  local max_lines = cfg().max_file_lines
-  if max_lines and buf_valid(bufnr) and api.nvim_buf_line_count(bufnr) > max_lines then
-    return
-  end
-  local delay = cfg().scan_debounce_ms or 400
-  local t = timers[bufnr]
-  if not t then
-    t = vim.uv.new_timer()
-    timers[bufnr] = t
-  end
-  t:stop()
-  t:start(delay, 0, function()
-    vim.schedule(function()
-      if buf_valid(bufnr) and api.nvim_get_current_buf() == bufnr then
-        M.refresh()
-      end
-    end)
-  end)
 end
 
 return M

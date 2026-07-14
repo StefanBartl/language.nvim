@@ -157,6 +157,14 @@ Grammar/style issues (harper_ls/ltex):
     Apply LSP fix…         run the language server's code actions at the issue
     Ignore (session/persistent), Jump to location
 
+Live scanning~
+Set `spell.live = true` for always-on inline diagnostics that update as you
+edit (debounced by `scan_debounce_ms`). It is decoupled from the panel and runs
+only for `spell.filetypes`. With `spell.live_scope = "visible"` (default) it
+scans just the visible window range and follows the viewport; set it to
+"buffer" to scan the whole buffer. The `max_file_lines`, readonly and
+`max_highlights` gates apply.
+
 After each action the panel re-scans and re-opens. Set `view = "quickfix"` for
 the classic diagnostics + quickfix/Trouble session flow with z= fixing.
 
