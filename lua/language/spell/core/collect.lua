@@ -18,6 +18,30 @@ require("language.spell.@types")
 local native = require("language.spell.providers.native")
 local lsp = require("language.spell.providers.lsp")
 local ignore = require("language.spell.core.ignore")
+local cache = require("language.spell.core.cache")
+
+---In-flight async jobs, keyed so a new scan for the same target cancels the
+---previous one (live scan while typing, panel re-open, …).
+---@type table<string, Language.Job>
+local active = {}
+
+---@param key string
+local function cancel_key(key)
+  local j = active[key]
+  if j then
+    pcall(j.cancel)
+    active[key] = nil
+  end
+end
+
+---@param scope LanguageScope
+---@return string
+local function cancel_key_for(scope)
+  if scope.kind == "cwd" or scope.kind == "path" then
+    return "wide:" .. (scope.path or "cwd")
+  end
+  return "buf:" .. tostring(scope.bufnr or 0)
+end
 
 ---External CLI providers (async), keyed by config name. Each exposes
 ---`available()` and `scan_async(scope, cfg, cb)`.
@@ -83,13 +107,33 @@ local function is_single_buffer(scope)
   return scope.kind == "buffer" or scope.kind == "visible" or scope.kind == "selection"
 end
 
----Raw synchronous collection for a single-buffer scope: native spelling plus
----LSP grammar harvest (no post-processing).
+---Native scan for a single-buffer scope, with whole-buffer caching.
+---@param scope LanguageScope
+---@param cfg LanguageSpellCfg
+---@return LanguageSpellIssue[]
+local function native_cached(scope, cfg)
+  if scope.kind == "buffer" and scope.bufnr then
+    local hit = cache.get(scope.bufnr)
+    if hit then
+      return hit
+    end
+    local issues = native.scan_scope(scope, cfg)
+    cache.set(scope.bufnr, issues)
+    return issues
+  end
+  return native.scan_scope(scope, cfg)
+end
+
+---Raw synchronous collection for a single-buffer scope: native spelling (cached)
+---plus fresh LSP grammar harvest (no post-processing). Returns a new list so
+---post-processing never mutates the cached native issues in place.
 ---@param scope LanguageScope
 ---@param cfg LanguageSpellCfg
 ---@return LanguageSpellIssue[]
 local function raw_buffer(scope, cfg)
-  local issues = native.scan_scope(scope, cfg)
+  ---@type LanguageSpellIssue[]
+  local issues = {}
+  vim.list_extend(issues, native_cached(scope, cfg))
   local buffer_providers = cfg.providers and cfg.providers.buffer
   if provider_enabled(cfg, buffer_providers, "lsp") and lsp.available() then
     vim.list_extend(issues, lsp.scan_scope(scope, cfg))
@@ -120,30 +164,45 @@ end
 ---@param cb fun(issues: LanguageSpellIssue[])
 ---@return Language.Job|nil
 function M.gather(scope, cfg, cb)
+  local key = cancel_key_for(scope)
+  -- A new scan for the same target supersedes any in-flight one.
+  cancel_key(key)
+
   if is_single_buffer(scope) then
     local raw = raw_buffer(scope, cfg)
     local buffer_providers = cfg.providers and cfg.providers.buffer
     if provider_enabled(cfg, buffer_providers, "cspell_server") then
       local server = require("language.spell.providers.cspell_server")
       if server.available() then
-        return server.check(scope, cfg, function(server_issues)
+        active[key] = server.check(scope, cfg, function(server_issues)
+          active[key] = nil
           vim.list_extend(raw, server_issues)
           cb(post(raw, cfg))
         end)
+        return active[key]
       end
     end
     cb(post(raw, cfg))
     return nil
   end
 
+  -- cwd/path: first available external CLI provider, else native fallback.
   for _, name in ipairs((cfg.providers and cfg.providers.cwd) or { "native" }) do
     local mod_path = CLI_MODULES[name]
     if mod_path then
       local provider = require(mod_path)
       if provider.available() then
-        return provider.scan_async(scope, cfg, function(issues)
-          cb(post(issues, cfg))
+        local prog = require("lib.nvim.progress").create({
+          title = "[language]",
+        })
+        prog:update({ text = ("spell-scanning %s (%s)…"):format(scope.kind, name) })
+        active[key] = provider.scan_async(scope, cfg, function(issues)
+          active[key] = nil
+          local result = post(issues, cfg)
+          prog:finish(("%d spelling issue(s)"):format(#result))
+          cb(result)
         end)
+        return active[key]
       end
     elseif name == "native" then
       cb(M.scan(scope, cfg))

@@ -312,12 +312,13 @@ function M.open_panel(scope)
   require("language.spell.ui.panel").open(scope, cfg())
 end
 
----GC hook: drop per-buffer session state for a deleted buffer. (Live-scan
----timers are owned and cleaned up by `language.spell.live`.)
+---GC hook: drop per-buffer session state + cached scan for a deleted buffer.
+---(Live-scan timers are owned and cleaned up by `language.spell.live`.)
 ---@param bufnr integer
 ---@return nil
 function M.on_buf_delete(bufnr)
   sessions[bufnr] = nil
+  require("language.spell.core.cache").invalidate(bufnr)
 end
 
 return M

@@ -74,6 +74,42 @@ function M.setup(cfg)
       })
     end
   end
+
+  -- Optional guard: abort `:w` on configured filetypes while spelling errors
+  -- remain (grammar is advisory and never blocks). Bypass with `:noautocmd w`.
+  if spell_cfg.guard and spell_cfg.guard.block_write_on_error then
+    local function ft_matches(bufnr)
+      local ft = vim.bo[bufnr].filetype
+      for _, f in ipairs(spell_cfg.filetypes or {}) do
+        if f == ft then
+          return true
+        end
+      end
+      return false
+    end
+
+    vim.api.nvim_create_autocmd("BufWritePre", {
+      group = group,
+      callback = function(ev)
+        if not ft_matches(ev.buf) then
+          return
+        end
+        local scope = { kind = "buffer", bufnr = ev.buf }
+        local sp = require("language.config").get().spell
+        local issues = require("language.spell.providers.native").scan_scope(scope, sp)
+        issues = require("language.spell.core.ignore").filter(issues)
+        if #issues > 0 then
+          error(
+            ("[language] %d spelling issue(s) — write aborted (:noautocmd w to bypass)"):format(
+              #issues
+            ),
+            0
+          )
+        end
+      end,
+      desc = "[language] block write on spelling errors",
+    })
+  end
 end
 
 return M

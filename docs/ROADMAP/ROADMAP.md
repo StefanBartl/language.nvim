@@ -61,6 +61,14 @@ Status of the phased build. ✅ done · 🔜 planned.
   start) — code-aware, live-capable. Opt in with `"cspell_server"` in
   `spell.providers.buffer` (needs node + cspell).
 
+- ✅ **Gap-closing round** — wired the pieces the plan declared but hadn't built:
+  per-buffer native scan **cache** (`spell/core/cache`, keyed by `changedtick`);
+  **`lib.nvim.progress`** feedback on cwd/path CLI scans; **cancellation** of
+  in-flight spell scans (a new scan for the same target supersedes the old one,
+  in `collect.gather`); wired **`dictionary.replace_all`** (Choose suggestion →
+  all occurrences) and **`guard.block_write_on_error`** (opt-in `:w` abort);
+  inline **`language:disable-line` / `-next-line` / `-file`** directives.
+
 ## Planned
 
 _All roadmap items implemented._ Future ideas welcome.

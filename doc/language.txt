@@ -213,7 +213,29 @@ edit (debounced by `scan_debounce_ms`). It is decoupled from the panel and runs
 only for `spell.filetypes`. With `spell.live_scope = "visible"` (default) it
 scans just the visible window range and follows the viewport; set it to
 "buffer" to scan the whole buffer. The `max_file_lines`, readonly and
-`max_highlights` gates apply.
+`max_highlights` gates apply. Whole-buffer native scans are cached by
+`changedtick`, so re-opening the panel or re-scanning an unchanged buffer is
+instant.
+
+                                                        *language-spell-silencing*
+Silencing false positives~
+Besides the dictionary (`zg` / "Add to dictionary") and the ignore list, inline
+directives silence spots without touching any list:
+    language:disable-line        skip the line the directive is on
+    language:disable-next-line    skip the following line
+    language:disable-file         skip the whole buffer
+Put them in a comment so they don't show in rendered output.
+
+                                                        *language-spell-guard*
+Block writing on errors (opt-in)~
+`spell.guard.block_write_on_error = true` aborts `:w` on `spell.filetypes`
+buffers while spelling errors remain (grammar is advisory and never blocks).
+Bypass a single write with `:noautocmd w`.
+
+                                                        *language-spell-replace-all*
+`spell.dictionary.replace_all = true` (default) makes "Choose suggestion…" in
+the panel apply the pick to every occurrence of the word in the buffer; set it
+to false to replace only the exact occurrence.
 
 After each action the panel re-scans and re-opens. Set `view = "quickfix"` for
 the classic diagnostics + quickfix/Trouble session flow with z= fixing.

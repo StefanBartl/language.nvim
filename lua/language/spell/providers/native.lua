@@ -167,6 +167,31 @@ end
 ---@param bufnr integer|nil
 ---@param path string
 ---@param out LanguageSpellIssue[]
+---Compute which line indices are silenced by inline `language:disable-*`
+---directives, and whether the whole file is disabled.
+---  `language:disable-file`       — skip the entire buffer
+---  `language:disable-line`       — skip the line the directive is on
+---  `language:disable-next-line`  — skip the following line
+---@param lines string[]
+---@return table<integer, true> disabled, boolean whole_file
+local function disabled_lines(lines)
+  ---@type table<integer, true>
+  local disabled = {}
+  local whole_file = false
+  for i = 1, #lines do
+    local line = lines[i]
+    if line:find("language:disable%-file") then
+      whole_file = true
+    end
+    if line:find("language:disable%-next%-line") then
+      disabled[i + 1] = true
+    elseif line:find("language:disable%-line") then
+      disabled[i] = true
+    end
+  end
+  return disabled, whole_file
+end
+
 ---@param cfg LanguageSpellCfg
 ---@param spellable? fun(lnum: integer, col: integer): boolean  # nil = treat all text as spellable
 local function scan_lines(lines, first_lnum, bufnr, path, out, cfg, spellable)
@@ -176,9 +201,14 @@ local function scan_lines(lines, first_lnum, bufnr, path, out, cfg, spellable)
   local min_length = ws.min_length or 4
   local regions = cfg.regions
 
+  local disabled, whole_file = disabled_lines(lines)
+  if whole_file then
+    return
+  end
+
   for i = 1, #lines do
     local line = lines[i]
-    local errs = check(line)
+    local errs = (not disabled[i]) and check(line) or {}
     if #errs > 0 then
       local spans = skip_spans(line, regions)
       local lnum = first_lnum + i - 1

@@ -134,13 +134,27 @@ function M._items(issue, on_done)
       {
         label = "Choose suggestion…",
         action = function()
+          -- With dictionary.replace_all, a chosen suggestion is applied to every
+          -- occurrence of the word in the buffer (spellrepall-style); otherwise
+          -- only the exact occurrence under the issue is replaced.
+          local replace_all = require("language.config").get().spell.dictionary.replace_all
           pick_suggestion(issue, "Replace '" .. issue.word .. "'", function(word)
-            local ok, err = actions.replace_at(issue, word)
-            if ok then
-              notify.info(("Replaced with '%s'"):format(word))
-              on_done()
+            if replace_all and issue.bufnr then
+              local ok, count = actions.replace_all_in_buffer(issue.bufnr, issue.word, word)
+              if ok then
+                notify.info(("Replaced %d occurrence(s) with '%s'"):format(count, word))
+                on_done()
+              else
+                notify.error(tostring(count))
+              end
             else
-              notify.error(tostring(err))
+              local ok, err = actions.replace_at(issue, word)
+              if ok then
+                notify.info(("Replaced with '%s'"):format(word))
+                on_done()
+              else
+                notify.error(tostring(err))
+              end
             end
           end)
         end,
