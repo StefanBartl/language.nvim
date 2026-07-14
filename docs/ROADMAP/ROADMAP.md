@@ -22,6 +22,9 @@ Status of the phased build. ✅ done · 🔜 planned.
 - ✅ **Phase 6 — More providers**: translate `deepl`/`shell`/`custom` + fallback
   chain; spell `typos` (async cwd/path) and LSP grammar harvest
   (harper_ls/ltex); `collect.gather` async-capable collection.
+- ✅ **cspell & codespell adapters**: async CLI spell providers for cwd/path,
+  dispatched generically via `collect.gather` (`spell/providers/{cspell,
+  codespell,util}`).
 - ✅ **Phase 7 — Config integration**: replaced the in-config
   `config/trouble/spell` and `config/translate` modules with the standalone
   plugin.
@@ -29,8 +32,8 @@ Status of the phased build. ✅ done · 🔜 planned.
 
 ## Planned
 
-- 🔜 **Spell providers**: `cspell` and `codespell` adapters (cspell as a
-  long-lived process à la fastspell for ~instant checks).
+- 🔜 **cspell long-lived process**: keep a persistent cspell server (à la
+  fastspell) for ~instant buffer-scope checks instead of a per-scan spawn.
 - 🔜 **Grammar fixes**: apply LSP code actions from the panel (add-to-dict,
   disable-rule) instead of only surfacing/jumping.
 - 🔜 **Live scan**: opt-in debounced scanning wired end-to-end with the

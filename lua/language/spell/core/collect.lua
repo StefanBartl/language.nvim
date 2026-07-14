@@ -19,6 +19,15 @@ local native = require("language.spell.providers.native")
 local lsp = require("language.spell.providers.lsp")
 local ignore = require("language.spell.core.ignore")
 
+---External CLI providers (async), keyed by config name. Each exposes
+---`available()` and `scan_async(scope, cfg, cb)`.
+---@type table<string, string>
+local CLI_MODULES = {
+  typos = "language.spell.providers.typos",
+  cspell = "language.spell.providers.cspell",
+  codespell = "language.spell.providers.codespell",
+}
+
 local M = {}
 
 ---Deduplicate issues by (path, word), counting occurrences; keeps first hit.
@@ -101,10 +110,11 @@ function M.gather(scope, cfg, cb)
   end
 
   for _, name in ipairs((cfg.providers and cfg.providers.cwd) or { "native" }) do
-    if name == "typos" then
-      local typos = require("language.spell.providers.typos")
-      if typos.available() then
-        return typos.scan_async(scope, cfg, function(issues)
+    local mod_path = CLI_MODULES[name]
+    if mod_path then
+      local provider = require(mod_path)
+      if provider.available() then
+        return provider.scan_async(scope, cfg, function(issues)
           cb(post(issues, cfg))
         end)
       end

@@ -22,8 +22,8 @@ benötigt — nur `curl` (Google-Engine, keyless, funktioniert ohne Konfiguratio
   oder Quickfix-Fallback. `z=`-Fix mit automatischem Weitersprung, Session-State
   pro Buffer, spelllang-Wiederherstellung.
 - **Grammatik & Provider** — Grammatik-Diagnostics von `harper_ls`/`ltex`
-  erscheinen im selben Panel; optionale externe Spell-CLIs (`typos` für
-  cwd/path-Scans). Native Erkennung splittet CamelCase/snake_case und prüft nur
+  erscheinen im selben Panel; optionale externe Spell-CLIs (`typos`, `cspell`,
+  `codespell`) für cwd/path-Scans. Native Erkennung splittet CamelCase/snake_case und prüft nur
   Treesitter-`@spell`-Regionen (Kommentare/Strings/Prosa), keine Identifier-
   Fehlalarme.
 - **`:Translate`** — Range/Auswahl übersetzen; Default ersetzt den Text in place

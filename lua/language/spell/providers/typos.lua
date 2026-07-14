@@ -13,6 +13,7 @@ require("language.spell.@types")
 
 local fn = vim.fn
 local job = require("language.util.job")
+local putil = require("language.spell.providers.util")
 
 local M = {}
 
@@ -22,12 +23,6 @@ M.supports = { buffer = false, cwd = true, grammar = false }
 ---@return boolean
 function M.available()
   return fn.executable("typos") == 1
-end
-
----@param p string
----@return boolean
-local function is_absolute(p)
-  return p:match("^%a:[/\\]") ~= nil or p:match("^[/\\]") ~= nil
 end
 
 ---Parse typos JSON-lines output into issues.
@@ -40,15 +35,10 @@ local function parse(out, base)
   for line in out:gmatch("[^\r\n]+") do
     local ok, obj = pcall(vim.json.decode, line)
     if ok and type(obj) == "table" and obj.type == "typo" and type(obj.typo) == "string" then
-      local path = obj.path or ""
-      if base and not is_absolute(path) then
-        path = base .. "/" .. path:gsub("^%.[/\\]", "")
-      end
-      path = fn.fnamemodify(path, ":p")
-      local buf = fn.bufnr(path)
+      local path = putil.resolve_path(obj.path or "", base)
       local col = (obj.byte_offset or 0) + 1
       issues[#issues + 1] = {
-        bufnr = (buf > 0 and vim.api.nvim_buf_is_valid(buf)) and buf or nil,
+        bufnr = putil.bufnr_for(path),
         path = path,
         lnum = obj.line_num or 1,
         col = col,
