@@ -36,6 +36,55 @@ local function cancel_active()
   active = {}
 end
 
+---Translate a precise character-wise region and (for replace) set the exact
+---byte span. Coordinates are 0-based rows and byte columns, end-exclusive —
+---the shape returned by `nvim_buf_get_text` / accepted by `nvim_buf_set_text`.
+---@param target string
+---@param opts { bufnr: integer, sr: integer, sc: integer, er: integer, ec: integer, output?: LanguageTranslateOutput }
+---@return nil
+function M.run_region(target, opts)
+  if type(target) ~= "string" or target == "" then
+    notify.warn("Please specify a target language")
+    return
+  end
+  local bufnr = opts.bufnr
+  if not api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+  local c = cfg()
+  local provider, err = registry.resolve(c)
+  if not provider then
+    notify.error(err or "no translate engine available")
+    return
+  end
+
+  local ok_get, lines = pcall(api.nvim_buf_get_text, bufnr, opts.sr, opts.sc, opts.er, opts.ec, {})
+  if not ok_get or type(lines) ~= "table" or #lines == 0 then
+    notify.warn("Could not read the selected region")
+    return
+  end
+
+  cancel_active()
+  local mode = opts.output or c.default_output or "replace"
+
+  local job = provider.translate(lines, target, nil, c, function(ok, result)
+    if not ok then
+      notify.error(tostring(result))
+      return
+    end
+    ---@cast result string[]
+    if mode == "replace" then
+      pcall(api.nvim_buf_set_text, bufnr, opts.sr, opts.sc, opts.er, opts.ec, result)
+    else
+      output.apply(mode, result, { bufnr = bufnr, s = opts.sr + 1, e = opts.er + 1 })
+    end
+    require("language.translate.history").record({ input = lines, output = result, target = target })
+  end)
+  if job then
+    active[#active + 1] = job
+  end
+end
+
 ---Resolve a scope to a concrete { bufnr, s, e } line range on an open buffer.
 ---@param scope LanguageScope|nil
 ---@return integer|nil bufnr, integer s, integer e

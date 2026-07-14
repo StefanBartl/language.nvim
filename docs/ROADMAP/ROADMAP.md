@@ -43,16 +43,18 @@ Status of the phased build. ✅ done · 🔜 planned.
   `config/trouble/spell` and `config/translate` modules with the standalone
   plugin.
 - ✅ **Phase 8 — Docs**: `doc/language.txt`, this roadmap, README.
-
-## Planned
-
-- 🔜 **cspell long-lived process**: keep a persistent cspell server (à la
-  fastspell) for ~instant buffer-scope checks instead of a per-scan spawn.
 - ✅ **Reverse / round-trip** (window `<C-r>`): promotes the translation to the
   input and picks a new target, so a result can be translated back or onward.
 - ✅ **Query history** (`translate/history`): records `:Translate` results and
   window copies (newest-first ring, optional JSON persistence); recall via the
   window `<C-h>` picker or `require("language").translate_history()`.
-- 🔜 **Fine-grained selection**: column-precise word/visual-block translation
-  with UTF-8 handling (currently line-range based).
-- 🔜 **Thesaurus/synonym** action in the item menu (vim-lexical-style).
+- ✅ **Column-precise selection** (`translate.run_region`): char-wise motions
+  (`<lhs>iw`) and char-wise visual selections translate the exact byte span
+  (multibyte-safe via getregionpos) and replace it in place; line/block-wise
+  still use the line range.
+
+## Planned
+
+- 🔜 **cspell long-lived process**: keep a persistent cspell server (à la
+  fastspell) for ~instant buffer-scope checks instead of a per-scan spawn.
+- 🔜 **Thesaurus / synonyms** action in the spell item menu (vim-lexical-style).

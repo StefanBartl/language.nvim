@@ -150,6 +150,8 @@ Motion / visual mappings (opt-in via `translate.keymaps`):
     operator   `<lhs>{motion}` translates the moved-over text object, e.g.
                `<lhs>ip` for a paragraph or `<lhs>iw` for a word.
     visual     `<lhs>` translates the current visual selection.
+Char-wise motions and char-wise visual selections translate and replace the
+exact byte span (multibyte-safe); line-wise (V) uses the whole line range.
 The target language is `translate.default_target` when set, otherwise chosen
 from `translate.default_langs` via a picker. Results use `default_output`. >lua
     require("language").setup({
