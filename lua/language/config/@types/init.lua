@@ -80,9 +80,18 @@
 -- Root
 -- #####################################################################
 
+---@class LanguageThesaurusCfg
+---@field enable     boolean
+---@field source     "datamuse"|"custom"
+---@field max        integer
+---@field timeout_ms integer
+---@field keymap     string|false
+---@field custom     fun(word: string, cb: fun(synonyms: string[]))|nil
+
 ---@class LanguageConfig
 ---@field spell     LanguageSpellCfg
 ---@field translate LanguageTranslateCfg
+---@field thesaurus LanguageThesaurusCfg
 ---@field commands  boolean
 
 return {}

@@ -51,6 +51,14 @@ function M.setup(cfg)
       require("language.translate.motion").visual()
     end, "[language] Translate selection")
   end
+
+  -- Thesaurus: replace the word under the cursor with a synonym.
+  local th = (cfg.thesaurus and cfg.thesaurus.keymap) or false
+  if type(th) == "string" and th ~= "" then
+    map("n", th, function()
+      require("language.thesaurus").replace_under_cursor()
+    end, "[language] Synonyms for word under cursor")
+  end
 end
 
 return M

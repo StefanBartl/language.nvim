@@ -30,6 +30,8 @@ benötigt — nur `curl` (Google-Engine, keyless, funktioniert ohne Konfiguratio
   (`--output=replace`), alternativ `float`/`notify`/`clipboard`/`insert`.
   `--nocode` überspringt Fenced- und Inline-Code. Engines: Google (keyless),
   DeepL, translate-shell, eigenes CLI — mit Fallback-Kette.
+- **Thesaurus** — `require("language").synonyms()` ersetzt das Wort unter dem
+  Cursor durch ein Synonym (Datamuse-API, keyless; oder eigene Quelle/Sprache).
 - **Scoping** — jede Aktion kennt einen Scope: `buffer` (Default), `visible`,
   `cwd`, `path=<datei|ordner>`, `selection`.
 - **Asynchron & abbrechbar** — externe Prozesse (curl u. a.) laufen non-blocking

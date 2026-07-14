@@ -71,6 +71,17 @@ local defaults = {
     keymaps = { operator = false, visual = false },
   },
 
+  -- Thesaurus / synonyms (writing aid). Default source is the free, keyless
+  -- Datamuse API (English). Set a `custom` function for another source/language.
+  thesaurus = {
+    enable = true,
+    source = "datamuse", -- "datamuse" | "custom"
+    max = 20,
+    timeout_ms = 6000,
+    keymap = false, -- opt-in: replace the word under the cursor with a synonym
+    -- custom = function(word, cb) cb({ "syn1", "syn2" }) end,
+  },
+
   commands = true,
 }
 

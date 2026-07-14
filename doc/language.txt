@@ -193,6 +193,17 @@ keys (press <Esc> first) so insert-mode typing keeps its native keys:
     q,<Esc> close  (also <C-c> in insert mode)
 The window uses the configured engine/fallback like every other translation.
 
+                                                          *language-thesaurus*
+Thesaurus / synonyms~
+`require("language").synonyms()` (or the opt-in `thesaurus.keymap`) looks up
+synonyms for the word under the cursor and replaces it with your pick. The
+default source is the free, keyless Datamuse API (English); set
+`thesaurus.source = "custom"` with `thesaurus.custom = fun(word, cb)` for another
+source or language. >lua
+    require("language").setup({
+      thesaurus = { keymap = "<leader>sy" },  -- opt-in
+    })
+<
 Live scanning~
 Set `spell.live = true` for always-on inline diagnostics that update as you
 edit (debounced by `scan_debounce_ms`). It is decoupled from the panel and runs

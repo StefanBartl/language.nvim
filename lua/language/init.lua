@@ -69,6 +69,12 @@ function M.translate_history()
   end)
 end
 
+---Replace the word under the cursor with a synonym (thesaurus lookup).
+---@return nil
+function M.synonyms()
+  require("language.thesaurus").replace_under_cursor()
+end
+
 ---Open the spell review panel.
 ---@param scope? string
 ---@return nil

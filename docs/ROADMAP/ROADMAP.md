@@ -52,9 +52,11 @@ Status of the phased build. ✅ done · 🔜 planned.
   (`<lhs>iw`) and char-wise visual selections translate the exact byte span
   (multibyte-safe via getregionpos) and replace it in place; line/block-wise
   still use the line range.
+- ✅ **Thesaurus / synonyms** (`thesaurus/`): replace the word under the cursor
+  with a synonym from the free, keyless Datamuse API (async) or a `custom`
+  source; opt-in `thesaurus.keymap` / `require("language").synonyms()`.
 
 ## Planned
 
 - 🔜 **cspell long-lived process**: keep a persistent cspell server (à la
   fastspell) for ~instant buffer-scope checks instead of a per-scan spawn.
-- 🔜 **Thesaurus / synonyms** action in the spell item menu (vim-lexical-style).
