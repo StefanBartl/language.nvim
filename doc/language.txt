@@ -123,8 +123,11 @@ and yields between chunks so the editor never freezes.
                 URLs/emails.
     typos       fast tree-wide scanning via the `typos` CLI (async), used for
                 cwd/path scopes when available.
-    cspell,     external CLIs (opt-in).
+    cspell,     external CLIs (opt-in) for cwd/path scopes.
     codespell
+    cspell_server  a persistent Node sidecar that keeps cspell-lib loaded, for
+                fast, code-aware, live buffer checks (needs node + cspell). Opt
+                in by adding "cspell_server" to `spell.providers.buffer`.
     harper/ltex grammar diagnostics from a running language server are
                 harvested and shown alongside spelling issues (kind = grammar).
 

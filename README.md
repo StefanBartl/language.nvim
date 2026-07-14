@@ -23,7 +23,9 @@ benötigt — nur `curl` (Google-Engine, keyless, funktioniert ohne Konfiguratio
   pro Buffer, spelllang-Wiederherstellung.
 - **Grammatik & Provider** — Grammatik-Diagnostics von `harper_ls`/`ltex`
   erscheinen im selben Panel; optionale externe Spell-CLIs (`typos`, `cspell`,
-  `codespell`) für cwd/path-Scans. Native Erkennung splittet CamelCase/snake_case und prüft nur
+  `codespell`) für cwd/path-Scans; optionaler **persistenter cspell-Sidecar**
+  (`"cspell_server"` in `spell.providers.buffer`, braucht node+cspell) für
+  schnelle, code-aware, live Buffer-Checks. Native Erkennung splittet CamelCase/snake_case und prüft nur
   Treesitter-`@spell`-Regionen (Kommentare/Strings/Prosa), keine Identifier-
   Fehlalarme.
 - **`:Translate`** — Range/Auswahl übersetzen; Default ersetzt den Text in place

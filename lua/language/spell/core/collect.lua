@@ -77,35 +77,62 @@ local function provider_enabled(cfg, list, name)
   return false
 end
 
+---@param scope LanguageScope
+---@return boolean
+local function is_single_buffer(scope)
+  return scope.kind == "buffer" or scope.kind == "visible" or scope.kind == "selection"
+end
+
+---Raw synchronous collection for a single-buffer scope: native spelling plus
+---LSP grammar harvest (no post-processing).
+---@param scope LanguageScope
+---@param cfg LanguageSpellCfg
+---@return LanguageSpellIssue[]
+local function raw_buffer(scope, cfg)
+  local issues = native.scan_scope(scope, cfg)
+  local buffer_providers = cfg.providers and cfg.providers.buffer
+  if provider_enabled(cfg, buffer_providers, "lsp") and lsp.available() then
+    vim.list_extend(issues, lsp.scan_scope(scope, cfg))
+  end
+  return issues
+end
+
 ---Synchronous scan: native spelling plus LSP grammar harvest for single-buffer
----scopes. For cwd/path this uses the native loaded-buffer scan.
+---scopes. For cwd/path this uses the native loaded-buffer scan. Does not include
+---the async cspell sidecar (use `gather` for that).
 ---@param scope LanguageScope
 ---@param cfg LanguageSpellCfg
 ---@return LanguageSpellIssue[]
 function M.scan(scope, cfg)
-  local issues = native.scan_scope(scope, cfg)
-
-  local single_buffer = scope.kind == "buffer"
-    or scope.kind == "visible"
-    or scope.kind == "selection"
-  local buffer_providers = cfg.providers and cfg.providers.buffer
-  if single_buffer and provider_enabled(cfg, buffer_providers, "lsp") and lsp.available() then
-    vim.list_extend(issues, lsp.scan_scope(scope, cfg))
+  if is_single_buffer(scope) then
+    return post(raw_buffer(scope, cfg), cfg)
   end
-
-  return post(issues, cfg)
+  return post(native.scan_scope(scope, cfg), cfg)
 end
 
----Async-capable scan. For cwd/path, prefers the first available external CLI
----provider in `providers.cwd`, else falls back to the synchronous native scan.
----Always delivers via `cb`.
+---Async-capable scan; always delivers via `cb`.
+---  • single-buffer scopes: native + LSP (sync), plus the persistent cspell
+---    sidecar (async) when "cspell_server" is in `providers.buffer`.
+---  • cwd/path scopes: the first available external CLI provider in
+---    `providers.cwd`, else the synchronous native scan.
 ---@param scope LanguageScope
 ---@param cfg LanguageSpellCfg
 ---@param cb fun(issues: LanguageSpellIssue[])
 ---@return Language.Job|nil
 function M.gather(scope, cfg, cb)
-  if scope.kind ~= "cwd" and scope.kind ~= "path" then
-    cb(M.scan(scope, cfg))
+  if is_single_buffer(scope) then
+    local raw = raw_buffer(scope, cfg)
+    local buffer_providers = cfg.providers and cfg.providers.buffer
+    if provider_enabled(cfg, buffer_providers, "cspell_server") then
+      local server = require("language.spell.providers.cspell_server")
+      if server.available() then
+        return server.check(scope, cfg, function(server_issues)
+          vim.list_extend(raw, server_issues)
+          cb(post(raw, cfg))
+        end)
+      end
+    end
+    cb(post(raw, cfg))
     return nil
   end
 
@@ -124,7 +151,6 @@ function M.gather(scope, cfg, cb)
     end
   end
 
-  -- Nothing matched: native fallback.
   cb(M.scan(scope, cfg))
   return nil
 end

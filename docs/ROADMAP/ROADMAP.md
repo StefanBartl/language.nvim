@@ -55,8 +55,12 @@ Status of the phased build. ✅ done · 🔜 planned.
 - ✅ **Thesaurus / synonyms** (`thesaurus/`): replace the word under the cursor
   with a synonym from the free, keyless Datamuse API (async) or a `custom`
   source; opt-in `thesaurus.keymap` / `require("language").synonyms()`.
+- ✅ **cspell long-lived process** (`node/cspell_server.js` +
+  `spell/providers/cspell_server`): a persistent Node sidecar keeps cspell-lib
+  loaded and checks the buffer over stdin/stdout (~instant, no per-scan cold
+  start) — code-aware, live-capable. Opt in with `"cspell_server"` in
+  `spell.providers.buffer` (needs node + cspell).
 
 ## Planned
 
-- 🔜 **cspell long-lived process**: keep a persistent cspell server (à la
-  fastspell) for ~instant buffer-scope checks instead of a per-scan spawn.
+_All roadmap items implemented._ Future ideas welcome.

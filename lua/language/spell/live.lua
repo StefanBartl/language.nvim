@@ -81,17 +81,22 @@ local function build_scope(bufnr)
   return { kind = "buffer", bufnr = bufnr }
 end
 
----Scan `bufnr` now and (re)publish its live diagnostics.
+---Scan `bufnr` now and (re)publish its live diagnostics. Collection is
+---async-capable (the cspell sidecar), so publishing happens in the callback.
 ---@param bufnr integer
 ---@return nil
 function M.scan(bufnr)
   if not M.should_scan(bufnr) then
     return
   end
-  local issues = collect.scan(build_scope(bufnr), cfg())
-  list.clear({ [bufnr] = true })
-  list.publish(issues, SOURCE, cfg().max_highlights)
-  attached[bufnr] = true
+  collect.gather(build_scope(bufnr), cfg(), function(issues)
+    if not api.nvim_buf_is_valid(bufnr) then
+      return
+    end
+    list.clear({ [bufnr] = true })
+    list.publish(issues, SOURCE, cfg().max_highlights)
+    attached[bufnr] = true
+  end)
 end
 
 ---Debounced live rescan trigger.

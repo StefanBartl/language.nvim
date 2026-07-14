@@ -57,6 +57,12 @@ local function check_spell_tools()
   else
     info_s("codespell not found (optional)")
   end
+  -- Persistent cspell sidecar (fast, code-aware buffer/live checks).
+  if exe("cspell") and exe("node") then
+    ok_s('cspell sidecar ready (node + cspell) — add "cspell_server" to spell.providers.buffer')
+  elseif exe("cspell") then
+    info_s("node not found — persistent cspell sidecar unavailable (one-shot cspell still works)")
+  end
 end
 
 local function check_grammar()
