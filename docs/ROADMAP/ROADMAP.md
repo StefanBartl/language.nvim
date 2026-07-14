@@ -48,7 +48,10 @@ Status of the phased build. ✅ done · 🔜 planned.
 
 - 🔜 **cspell long-lived process**: keep a persistent cspell server (à la
   fastspell) for ~instant buffer-scope checks instead of a per-scan spawn.
-- 🔜 **Translate UX**: reverse translation; query history.
+- ✅ **Reverse / round-trip** (window `<C-r>`): promotes the translation to the
+  input and picks a new target, so a result can be translated back or onward.
+
+- 🔜 **Translate UX**: query history (recall previous translations).
 - 🔜 **Fine-grained selection**: column-precise word/visual-block translation
   with UTF-8 handling (currently line-range based).
 - 🔜 **Thesaurus/synonym** action in the item menu (vim-lexical-style).

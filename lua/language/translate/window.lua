@@ -147,6 +147,24 @@ local function pick_retarget()
   })
 end
 
+---Reverse / round-trip: promote the current translation to the input, then pick
+---a new target so it can be translated back (or onward).
+---@return nil
+function M.reverse()
+  if not (state.output_buf and api.nvim_buf_is_valid(state.output_buf)) then
+    return
+  end
+  if not (state.input_buf and api.nvim_buf_is_valid(state.input_buf)) then
+    return
+  end
+  local out = api.nvim_buf_get_lines(state.output_buf, 0, -1, false)
+  if #out == 0 or (#out == 1 and (out[1] == "" or out[1] == "…")) then
+    return
+  end
+  api.nvim_buf_set_lines(state.input_buf, 0, -1, false, out)
+  pick_retarget()
+end
+
 ---Create the two floating windows for `target`, prefilled with `source_lines`.
 ---@param target string
 ---@param source_lines string[]|nil
@@ -194,6 +212,7 @@ local function launch(target, source_lines)
   vim.keymap.set("n", "<Esc>", M.close, mo)
   vim.keymap.set("i", "<C-c>", M.close, mo)
   vim.keymap.set({ "n", "i" }, "<C-l>", pick_retarget, mo)
+  vim.keymap.set({ "n", "i" }, "<C-r>", M.reverse, mo)
   vim.keymap.set({ "n", "i" }, "<C-y>", function()
     local out = api.nvim_buf_get_lines(state.output_buf, 0, -1, false)
     local text = table.concat(out, "\n")
