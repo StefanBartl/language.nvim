@@ -161,12 +161,6 @@ local function emit_split(word, kind_key, col, lnum, bufnr, path, min_length, ou
   return emitted
 end
 
----Scan a list of lines, appending issues to `out`.
----@param lines string[]
----@param first_lnum integer
----@param bufnr integer|nil
----@param path string
----@param out LanguageSpellIssue[]
 ---Compute which line indices are silenced by inline `language:disable-*`
 ---directives, and whether the whole file is disabled.
 ---  `language:disable-file`       — skip the entire buffer
@@ -303,7 +297,9 @@ local function collect_file(path, out, cfg)
   scan_lines(lines, 1, nil, path, out, cfg, nil)
 end
 
----Iterate loaded, listed buffers whose path is under `prefix`.
+---Iterate loaded, listed buffers whose path is under `prefix`. Cheap, but only
+---sees buffers already open in this session — see `scan_tree` for a real
+---recursive disk walk.
 ---@param prefix string
 ---@param out LanguageSpellIssue[]
 ---@param cfg LanguageSpellCfg
@@ -321,6 +317,137 @@ local function collect_loaded_under(prefix, out, cfg)
       end
     end
   end
+end
+
+-- ── Recursive disk tree scan (async, chunked) ───────────────────────────────
+-- The native cwd/path fallback above only sees already-loaded buffers. When no
+-- external CLI provider (typos/cspell/codespell) is configured/available,
+-- `scan_tree` instead walks the actual directory tree on disk — every matching
+-- file is checked, not just the ones currently open — reading unopened files
+-- from disk and preferring live buffer content for files that are open (so
+-- unsaved edits are reflected). Chunked via `vim.schedule` so large trees
+-- don't block the editor.
+
+---Directory names never descended into.
+---@type table<string, true>
+local TREE_IGNORE_DIR = {
+  [".git"] = true,
+  node_modules = true,
+  [".venv"] = true,
+  venv = true,
+  dist = true,
+  build = true,
+  target = true,
+  [".cache"] = true,
+  __pycache__ = true,
+}
+
+---Files above this size are skipped before reading (cheap pre-filter; the
+---`max_file_lines` config cap still applies after read for smaller files).
+local TREE_MAX_BYTES = 5 * 1024 * 1024
+
+---Gather text files (by `TEXT_EXT`, skipping vendor dirs) under `dir`.
+---@param dir string
+---@return string[] absolute paths
+local function gather_tree_files(dir)
+  ---@type string[]
+  local out = {}
+  pcall(function()
+    for name, typ in vim.fs.dir(dir, { depth = 24 }) do
+      if typ == "file" then
+        local skip = false
+        for seg in name:gmatch("[^/\\]+") do
+          if TREE_IGNORE_DIR[seg] then
+            skip = true
+            break
+          end
+        end
+        local ext = name:match("%.([^.\\/]+)$")
+        if not skip and ext and TEXT_EXT[ext:lower()] then
+          out[#out + 1] = fn.fnamemodify(dir .. "/" .. name, ":p")
+        end
+      end
+    end
+  end)
+  return out
+end
+
+---Files scanned per event-loop tick during a disk tree walk.
+local TREE_CHUNK = 20
+
+---Recursively scan every text file under `dir` (not just open buffers).
+---Cancellable; delivers the full issue list via `cb` when done.
+---@param dir string
+---@param cfg LanguageSpellCfg
+---@param cb fun(issues: LanguageSpellIssue[])
+---@return Language.Job
+local function scan_tree_async(dir, cfg, cb)
+  local files = gather_tree_files(dir)
+  ---@type LanguageSpellIssue[]
+  local out = {}
+  local i = 0
+  local cancelled = false
+  local max_lines = cfg.max_file_lines
+
+  local function step()
+    if cancelled then
+      return
+    end
+    local last = math.min(i + TREE_CHUNK, #files)
+    for idx = i + 1, last do
+      local abs = files[idx]
+      local buf = fn.bufnr(abs)
+      if buf > 0 and api.nvim_buf_is_valid(buf) and api.nvim_buf_is_loaded(buf) then
+        -- Open in this session: use live content (reflects unsaved edits).
+        if scannable(buf, cfg) then
+          collect_buf_range(buf, 1, api.nvim_buf_line_count(buf), out, cfg)
+        end
+      else
+        -- Not open: read from disk (size-capped, then line-count-capped).
+        local size = fn.getfsize(abs)
+        if size >= 0 and size <= TREE_MAX_BYTES then
+          local ok, lines = pcall(fn.readfile, abs)
+          if ok and type(lines) == "table" and (not max_lines or #lines <= max_lines) then
+            scan_lines(lines, 1, nil, abs, out, cfg, nil)
+          end
+        end
+      end
+    end
+    i = last
+    if i >= #files then
+      cb(out)
+    else
+      vim.schedule(step)
+    end
+  end
+
+  step()
+
+  ---@type Language.Job
+  return {
+    cancel = function()
+      cancelled = true
+    end,
+  }
+end
+
+---Async cwd/path scan: a real recursive disk walk, used as the native
+---fallback in `collect.gather` when no external CLI spell provider is
+---available. For a `path` that points at a single file, reads just that file.
+---@param scope LanguageScope
+---@param cfg LanguageSpellCfg
+---@param cb fun(issues: LanguageSpellIssue[])
+---@return Language.Job|nil
+function M.scan_tree(scope, cfg, cb)
+  if scope.kind == "path" and scope.path and fn.isdirectory(scope.path) == 0 then
+    ---@type LanguageSpellIssue[]
+    local out = {}
+    collect_file(scope.path, out, cfg)
+    cb(out)
+    return nil
+  end
+  local dir = (scope.kind == "path" and scope.path) or fn.getcwd()
+  return scan_tree_async(dir, cfg, cb)
 end
 
 ---Scan the given scope and return all native spell issues.

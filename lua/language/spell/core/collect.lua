@@ -8,9 +8,10 @@
 ---   • `scan`   — synchronous. Native spelling (+ LSP grammar harvest for
 ---     single-buffer scopes). Used by the buffer session flow.
 ---   • `gather` — async-capable. For cwd/path scopes it prefers an external CLI
----     provider (typos) when configured and available, falling back to the
----     synchronous native scan. Delivers issues via callback. Used by wide
----     scopes and the panel.
+---     provider (typos/cspell/codespell) when configured and available, else
+---     falls back to a real recursive native disk-tree scan (async, chunked —
+---     not just already-loaded buffers). Delivers issues via callback. Used by
+---     wide scopes and the panel.
 
 require("language.@types")
 require("language.spell.@types")
@@ -142,8 +143,8 @@ local function raw_buffer(scope, cfg)
 end
 
 ---Synchronous scan: native spelling plus LSP grammar harvest for single-buffer
----scopes. For cwd/path this uses the native loaded-buffer scan. Does not include
----the async cspell sidecar (use `gather` for that).
+---scopes. For cwd/path this uses the native loaded-buffer scan only (fast, but
+---blind to files that aren't open) — use `gather` for a full disk-tree scan.
 ---@param scope LanguageScope
 ---@param cfg LanguageSpellCfg
 ---@return LanguageSpellIssue[]
@@ -152,6 +153,25 @@ function M.scan(scope, cfg)
     return post(raw_buffer(scope, cfg), cfg)
   end
   return post(native.scan_scope(scope, cfg), cfg)
+end
+
+---Native async recursive disk-tree scan for a cwd/path scope (real fallback
+---when no external CLI spell provider is available), with progress feedback.
+---@param scope LanguageScope
+---@param cfg LanguageSpellCfg
+---@param key string
+---@param cb fun(issues: LanguageSpellIssue[])
+---@return Language.Job|nil
+local function native_tree(scope, cfg, key, cb)
+  local prog = require("lib.nvim.progress").create({ title = "[language]" })
+  prog:update({ text = ("spell-scanning %s (native)…"):format(scope.kind) })
+  active[key] = native.scan_tree(scope, cfg, function(issues)
+    active[key] = nil
+    local result = post(issues, cfg)
+    prog:finish(("%d spelling issue(s)"):format(#result))
+    cb(result)
+  end)
+  return active[key]
 end
 
 ---Async-capable scan; always delivers via `cb`.
@@ -186,7 +206,8 @@ function M.gather(scope, cfg, cb)
     return nil
   end
 
-  -- cwd/path: first available external CLI provider, else native fallback.
+  -- cwd/path: first available external CLI provider, else a real recursive
+  -- native disk-tree scan (async, chunked) — not just already-loaded buffers.
   for _, name in ipairs((cfg.providers and cfg.providers.cwd) or { "native" }) do
     local mod_path = CLI_MODULES[name]
     if mod_path then
@@ -205,13 +226,12 @@ function M.gather(scope, cfg, cb)
         return active[key]
       end
     elseif name == "native" then
-      cb(M.scan(scope, cfg))
-      return nil
+      return native_tree(scope, cfg, key, cb)
     end
   end
 
-  cb(M.scan(scope, cfg))
-  return nil
+  -- Nothing in `providers.cwd` matched/available: still do a real tree scan.
+  return native_tree(scope, cfg, key, cb)
 end
 
 return M

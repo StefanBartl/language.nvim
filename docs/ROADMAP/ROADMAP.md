@@ -86,6 +86,16 @@ Status of the phased build. ✅ done · 🔜 planned.
   workflow under its original name. Motion/visual maps (`translate/motion`)
   now hardcode `replace` (rewrite-in-place operator semantics), independent of
   the popup default.
+- ✅ **Native recursive disk-tree scan for cwd/path** (`native.scan_tree` +
+  `collect.native_tree`): closed a real gap — the native cwd/path fallback
+  previously only checked already-open buffers (`collect_loaded_under`),
+  silently skipping any file not currently loaded in the session. Now, when no
+  external CLI provider (typos/cspell/codespell) is available, native
+  recursively walks the directory on disk (async, 20 files/tick via
+  `vim.schedule`, cancellable, `lib.nvim.progress` feedback), preferring live
+  buffer content for open files and reading closed files fresh from disk.
+  Skips vendor dirs (.git/node_modules/.venv/dist/build/target/.cache/
+  __pycache__), files >5MB, and files over `spell.max_file_lines`.
 
 ## Planned
 
