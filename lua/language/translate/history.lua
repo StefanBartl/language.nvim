@@ -6,6 +6,8 @@
 --- set, the ring is loaded on first use and saved to a JSON file after each
 --- record. Idea from vim-translator's query history.
 
+local json = require("lib.nvim.fs.json")
+
 local M = {}
 
 ---@class Language.TranslateHistoryEntry
@@ -36,12 +38,9 @@ local function ensure_loaded()
   ring = {}
   local h = hcfg()
   if h.persist and h.file and vim.fn.filereadable(h.file) == 1 then
-    local ok, content = pcall(vim.fn.readfile, h.file)
-    if ok and type(content) == "table" and #content > 0 then
-      local ok2, decoded = pcall(vim.json.decode, table.concat(content, "\n"))
-      if ok2 and type(decoded) == "table" then
-        ring = decoded
-      end
+    local decoded = json.read(h.file)
+    if type(decoded) == "table" then
+      ring = decoded
     end
   end
   return ring
@@ -53,10 +52,7 @@ local function save()
   if not (h.persist and h.file and h.file ~= "") then
     return
   end
-  pcall(function()
-    vim.fn.mkdir(vim.fn.fnamemodify(h.file, ":h"), "p")
-    vim.fn.writefile({ vim.json.encode(ring) }, h.file)
-  end)
+  json.write(h.file, ring)
 end
 
 ---Record a successful translation (newest first, capped, deduped by input+target).
