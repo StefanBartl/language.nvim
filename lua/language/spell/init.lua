@@ -160,7 +160,7 @@ function M.refresh()
   local issues = collect.scan(scope, cfg())
 
   list.clear({ [bufnr] = true })
-  touched = list.publish(issues, SOURCE, cfg().max_highlights)
+  touched = list.publish(issues, SOURCE, cfg().max_highlights, cfg().highlights)
 
   local use_trouble = cfg().ui and cfg().ui.view ~= "quickfix"
   list.refresh(issues, { use_trouble = use_trouble, source = SOURCE, title = "Spellcheck" })
@@ -222,7 +222,7 @@ function M.run(lang, scope)
         notify.info(("No spelling errors found (%s)"):format(scope_label))
         return
       end
-      touched = list.publish(issues, SOURCE, cfg().max_highlights)
+      touched = list.publish(issues, SOURCE, cfg().max_highlights, cfg().highlights)
       list.open(
         issues,
         { use_trouble = use_trouble, source = SOURCE, title = "Spellcheck: " .. scope_label }
@@ -267,7 +267,7 @@ function M.run(lang, scope)
     lang = lang or vim.bo.spelllang,
   }
 
-  touched = list.publish(issues, SOURCE, cfg().max_highlights)
+  touched = list.publish(issues, SOURCE, cfg().max_highlights, cfg().highlights)
   attach_keymaps(bufnr)
   list.open(issues, { use_trouble = use_trouble, source = SOURCE, title = "Spellcheck" })
   notify.info(("%d spelling issue(s) found (%s)"):format(#issues, scope_label))

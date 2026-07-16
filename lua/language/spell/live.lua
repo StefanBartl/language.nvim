@@ -94,7 +94,7 @@ function M.scan(bufnr)
       return
     end
     list.clear({ [bufnr] = true })
-    list.publish(issues, SOURCE, cfg().max_highlights)
+    list.publish(issues, SOURCE, cfg().max_highlights, cfg().highlights)
     attached[bufnr] = true
   end)
 end

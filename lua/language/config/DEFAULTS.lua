@@ -16,6 +16,9 @@ local defaults = {
       cwd = { "typos", "native" }, -- CLI preferred for tree scan
       native = { spelllang = nil }, -- nil = inherit vim 'spelllang'
       lsp = { enable = true, servers = { "harper_ls", "ltex" } },
+      -- Escape hatch for a spellchecker CLI without a bundled adapter: add
+      -- "custom" to `providers.cwd` and set cmd/parse. Mirrors translate.custom.
+      custom = nil, -- { cmd = function(scope, cfg) ... end, parse = function(out, base) ... end }
     },
     filetypes = { "markdown", "text", "gitcommit", "tex", "rst", "asciidoc", "help" },
     default_scope = "buffer", -- buffer|visible|cwd|path
@@ -39,6 +42,9 @@ local defaults = {
       replace_all = true, -- apply suggestion to all identical errors in scope
     },
     guard = { block_write_on_error = false }, -- opt-in: abort :w on spelling errors
+    -- Opt-in: mark issues directly in the buffer via extmarks (LanguageSpellHighlight/
+    -- LanguageGrammarHighlight highlight groups), independent of vim.diagnostic config.
+    highlights = { enable = false, style = "underline" }, -- style: "underline"|"undercurl"
     keymaps = {
       panel = "<leader>ss",
       next = "]s",
