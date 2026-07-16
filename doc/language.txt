@@ -151,8 +151,13 @@ arguments:
     selection   a visual/line range (mainly for :Translate)
 
 For cwd/path scopes with many files, an external CLI spell provider is
-preferred (one process over the tree); otherwise the native scanner is used
-and yields between chunks so the editor never freezes.
+preferred (one process over the tree, fastest); otherwise the native scanner
+recursively walks the directory on disk (not just already-open buffers),
+async and chunked (20 files per tick) so the editor never freezes. Live
+(unsaved) buffer content is used for files that happen to be open; closed
+files are read fresh from disk. Vendor directories (.git, node_modules, .venv,
+dist, build, target, .cache, __pycache__) are skipped, as are files above 5 MB
+or `spell.max_file_lines`.
 
 ==============================================================================
 6. SPELL PROVIDERS                                   *language-spell-providers*
@@ -161,7 +166,9 @@ and yields between chunks so the editor never freezes.
                 'spelllang'. Splits CamelCase/snake_case identifiers and only
                 reports genuinely misspelled subwords; restricts checking to
                 Treesitter @spell regions (comments/strings/prose) and skips
-                URLs/emails.
+                URLs/emails. For cwd/path scopes it recursively scans every
+                matching file on disk (see |language-scoping|), not only
+                already-open buffers.
     typos       fast tree-wide scanning via the `typos` CLI (async), used for
                 cwd/path scopes when available.
     cspell,     external CLIs (opt-in) for cwd/path scopes.

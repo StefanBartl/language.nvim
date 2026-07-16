@@ -47,7 +47,11 @@ benötigt — nur `curl` (Google-Engine, keyless, funktioniert ohne Konfiguratio
   / `-next-line` / `-file` (im Kommentar), persistente Ignore-Liste, Wörterbuch.
   Opt-in `spell.guard.block_write_on_error` bricht `:w` bei Tippfehlern ab.
 - **Scoping** — jede Aktion kennt einen Scope: `buffer` (Default), `visible`,
-  `cwd`, `path=<datei|ordner>`, `selection`.
+  `cwd`, `path=<datei|ordner>`, `selection`. Für `cwd`/`path` bevorzugt Spell
+  einen externen CLI-Provider (`typos`/`cspell`/`codespell`, ein Prozess über
+  den ganzen Baum); ohne CLI läuft ein echtes, rekursives, asynchron-
+  chunk-basiertes natives Directory-Walking (nicht nur offene Buffer) —
+  überspringt `.git`/`node_modules`/etc., abbrechbar, mit Fortschrittsanzeige.
 - **Asynchron & abbrechbar** — externe Prozesse (curl u. a.) laufen non-blocking
   über eine argv-basierte Job-Schicht (kein Shell-Interpolieren von Text) mit
   Timeout; ein neuer Aufruf bricht den laufenden ab.
@@ -76,7 +80,7 @@ benötigt — nur `curl` (Google-Engine, keyless, funktioniert ohne Konfiguratio
 
 ```vim
 :Spellcheck                 " aktuellen Buffer prüfen (Session an/aus)
-:Spellcheck en cwd          " alle offenen Textbuffer unter dem cwd
+:Spellcheck en cwd          " alle Textdateien unter dem cwd (rekursiv, CLI bevorzugt, sonst natives Tree-Walking)
 :Spellcheck de path=~/notes " Datei oder Ordner
 :Spellcheck clear           " Session beenden, Diagnostics entfernen
 :Spellcheck refresh         " neu scannen
