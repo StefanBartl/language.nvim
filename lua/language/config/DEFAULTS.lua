@@ -50,7 +50,7 @@ local defaults = {
   translate = {
     engine = "google", -- "google"|"deepl"|"shell"|<custom>
     fallback = { "google" }, -- engine fallback chain (graceful degradation)
-    default_output = "replace", -- "replace"|"float"|"notify"|"clipboard"|"insert"
+    default_output = "popup", -- "popup"|"replace"|"buffer"|"vsplit"|"split"|"tab"|"insert"|"clipboard"|"notify"
     default_input = "selection", -- selection|clipboard|input
     default_langs = { "EN", "DE", "FR", "ZH", "JA" },
     default_target = nil, -- fixed target for motion/visual maps; nil = prompt
@@ -69,6 +69,17 @@ local defaults = {
     --   operator: `<lhs>{motion}` translates the moved-over text (e.g. gtrip)
     --   visual:   `<lhs>` translates the visual selection
     keymaps = { operator = false, visual = false },
+    -- Multi-file translation (:Translate cwd / path=<dir>): pick files (kit
+    -- multi-select, <Tab>), then per file:
+    --   "suffix"  → write a sibling file  name.<TARGET>.ext  (non-destructive, default)
+    --   "replace" → overwrite the file in place (asks for confirmation first)
+    --   "buffers" → open each translation in a scratch buffer (no disk write)
+    -- Override per call with `--files=<mode>`.
+    files = {
+      output = "suffix",
+      extensions = { "md", "markdown", "txt", "text", "rst", "adoc", "asciidoc", "tex", "org" },
+      max_kb = 512,
+    },
   },
 
   -- Thesaurus / synonyms (writing aid). Default source is the free, keyless

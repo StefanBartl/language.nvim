@@ -28,10 +28,19 @@ benötigt — nur `curl` (Google-Engine, keyless, funktioniert ohne Konfiguratio
   schnelle, code-aware, live Buffer-Checks. Native Erkennung splittet CamelCase/snake_case und prüft nur
   Treesitter-`@spell`-Regionen (Kommentare/Strings/Prosa), keine Identifier-
   Fehlalarme.
-- **`:Translate`** — Range/Auswahl übersetzen; Default ersetzt den Text in place
-  (`--output=replace`), alternativ `float`/`notify`/`clipboard`/`insert`.
-  `--nocode` überspringt Fenced- und Inline-Code. Engines: Google (keyless),
-  DeepL, translate-shell, eigenes CLI — mit Fallback-Kette.
+- **`:Translate`** / **`:TranslateReplace`** — Range/Auswahl übersetzen.
+  `:Translate` zeigt das Ergebnis standardmäßig in einem **Popup**
+  (`lib.nvim.ui.kit`, read-only, fokussierbar/scrollbar, `q`/`<Esc>` schließt) —
+  der Buffer bleibt unangetastet; alternativ `--output=replace|buffer|vsplit|
+  split|tab|insert|clipboard|notify`. `:TranslateReplace` ist der direkte,
+  mutierende Gegenpart (immer `replace`, kein `--output=`) — das klassische
+  „markieren, übersetzen, ersetzen"-Verhalten. Motion-/Visual-Mappings
+  (`translate.keymaps`) ersetzen immer, unabhängig vom Popup-Default.
+  `--nocode` überspringt Fenced- und Inline-Code (nur bei Replace relevant).
+  Engines: Google (keyless), DeepL, translate-shell, eigenes CLI — mit
+  Fallback-Kette. `:Translate <lang> cwd`/`path=<dir>` übersetzt mehrere
+  Dateien (Multi-Select via `lib.nvim.ui.kit`, Ausgabe als Sprach-Suffix,
+  in-place oder Scratch-Buffer).
 - **Thesaurus** — `require("language").synonyms()` ersetzt das Wort unter dem
   Cursor durch ein Synonym (Datamuse-API, keyless; oder eigene Quelle/Sprache).
 - **False positives stumm schalten** — Inline-Direktiven `language:disable-line`
@@ -72,11 +81,14 @@ benötigt — nur `curl` (Google-Engine, keyless, funktioniert ohne Konfiguratio
 :Spellcheck clear           " Session beenden, Diagnostics entfernen
 :Spellcheck refresh         " neu scannen
 
-:'<,'>Translate DE          " Auswahl nach Deutsch, ersetzt den Text
-:Translate EN --nocode      " Range übersetzen, Code auslassen
-:Translate FR --output=float " Übersetzung im Float statt Ersetzen
-:Translate!                 " interaktives Fenster (live übersetzen beim Tippen)
-:'<,'>Translate! DE         " Fenster mit Auswahl vorbefüllt, Ziel DE
+:'<,'>Translate DE           " Popup mit der Übersetzung, Buffer unangetastet
+:Translate FR --output=vsplit " Übersetzung in einem neuen vertikalen Split
+:'<,'>TranslateReplace DE    " Auswahl nach Deutsch, ERSETZT den Text (klassisches Verhalten)
+:TranslateReplace EN --nocode " ersetzt, überspringt Fenced-/Inline-Code
+:Translate!                  " interaktives Fenster (live übersetzen beim Tippen)
+:'<,'>Translate! DE          " Fenster mit Auswahl vorbefüllt, Ziel DE
+:Translate DE cwd            " Dateien im cwd wählen (Tab) & übersetzen → name.DE.ext
+:TranslateReplace DE cwd     " Dateien wählen & in-place überschreiben (mit Rückfrage)
 ```
 
 Standard-Keymap: `<leader>ss` schaltet die Spell-Session im aktuellen Buffer um
@@ -112,7 +124,7 @@ require("language").setup({
   translate = {
     engine = "google",           -- "google" (keyless) | "deepl" | "shell" | "custom"
     fallback = { "google" },     -- Engine-Kette, wenn die gewählte nicht verfügbar ist
-    default_output = "replace",  -- replace | float | notify | clipboard | insert
+    default_output = "popup",    -- popup | replace | buffer | vsplit | split | tab | insert | clipboard | notify
     default_target = nil,        -- feste Zielsprache für Motion/Visual-Maps; nil = Auswahl
     timeout_ms = 8000,
     deepl = { api_key = nil },   -- oder $DEEPL_API_KEY

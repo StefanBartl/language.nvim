@@ -43,12 +43,24 @@ function M.spellcheck(lang, scope)
   require("language.spell").run(lang, scope)
 end
 
----Translate a range/selection.
+---Translate a range/selection. Default output is `translate.default_output`
+---(popup, non-mutating). See `M.translate_replace` to force in-place replace.
 ---@param lang string  target language, e.g. "EN", "DE"
 ---@param opts table|nil  { nocode?, output?, scope? }
 ---@return nil
 function M.translate(lang, opts)
   require("language.translate").run(lang, opts)
+end
+
+---Translate a range/selection and replace it in place (`:TranslateReplace`).
+---@param lang string  target language, e.g. "EN", "DE"
+---@param opts table|nil  { nocode?, scope? }
+---@return nil
+function M.translate_replace(lang, opts)
+  require("language.translate").run(
+    lang,
+    vim.tbl_extend("force", opts or {}, { output = "replace" })
+  )
 end
 
 ---Open the interactive translation window.

@@ -1,10 +1,12 @@
 ---@module 'language.translate'
 ---@brief Translate domain entry point: scope → provider → output.
 ---@description
---- Phase-3 scope: keyless Google provider, async and cancellable, over the
---- shared scope model. Default output `replace` reproduces the prior
---- `:TranslateReplace` behavior. `--nocode` translates only the prose ranges of
---- a selection (fenced/inline code preserved), applied bottom-up so line
+--- Keyless Google provider by default, async and cancellable, over the shared
+--- scope model. Default output is `popup` (read-only, non-mutating) — see
+--- `:Translate` vs `:TranslateReplace` in bindings/usrcmds.lua: `:Translate`
+--- shows the result without touching the buffer; `:TranslateReplace` forces
+--- `replace`. `--nocode` (replace mode only) translates only the prose ranges
+--- of a selection (fenced/inline code preserved), applied bottom-up so line
 --- numbers stay valid across replacements.
 
 require("language.@types")
@@ -65,7 +67,7 @@ function M.run_region(target, opts)
   end
 
   cancel_active()
-  local mode = opts.output or c.default_output or "replace"
+  local mode = opts.output or c.default_output or "popup"
 
   local job = provider.translate(lines, target, nil, c, function(ok, result)
     if not ok then
@@ -76,7 +78,11 @@ function M.run_region(target, opts)
     if mode == "replace" then
       pcall(api.nvim_buf_set_text, bufnr, opts.sr, opts.sc, opts.er, opts.ec, result)
     else
-      output.apply(mode, result, { bufnr = bufnr, s = opts.sr + 1, e = opts.er + 1 })
+      output.apply(
+        mode,
+        result,
+        { bufnr = bufnr, s = opts.sr + 1, e = opts.er + 1, target = target }
+      )
     end
     require("language.translate.history").record({ input = lines, output = result, target = target })
   end)
@@ -117,7 +123,7 @@ local function translate_range(provider, bufnr, s, e, target, mode)
       return
     end
     ---@cast result string[]
-    output.apply(mode, result, { bufnr = bufnr, s = s, e = e })
+    output.apply(mode, result, { bufnr = bufnr, s = s, e = e, target = target })
     require("language.translate.history").record({ input = lines, output = result, target = target })
   end)
   if jobref then
@@ -204,7 +210,7 @@ function M.run(lang, opts)
   -- A new run supersedes any in-flight one.
   cancel_active()
 
-  local mode = opts.output or c.default_output or "replace"
+  local mode = opts.output or c.default_output or "popup"
   local nocode = opts.nocode
   if nocode == nil then
     nocode = c.nocode_default
@@ -215,6 +221,15 @@ function M.run(lang, opts)
   else
     translate_range(provider, bufnr, s, e, lang, mode)
   end
+end
+
+---Translate multiple files under a directory (cwd/path scope). Opens a
+---multi-select picker; see `language.translate.files`.
+---@param lang string
+---@param opts { dir: string, mode?: string }
+---@return nil
+function M.run_files(lang, opts)
+  require("language.translate.files").run(lang, opts)
 end
 
 return M
