@@ -59,7 +59,16 @@
 -- Translate subtree
 -- #####################################################################
 
----@alias LanguageTranslateOutput "replace"|"float"|"notify"|"clipboard"|"insert"
+---@alias LanguageTranslateOutput
+---| "popup"    # default: read-only kit popup near the cursor (lib.nvim.ui.kit)
+---| "replace"  # overwrite the source range in place
+---| "buffer"   # open the translation in a new unnamed buffer
+---| "vsplit"   # like "buffer", in a new vertical split
+---| "split"    # like "buffer", in a new horizontal split
+---| "tab"      # like "buffer", in a new tab
+---| "insert"   # insert just below the source range
+---| "clipboard" # copy to the system clipboard (and unnamed register)
+---| "notify"   # show via vim.notify
 ---@alias LanguageTranslateInput  "selection"|"clipboard"|"input"
 
 ---@class LanguageTranslateCfg
@@ -75,6 +84,7 @@
 ---@field custom         { cmd: fun(text: string[], target: string): string[], parse: fun(out: string): string[] }|nil
 ---@field keymaps        { operator: string|false, visual: string|false }
 ---@field history        { enable: boolean, max: integer, persist: boolean, file: string }
+---@field files          { output: "suffix"|"replace"|"buffers", extensions: string[], max_kb: integer }
 
 -- #####################################################################
 -- Root

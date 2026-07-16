@@ -4,8 +4,10 @@
 --- Provides a `g@`-based operator (translate the text you move over, e.g.
 --- `<lhs>ip` for a paragraph) and a visual-mode translator. The target language
 --- is `translate.default_target` when set, otherwise chosen from
---- `translate.default_langs` via a small picker. Results honour
---- `translate.default_output` (replace/float/…). Idea from pantran.nvim.
+--- `translate.default_langs` via a small picker. These are rewrite-in-place
+--- operators (like `gu`/`gq`), so they always replace — independent of
+--- `translate.default_output` (which only affects `:Translate`). Idea from
+--- pantran.nvim.
 
 local api = vim.api
 
@@ -35,20 +37,21 @@ local function choose_target(cb)
   })
 end
 
----Translate a line range in `bufnr` via the configured output.
+---Translate a line range in `bufnr`, replacing it in place (rewrite operator).
 ---@param bufnr integer
 ---@param s integer
 ---@param e integer
 local function translate_range(bufnr, s, e)
   choose_target(function(lang)
     require("language.translate").run(lang, {
-      output = cfg().default_output,
+      output = "replace",
       scope = { kind = "selection", bufnr = bufnr, range = { s = s, e = e } },
     })
   end)
 end
 
----Translate a precise character-wise region (0-based, end-exclusive).
+---Translate a precise character-wise region, replacing it in place (0-based,
+---end-exclusive).
 ---@param bufnr integer
 ---@param sr integer
 ---@param sc integer
@@ -62,7 +65,7 @@ local function translate_region(bufnr, sr, sc, er, ec)
       sc = sc,
       er = er,
       ec = ec,
-      output = cfg().default_output,
+      output = "replace",
     })
   end)
 end

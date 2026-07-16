@@ -10,8 +10,9 @@ Status of the phased build. ✅ done · 🔜 planned.
   session (z= fix-and-advance, spelllang restore), diagnostics namespace,
   Trouble/quickfix fallback. Shared scope parser.
 - ✅ **Phase 3 — Translate core (native Google)**: keyless gtx endpoint, async
-  via the argv job runner, fenced/inline-code filter, `--nocode`,
-  `:Translate` with `replace` default (parity with the old `:TranslateReplace`).
+  via the argv job runner, fenced/inline-code filter, `--nocode`.
+  (Originally `:Translate` defaulted to `replace`; superseded below — see
+  "Translate/TranslateReplace role split".)
 - ✅ **Phase 4 — Review panel + async foundation**: `lib.nvim.ui.kit` picker +
   per-issue action menu (`spell/ui/{panel,item_menu}`), `spell/core/{collect,
   actions,ignore}`, cancellable/timed job runner.
@@ -68,6 +69,23 @@ Status of the phased build. ✅ done · 🔜 planned.
   in `collect.gather`); wired **`dictionary.replace_all`** (Choose suggestion →
   all occurrences) and **`guard.block_write_on_error`** (opt-in `:w` abort);
   inline **`language:disable-line` / `-next-line` / `-file`** directives.
+
+- ✅ **Multi-file translation** (`translate/files`): `:Translate <lang> cwd` (or
+  `path=<dir>`) gathers translatable files, multi-selects via the kit chooser
+  (`<Tab>`), and translates each — writing a language-suffixed sibling
+  (default), overwriting in place (`--files=replace`, with confirmation), or
+  opening scratch buffers (`--files=buffers`). Default via `translate.files.output`.
+- ✅ **`:Translate` / `:TranslateReplace` role split**: `translate.default_output`
+  changed to `popup` (default) — `:Translate` now shows the result in a
+  read-only, focusable `lib.nvim.ui.kit` popup (via `surface.open`, hard
+  dependency) without touching the buffer; `--output=` gained `buffer`/
+  `vsplit`/`split`/`tab` alongside the existing `replace`/`insert`/`clipboard`/
+  `notify` (dropped the old ad-hoc `float`). New `:TranslateReplace` command is
+  the direct mutating counterpart (always `replace`, forces file-mode
+  `replace` for `cwd`/`path=<dir>`) — restores the classic `:TranslateReplace`
+  workflow under its original name. Motion/visual maps (`translate/motion`)
+  now hardcode `replace` (rewrite-in-place operator semantics), independent of
+  the popup default.
 
 ## Planned
 

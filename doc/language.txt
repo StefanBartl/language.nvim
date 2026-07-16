@@ -22,14 +22,16 @@ CONTENTS                                                    *language-contents*
 ==============================================================================
 1. INTRODUCTION                                         *language-introduction*
 
-language.nvim bundles three text-language tools behind two commands:
+language.nvim bundles three text-language tools behind a small set of commands:
 
-    :Spellcheck   spelling + grammar review, worked through in one place
-    :Translate    translate a range/selection (in-place or to a popup)
+    :Spellcheck        spelling + grammar review, worked through in one place
+    :Translate         translate a range/selection, shown in a popup (default)
+    :TranslateReplace   translate a range/selection and replace it in place
 
-It is built on lib.nvim as a shared dependency. Translation is native — no
-external Neovim plugin is required; only `curl` (the default Google engine is
-keyless and works out of the box).
+It is built on lib.nvim as a hard dependency — including for UI (the
+translation popup, pickers, menus use `lib.nvim.ui.kit`). Translation is
+native — no external Neovim plugin is required; only `curl` (the default
+Google engine is keyless and works out of the box).
 
 Both domains share one explicit scope model (|language-scoping|) and run
 long/blocking work asynchronously with cancellation and timeouts.
@@ -80,22 +82,61 @@ Call once. See |language-config| for the full option tree. With lazy.nvim: >lua
 <
                                                                     *:Translate*
 :[range]Translate <lang> [--nocode] [--output=<mode>] [scope]
-    Translate the given range/selection to <lang>. Options:
+    Translate the given range/selection to <lang> and **show the result**
+    without touching the buffer (default output: `popup`, a read-only,
+    focusable, closable (q/<Esc>) `lib.nvim.ui.kit` float near the cursor —
+    scroll/yank freely, nothing is written back). Options:
         --nocode            skip fenced code blocks and inline-code lines
-        --output=<mode>     replace (default) | float | notify | clipboard
-                            | insert
-        scope               selection (default with a range) | buffer
+                            (only takes effect together with --output=replace)
+        --output=<mode>     popup (default) | replace | buffer | vsplit
+                            | split | tab | insert | clipboard | notify
+        --files=<mode>      output mode when scope is cwd/path=<dir> — see
+                            |language-translate-files|
+        scope               selection (default with a range) | buffer | cwd
                             | path=<p>
     Examples: >
-        :'<,'>Translate DE
-        :Translate EN --nocode
-        :Translate FR --output=float
+        :'<,'>Translate DE            " popup near the cursor, buffer untouched
+        :Translate EN --output=vsplit " open the translation in a vertical split
+        :Translate FR --output=buffer " open the translation in a new buffer
+<
+                                                             *:TranslateReplace*
+:[range]TranslateReplace <lang> [--nocode] [scope]
+    Translate the given range/selection to <lang> and **replace it in
+    place** — the direct, mutating counterpart to :Translate (this is what
+    :Translate did before language.nvim gained a non-mutating default; the
+    name/behavior matches the classic `:TranslateReplace`). Always replaces;
+    there is no `--output=`. `--nocode` skips fenced code blocks and
+    inline-code lines. `scope` is `selection` (default with a range) |
+    `buffer` | `cwd` | `path=<p>` — for `cwd`/`path=<dir>` this picks and
+    overwrites multiple files in place (with a confirmation prompt), see
+    |language-translate-files|.
+    Examples: >
+        :'<,'>TranslateReplace DE
+        :TranslateReplace EN --nocode
+        :TranslateReplace DE cwd       " pick files, overwrite in place
 <
                                                                    *:Translate!*
 :[range]Translate![lang]
     Open the interactive translation window (|language-translate-window|),
     prefilled from the range if given. The target is [lang], else
     `translate.default_target`, else a picker.
+
+                                                          *language-translate-files*
+:Translate <lang> cwd
+:Translate <lang> path=<dir> [--files=<mode>]
+:TranslateReplace <lang> cwd
+:TranslateReplace <lang> path=<dir>
+    Translate multiple files. Gathers translatable files under the directory
+    (by `translate.files.extensions`, skipping .git/node_modules/…), opens a
+    multi-select chooser (<Tab> to toggle, <CR> to confirm), then translates
+    each picked file. Output per file:
+        suffix   write a sibling  name.<LANG>.ext  (default, non-destructive)
+        replace  overwrite the file in place (asks for confirmation first)
+        buffers  open each translation in a scratch buffer (no disk write)
+    `:Translate … --files=<mode>` overrides `translate.files.output` for one
+    call; `:TranslateReplace … cwd|path=<dir>` always forces `replace`.
+    Note: `--nocode` code-skipping applies to buffer/selection translation,
+    not to whole-file translation.
 
 ==============================================================================
 5. SCOPING                                                   *language-scoping*
@@ -156,7 +197,9 @@ Motion / visual mappings (opt-in via `translate.keymaps`):
 Char-wise motions and char-wise visual selections translate and replace the
 exact byte span (multibyte-safe); line-wise (V) uses the whole line range.
 The target language is `translate.default_target` when set, otherwise chosen
-from `translate.default_langs` via a picker. Results use `default_output`. >lua
+from `translate.default_langs` via a picker. These are rewrite-in-place
+operators (like `gu`/`gq`) — they always replace, independent of
+`translate.default_output` (which only affects :Translate). >lua
     require("language").setup({
       translate = {
         default_target = "DE",             -- skip the picker
@@ -268,9 +311,10 @@ Defaults (abridged; see lua/language/config/DEFAULTS.lua): >lua
       },
       translate = {
         engine = "google", fallback = { "google" },
-        default_output = "replace", default_input = "selection",
+        default_output = "popup", default_input = "selection",
         nocode_default = false, timeout_ms = 8000,
         deepl = { api_key = nil },
+        files = { output = "suffix" },  -- :Translate cwd/path=<dir> default
       },
       commands = true,
     })
