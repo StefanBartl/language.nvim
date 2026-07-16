@@ -63,7 +63,7 @@ function M._render(scope, cfg, issues)
   end
 
   -- Keep inline diagnostics in sync with the panel contents.
-  list.publish(issues, SOURCE, cfg.max_highlights)
+  list.publish(issues, SOURCE, cfg.max_highlights, cfg.highlights)
 
   -- Detect whether the list spans multiple files (adjust row layout).
   local first_path = issues[1].path

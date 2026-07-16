@@ -7,7 +7,7 @@
 -- #####################################################################
 
 ---@alias LanguageSpellKind "spell"|"grammar"|"style"|"rare"|"caps"
----@alias LanguageSpellSource "native"|"typos"|"codespell"|"cspell"|"harper"|"ltex"
+---@alias LanguageSpellSource "native"|"typos"|"codespell"|"cspell"|"harper"|"ltex"|"custom"
 
 ---@class LanguageSpellIssue
 ---@field bufnr       integer|nil        -- set when the source is an open buffer

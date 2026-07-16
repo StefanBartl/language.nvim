@@ -97,6 +97,19 @@ Status of the phased build. ✅ done · 🔜 planned.
   Skips vendor dirs (.git/node_modules/.venv/dist/build/target/.cache/
   __pycache__), files >5MB, and files over `spell.max_file_lines`.
 
+- ✅ **Buffer highlights + custom spell provider** (`spell/ui/highlights`,
+  `spell/providers/custom`): closed the two gaps found while pruning the
+  personal open-items doc. `spell.highlights.enable = true` marks issues
+  directly in the buffer via `nvim_buf_set_extmark` (own
+  `LanguageSpellHighlight`/`LanguageGrammarHighlight` groups, `default = true`
+  so a colorscheme can override), independent of `vim.diagnostic.config()` —
+  wired through `spell/ui/list.lua`'s existing `publish`/`clear` choke point
+  so every call site (session, live scan, panel) gets it automatically.
+  `spell.providers.custom = { cmd, parse }` is a cwd/path escape hatch for a
+  checker without a bundled adapter, registered in `collect.lua`'s
+  `CLI_MODULES` next to typos/cspell/codespell — add `"custom"` to
+  `spell.providers.cwd` to use it. Mirrors `translate.custom`'s pattern.
+
 ## Planned
 
 _All roadmap items implemented._ Future ideas welcome.

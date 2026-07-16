@@ -10,6 +10,7 @@ require("language.spell.@types")
 
 local api = vim.api
 local diag = vim.diagnostic
+local highlights = require("language.spell.ui.highlights")
 
 local M = {}
 
@@ -45,12 +46,16 @@ end
 ---Publish issues into the namespace, grouped per buffer. Returns the set of
 ---buffers that received diagnostics (so callers can reset them later). When
 ---`max` is given, at most `max` diagnostics are published per buffer (perf cap;
----the full issue list still reaches the panel/quickfix).
+---the full issue list still reaches the panel/quickfix). When `highlights_cfg`
+---has `enable = true`, buffer extmark highlights are published alongside the
+---diagnostics (see `spell/ui/highlights.lua`) — independent of `max`, since
+---they're a separate opt-in visibility channel, not a diagnostics fallback.
 ---@param issues LanguageSpellIssue[]
 ---@param source string
 ---@param max integer|nil
+---@param highlights_cfg { enable: boolean, style: "underline"|"undercurl" }|nil
 ---@return table<integer, true> touched_bufs
-function M.publish(issues, source, max)
+function M.publish(issues, source, max, highlights_cfg)
   ---@type table<integer, vim.Diagnostic[]>
   local by_buf = {}
   for _, issue in ipairs(issues) do
@@ -73,10 +78,12 @@ function M.publish(issues, source, max)
     diag.set(M.ns, b, ds)
     touched[b] = true
   end
+  highlights.publish(issues, highlights_cfg)
   return touched
 end
 
----Reset diagnostics in the namespace for the given buffers (or all).
+---Reset diagnostics (and buffer highlight extmarks) in the namespace for the
+---given buffers, or all.
 ---@param bufs table<integer, true>|nil
 function M.clear(bufs)
   if bufs then
@@ -88,6 +95,7 @@ function M.clear(bufs)
   else
     diag.reset(M.ns)
   end
+  highlights.clear(bufs)
 end
 
 ---Build quickfix entries from issues.

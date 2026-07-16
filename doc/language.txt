@@ -178,6 +178,13 @@ or `spell.max_file_lines`.
                 in by adding "cspell_server" to `spell.providers.buffer`.
     harper/ltex grammar diagnostics from a running language server are
                 harvested and shown alongside spelling issues (kind = grammar).
+    custom      escape hatch for a checker without a bundled adapter (cwd/path
+                scopes). Configure `spell.providers.custom = { cmd = fun(scope,
+                cfg) -> argv, parse = fun(out, base) -> partial-issue[] }` and
+                add "custom" to `spell.providers.cwd`. `parse` returns a list of
+                `{ path, lnum, col, end_col?, word, kind?, message?,
+                suggestions? }`; `bufnr`/`source` are filled in automatically.
+                Mirrors `translate.custom`.
 
 Which providers run per scope is controlled by `spell.providers` (see
 |language-config|).
@@ -290,6 +297,22 @@ to false to replace only the exact occurrence.
 After each action the panel re-scans and re-opens. Set `view = "quickfix"` for
 the classic diagnostics + quickfix/Trouble session flow with z= fixing.
 
+                                                     *language-spell-highlights*
+Buffer highlights (opt-in)~
+Visibility normally runs entirely through |vim.diagnostic|, whose appearance
+follows the user's own `vim.diagnostic.config()`. Set
+`spell.highlights.enable = true` to additionally mark issues directly in the
+buffer via extmarks, independent of that config — useful when diagnostics
+virtual text/underline is muted globally or filtered elsewhere. Two highlight
+groups are defined (`default = true`, so a colorscheme or `:hi` can override
+them): `LanguageSpellHighlight` (spelling/rare/caps) and
+`LanguageGrammarHighlight` (grammar/style). `spell.highlights.style` selects
+`"underline"` (default) or `"undercurl"`. >lua
+    require("language").setup({
+      spell = { highlights = { enable = true, style = "undercurl" } },
+    })
+<
+
 ==============================================================================
 9. CONFIGURATION                                              *language-config*
 
@@ -300,6 +323,7 @@ Defaults (abridged; see lua/language/config/DEFAULTS.lua): >lua
           buffer = { "native", "lsp" },
           cwd    = { "typos", "native" },
           lsp    = { enable = true, servers = { "harper_ls", "ltex" } },
+          custom = nil,  -- { cmd = fun(scope,cfg)->argv, parse = fun(out,base)->issues }
         },
         filetypes = { "markdown","text","gitcommit","tex","rst","asciidoc","help" },
         default_scope = "buffer",
@@ -313,6 +337,7 @@ Defaults (abridged; see lua/language/config/DEFAULTS.lua): >lua
           ignore_file = vim.fn.stdpath("state") .. "/language/spell_ignore.txt",
           use_spellfile = true, replace_all = true,
         },
+        highlights = { enable = false, style = "underline" },  -- opt-in buffer extmarks
         keymaps = { panel = "<leader>ss", next = "]s",
                     fix = "<leader>z=", fix1 = "<leader>z1" },
       },

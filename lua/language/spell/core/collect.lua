@@ -51,6 +51,7 @@ local CLI_MODULES = {
   typos = "language.spell.providers.typos",
   cspell = "language.spell.providers.cspell",
   codespell = "language.spell.providers.codespell",
+  custom = "language.spell.providers.custom",
 }
 
 local M = {}
@@ -212,7 +213,7 @@ function M.gather(scope, cfg, cb)
     local mod_path = CLI_MODULES[name]
     if mod_path then
       local provider = require(mod_path)
-      if provider.available() then
+      if provider.available(cfg) then
         local prog = require("lib.nvim.progress").create({
           title = "[language]",
         })

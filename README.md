@@ -46,6 +46,15 @@ benötigt — nur `curl` (Google-Engine, keyless, funktioniert ohne Konfiguratio
 - **False positives stumm schalten** — Inline-Direktiven `language:disable-line`
   / `-next-line` / `-file` (im Kommentar), persistente Ignore-Liste, Wörterbuch.
   Opt-in `spell.guard.block_write_on_error` bricht `:w` bei Tippfehlern ab.
+- **Buffer-Highlights** (`spell.highlights.enable`) — markiert Issues zusätzlich
+  direkt im Buffer per Extmark (`underline`/`undercurl`), unabhängig von der
+  `vim.diagnostic`-Config des Users. Eigene Highlight-Groups
+  (`LanguageSpellHighlight`/`LanguageGrammarHighlight`, per Colorscheme
+  überschreibbar).
+- **Eigener Spell-CLI** (`spell.providers.custom`) — Escape-Hatch für Checker
+  ohne eingebauten Adapter (analog zu `translate.custom`): `{ cmd =
+  function(scope, cfg) ... end, parse = function(out, base) ... end }`, aktiv
+  über `"custom"` in `spell.providers.cwd`.
 - **Scoping** — jede Aktion kennt einen Scope: `buffer` (Default), `visible`,
   `cwd`, `path=<datei|ordner>`, `selection`. Für `cwd`/`path` bevorzugt Spell
   einen externen CLI-Provider (`typos`/`cspell`/`codespell`, ein Prozess über
@@ -122,6 +131,10 @@ require("language").setup({
     max_highlights = 100,   -- max. Inline-Diagnostics je Buffer (Panel zeigt trotzdem alle)
     max_file_lines = 20000, -- darüber: kein Live-Scan
     skip_readonly = true,
+
+    -- Opt-in: Issues zusätzlich per Extmark direkt im Buffer markieren,
+    -- unabhängig von vim.diagnostic.config().
+    highlights = { enable = false, style = "underline" }, -- style: "underline"|"undercurl"
 
     keymaps = { panel = "<leader>ss", next = "]s", fix = "<leader>z=", fix1 = "<leader>z1" },
   },

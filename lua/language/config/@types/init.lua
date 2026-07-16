@@ -16,6 +16,7 @@
 ---@field cwd    string[]                        -- providers used for cwd/path scope (CLI preferred)
 ---@field native { spelllang: string|nil }       -- nil = inherit vim 'spelllang'
 ---@field lsp    { enable: boolean, servers: string[] }
+---@field custom { cmd: fun(scope: LanguageScope, cfg: LanguageSpellCfg): string[], parse: fun(out: string, base: string|nil): table[] }|nil
 
 ---@class LanguageSpellWordSplitCfg
 ---@field enable     boolean                     -- split CamelCase/snake_case into subwords
@@ -37,6 +38,10 @@
 ---@field group_by "file"|"none"
 ---@field dedupe   boolean
 
+---@class LanguageSpellHighlightsCfg
+---@field enable boolean
+---@field style  "underline"|"undercurl"
+
 ---@class LanguageSpellCfg
 ---@field providers        LanguageSpellProvidersCfg
 ---@field filetypes        string[]
@@ -53,6 +58,7 @@
 ---@field ui               LanguageSpellUiCfg
 ---@field dictionary       LanguageSpellDictionaryCfg
 ---@field guard            { block_write_on_error: boolean }
+---@field highlights       LanguageSpellHighlightsCfg
 ---@field keymaps          table<string, string|false>
 
 -- #####################################################################
