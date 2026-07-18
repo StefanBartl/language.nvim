@@ -1,76 +1,27 @@
 # language.nvim
 
-Sprachwerkzeuge für Neovim in **einem** Plugin: **Rechtschreibung & Grammatik**
-prüfen und direkt abarbeiten sowie **Text übersetzen** — mit einheitlichem
-Scope-Modell (Buffer / Sichtbereich / cwd / Pfad / Auswahl) und durchgehend
-asynchron.
+Language tools for Neovim in **one** plugin: check **spelling & grammar** and
+act on it directly, plus **translate text** — with a unified scope model
+(buffer / visible range / cwd / path / selection) and fully asynchronous
+throughout.
 
-Gebaut auf [lib.nvim](https://github.com/StefanBartl/lib.nvim) als bewusst
-geteilte Abhängigkeit. Für Übersetzung wird **kein** externes Neovim-Plugin
-benötigt — nur `curl` (Google-Engine, keyless, funktioniert ohne Konfiguration).
+Built on [lib.nvim](https://github.com/StefanBartl/lib.nvim) as a
+deliberately shared dependency. Translation needs **no** external Neovim
+plugin — just `curl` (Google engine, keyless, works with zero configuration).
 
-> Status: **Beta** — Spell-Panel, Grammatik (LSP), Mehrfach-Provider und
-> mehrere Übersetzungs-Engines funktionieren. Weitere Ideen: siehe
+> Status: **Beta** — the spell panel, grammar (LSP), multiple providers, and
+> multiple translation engines all work. More ideas: see the
 > [ROADMAP](docs/ROADMAP/ROADMAP.md).
 
 ---
 
-## Features
+## Requirements
 
-- **`:Spellcheck`** — Rechtschreib-/Grammatik-Session über nativen `vim.spell`,
-  Ausgabe als Diagnostics + [Trouble](https://github.com/folke/trouble.nvim)
-  oder Quickfix-Fallback. `z=`-Fix mit automatischem Weitersprung, Session-State
-  pro Buffer, spelllang-Wiederherstellung.
-- **Grammatik & Provider** — Grammatik-Diagnostics von `harper_ls`/`ltex`
-  erscheinen im selben Panel; optionale externe Spell-CLIs (`typos`, `cspell`,
-  `codespell`) für cwd/path-Scans; optionaler **persistenter cspell-Sidecar**
-  (`"cspell_server"` in `spell.providers.buffer`, braucht node+cspell) für
-  schnelle, code-aware, live Buffer-Checks. Native Erkennung splittet CamelCase/snake_case und prüft nur
-  Treesitter-`@spell`-Regionen (Kommentare/Strings/Prosa), keine Identifier-
-  Fehlalarme.
-- **`:Translate`** / **`:TranslateReplace`** — Range/Auswahl übersetzen.
-  `:Translate` zeigt das Ergebnis standardmäßig in einem **Popup**
-  (`lib.nvim.ui.kit`, read-only, fokussierbar/scrollbar, `q`/`<Esc>` schließt) —
-  der Buffer bleibt unangetastet; alternativ `--output=replace|buffer|vsplit|
-  split|tab|insert|clipboard|notify`. `:TranslateReplace` ist der direkte,
-  mutierende Gegenpart (immer `replace`, kein `--output=`) — das klassische
-  „markieren, übersetzen, ersetzen"-Verhalten. Motion-/Visual-Mappings
-  (`translate.keymaps`) ersetzen immer, unabhängig vom Popup-Default.
-  `--nocode` überspringt Fenced- und Inline-Code (nur bei Replace relevant).
-  Engines: Google (keyless), DeepL, translate-shell, eigenes CLI — mit
-  Fallback-Kette. `:Translate <lang> cwd`/`path=<dir>` übersetzt mehrere
-  Dateien (Multi-Select via `lib.nvim.ui.kit`, Ausgabe als Sprach-Suffix,
-  in-place oder Scratch-Buffer).
-- **Thesaurus** — `require("language").synonyms()` ersetzt das Wort unter dem
-  Cursor durch ein Synonym (Datamuse-API, keyless; oder eigene Quelle/Sprache).
-- **False positives stumm schalten** — Inline-Direktiven `language:disable-line`
-  / `-next-line` / `-file` (im Kommentar), persistente Ignore-Liste, Wörterbuch.
-  Opt-in `spell.guard.block_write_on_error` bricht `:w` bei Tippfehlern ab.
-- **Buffer-Highlights** (`spell.highlights.enable`) — markiert Issues zusätzlich
-  direkt im Buffer per Extmark (`underline`/`undercurl`), unabhängig von der
-  `vim.diagnostic`-Config des Users. Eigene Highlight-Groups
-  (`LanguageSpellHighlight`/`LanguageGrammarHighlight`, per Colorscheme
-  überschreibbar).
-- **Eigener Spell-CLI** (`spell.providers.custom`) — Escape-Hatch für Checker
-  ohne eingebauten Adapter (analog zu `translate.custom`): `{ cmd =
-  function(scope, cfg) ... end, parse = function(out, base) ... end }`, aktiv
-  über `"custom"` in `spell.providers.cwd`.
-- **Scoping** — jede Aktion kennt einen Scope: `buffer` (Default), `visible`,
-  `cwd`, `path=<datei|ordner>`, `selection`. Für `cwd`/`path` bevorzugt Spell
-  einen externen CLI-Provider (`typos`/`cspell`/`codespell`, ein Prozess über
-  den ganzen Baum); ohne CLI läuft ein echtes, rekursives, asynchron-
-  chunk-basiertes natives Directory-Walking (nicht nur offene Buffer) —
-  überspringt `.git`/`node_modules`/etc., abbrechbar, mit Fortschrittsanzeige.
-- **Asynchron & abbrechbar** — externe Prozesse (curl u. a.) laufen non-blocking
-  über eine argv-basierte Job-Schicht (kein Shell-Interpolieren von Text) mit
-  Timeout; ein neuer Aufruf bricht den laufenden ab.
-
-## Anforderungen
-
-- Neovim ≥ 0.9 (empfohlen 0.10+ für `vim.system`)
+- Neovim ≥ 0.9 (0.10+ recommended for `vim.system`)
 - [lib.nvim](https://github.com/StefanBartl/lib.nvim)
-- `curl` (für Übersetzung)
-- optional: `folke/trouble.nvim` (schönere Liste), externe Spell-CLIs/LSP (später)
+- `curl` (for translation)
+- optional: `folke/trouble.nvim` (nicer list), external spell CLIs/LSP (see
+  [Features](docs/features.md))
 
 ## Installation (lazy.nvim)
 
@@ -85,75 +36,15 @@ benötigt — nur `curl` (Google-Engine, keyless, funktioniert ohne Konfiguratio
 }
 ```
 
-## Verwendung
+## Quickstart
 
 ```vim
-:Spellcheck                 " aktuellen Buffer prüfen (Session an/aus)
-:Spellcheck en cwd          " alle Textdateien unter dem cwd (rekursiv, CLI bevorzugt, sonst natives Tree-Walking)
-:Spellcheck de path=~/notes " Datei oder Ordner
-:Spellcheck clear           " Session beenden, Diagnostics entfernen
-:Spellcheck refresh         " neu scannen
-
-:'<,'>Translate DE           " Popup mit der Übersetzung, Buffer unangetastet
-:Translate FR --output=vsplit " Übersetzung in einem neuen vertikalen Split
-:'<,'>TranslateReplace DE    " Auswahl nach Deutsch, ERSETZT den Text (klassisches Verhalten)
-:TranslateReplace EN --nocode " ersetzt, überspringt Fenced-/Inline-Code
-:Translate!                  " interaktives Fenster (live übersetzen beim Tippen)
-:'<,'>Translate! DE          " Fenster mit Auswahl vorbefüllt, Ziel DE
-:Translate DE cwd            " Dateien im cwd wählen (Tab) & übersetzen → name.DE.ext
-:TranslateReplace DE cwd     " Dateien wählen & in-place überschreiben (mit Rückfrage)
+:Spellcheck                 " check the current buffer (toggle session on/off)
+:'<,'>Translate DE           " popup with the translation, buffer untouched
+:'<,'>TranslateReplace DE    " selection to German, REPLACES the text
 ```
 
-Standard-Keymap: `<leader>ss` schaltet die Spell-Session im aktuellen Buffer um
-(konfigurierbar). Während einer Session: `<leader>z=` korrigieren & weiter,
-`<leader>z1` ersten Vorschlag übernehmen & weiter, `]s` nächster Fehler.
-
-## Konfiguration
-
-`setup()` merged über die Defaults (siehe `lua/language/config/DEFAULTS.lua`).
-Auszug:
-
-```lua
-require("language").setup({
-  spell = {
-    default_scope = "buffer",
-    live = false,                -- true = fortlaufende Inline-Diagnostics beim Tippen
-    live_scope = "visible",      -- "visible" (nur Sichtbereich) | "buffer"
-    scan_debounce_ms = 400,
-    ui = { view = "picker", preview = true }, -- "quickfix" erzwingt den qf-Fallback
-
-    -- Code-Features
-    word_split = { enable = true, min_length = 4 }, -- CamelCase/snake_case in Subwörter
-    regions = { treesitter_spell = true, skip_urls = true, skip_emails = true },
-    programming_dict = false, -- opt-in: Fachwortliste (git, kubernetes, treesitter, …)
-
-    -- Performance/Safety-Caps
-    max_highlights = 100,   -- max. Inline-Diagnostics je Buffer (Panel zeigt trotzdem alle)
-    max_file_lines = 20000, -- darüber: kein Live-Scan
-    skip_readonly = true,
-
-    -- Opt-in: Issues zusätzlich per Extmark direkt im Buffer markieren,
-    -- unabhängig von vim.diagnostic.config().
-    highlights = { enable = false, style = "underline" }, -- style: "underline"|"undercurl"
-
-    keymaps = { panel = "<leader>ss", next = "]s", fix = "<leader>z=", fix1 = "<leader>z1" },
-  },
-  translate = {
-    engine = "google",           -- "google" (keyless) | "deepl" | "shell" | "custom"
-    fallback = { "google" },     -- Engine-Kette, wenn die gewählte nicht verfügbar ist
-    default_output = "popup",    -- popup | replace | buffer | vsplit | split | tab | insert | clipboard | notify
-    default_target = nil,        -- feste Zielsprache für Motion/Visual-Maps; nil = Auswahl
-    timeout_ms = 8000,
-    deepl = { api_key = nil },   -- oder $DEEPL_API_KEY
-    -- Opt-in Motion/Visual-Keymaps (Default aus, um Tasten nicht zu belegen):
-    --   operator: <lhs>{motion} übersetzt das Textobjekt (z. B. gtrip)
-    --   visual:   <lhs> übersetzt die Auswahl
-    keymaps = { operator = false, visual = false },
-    -- custom = { cmd = function(lines, target) return { "trans", "-b", ... } end,
-    --           parse = function(out) return vim.split(out, "\n") end },
-  },
-})
-```
+See [Usage](docs/usage.md) for the full command reference.
 
 ## Health
 
@@ -161,6 +52,13 @@ require("language").setup({
 :checkhealth language
 ```
 
-## Lizenz
+## Documentation
+
+- [Features](docs/features.md) — spellcheck, grammar, translate, thesaurus, highlights, scoping, and async behavior.
+- [Configuration](docs/configuration.md) — all `setup()` options with defaults and comments.
+- [Usage](docs/usage.md) — full command reference and default keymaps.
+- [Roadmap](docs/ROADMAP/ROADMAP.md) — build phases done and future ideas.
+
+## License
 
 MIT
