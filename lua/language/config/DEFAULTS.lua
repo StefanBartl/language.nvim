@@ -100,6 +100,8 @@ local defaults = {
   },
 
   commands = true,
+
+  which_key = { enable = true },
 }
 
 return defaults
