@@ -133,6 +133,15 @@ local function check_config()
   end
 end
 
+local function check_which_key()
+  start_s("which-key (optional)")
+  if require("language.bindings.which_key").available() then
+    ok_s("which-key installed — group labels registered")
+  else
+    info_s("which-key not found (optional; keymap `desc` fields still work standalone)")
+  end
+end
+
 function M.check()
   check_neovim()
   check_lib()
@@ -140,6 +149,7 @@ function M.check()
   check_grammar()
   check_translate()
   check_config()
+  check_which_key()
 end
 
 return M

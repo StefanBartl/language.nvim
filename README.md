@@ -58,7 +58,4 @@ See [Usage](docs/usage.md) for the full command reference.
 - [Configuration](docs/configuration.md) — all `setup()` options with defaults and comments.
 - [Usage](docs/usage.md) — full command reference and default keymaps.
 - [Roadmap](docs/ROADMAP/ROADMAP.md) — build phases done and future ideas.
-
-## License
-
-MIT
+- [Bindings](docs/BINDINGS.md) — every keymap, user command, and autocmd.

@@ -105,9 +105,10 @@
 ---@field custom     fun(word: string, cb: fun(synonyms: string[]))|nil
 
 ---@class LanguageConfig
----@field spell     LanguageSpellCfg
----@field translate LanguageTranslateCfg
----@field thesaurus LanguageThesaurusCfg
----@field commands  boolean
+---@field spell      LanguageSpellCfg
+---@field translate  LanguageTranslateCfg
+---@field thesaurus  LanguageThesaurusCfg
+---@field commands   boolean
+---@field which_key  { enable: boolean }
 
 return {}
