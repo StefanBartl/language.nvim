@@ -24,14 +24,26 @@ once in `lua/language/bindings/keymaps.lua`.
 
 ## User commands
 
+Each is its own [`lib.nvim.usercmd.composer`](https://github.com/StefanBartl/lib.nvim)
+verb (a flat `path = {}` root route — no subcommand tree), defined in
+`lua/language/bindings/usrcmds/init.lua`.
+
 | Command             | Defined in                          | Purpose |
 |----------------------|--------------------------------------|---------|
-| `:Spellcheck`        | `lua/language/bindings/usrcmds.lua`  | Spell/grammar review — `[lang] [buffer\|visible\|cwd\|path=<p>\|clear\|refresh]` |
-| `:Translate`         | `lua/language/bindings/usrcmds.lua`  | Translate (popup by default) — `<lang> [--nocode\|--output=<m>\|--files=<m>] [scope]`; `!` opens the interactive window |
-| `:TranslateReplace`  | `lua/language/bindings/usrcmds.lua`  | Translate and replace in place — `<lang> [--nocode] [selection\|buffer\|cwd\|path=<p>]` |
+| `:Spellcheck`        | `lua/language/bindings/usrcmds/init.lua`  | Spell/grammar review — `[lang] [buffer\|visible\|cwd\|path=<p>\|clear\|refresh]` |
+| `:Translate`         | `lua/language/bindings/usrcmds/init.lua`  | Translate (popup by default) — `<lang> [--nocode\|--output=<m>\|--files=<m>] [scope]`; `!` opens the interactive window |
+| `:TranslateReplace`  | `lua/language/bindings/usrcmds/init.lua`  | Translate and replace in place — `<lang> [--nocode] [selection\|buffer\|cwd\|path=<p>]` |
 
 All three support tab-completion for language codes, scopes, and flags. Set
 `commands = false` in `setup()` to skip registering them entirely.
+
+An unrecognized `--flag` on `:Translate`/`:TranslateReplace` now reports a
+clear error (composer's declared-flags gate runs before the handler) instead
+of being silently ignored, as it was pre-composer. Actual dispatch for valid
+input is otherwise unchanged — the handlers still parse the raw argument
+string themselves rather than composer's bound positional args, since the
+grammar classifies tokens by shape in any order (scope word, `path=<p>`,
+`--flag[=value]`, or the bare language code), not strict positional slots.
 
 ## Autocmds
 
