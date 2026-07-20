@@ -64,6 +64,12 @@ Call once. See |language-config| for the full option tree. With lazy.nvim: >lua
 ==============================================================================
 4. COMMANDS                                                 *language-commands*
 
+Each command is its own lib.nvim.usercmd.composer verb (a flat root route,
+no subcommand tree). An unrecognized `--flag` on :Translate/:TranslateReplace
+now reports a clear error instead of being silently ignored, as it was
+before this command layer was rebuilt on the composer; dispatch for valid
+input is otherwise unchanged.
+
                                                                    *:Spellcheck*
 :Spellcheck [lang] [scope|verb]
     Run a spell/grammar review. Optional first argument is a language code

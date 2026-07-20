@@ -38,6 +38,11 @@ local function check_lib()
   else
     err_s("lib.nvim not found — install StefanBartl/lib.nvim")
   end
+  if pcall(require, "lib.nvim.usercmd.composer") then
+    ok_s("lib.nvim.usercmd.composer available (:Spellcheck/:Translate/:TranslateReplace)")
+  else
+    err_s("lib.nvim.usercmd.composer not found — commands will fail to register")
+  end
 end
 
 local function check_spell_tools()
