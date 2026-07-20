@@ -18,6 +18,7 @@ local notify = require("lib.nvim.notify").create("[language.translate]")
 local registry = require("language.translate.providers.registry")
 local output = require("language.translate.output")
 local filter = require("language.translate.filter")
+local indent = require("language.translate.indent")
 
 local M = {}
 
@@ -116,13 +117,15 @@ end
 ---@param mode LanguageTranslateOutput
 local function translate_range(provider, bufnr, s, e, target, mode)
   local lines = api.nvim_buf_get_lines(bufnr, s - 1, e, false)
+  local dedented, indents = indent.strip(lines)
   local jobref
-  jobref = provider.translate(lines, target, nil, cfg(), function(ok, result)
+  jobref = provider.translate(dedented, target, nil, cfg(), function(ok, result)
     if not ok then
       notify.error(tostring(result))
       return
     end
     ---@cast result string[]
+    result = indent.restore(result, indents)
     output.apply(mode, result, { bufnr = bufnr, s = s, e = e, target = target })
     require("language.translate.history").record({ input = lines, output = result, target = target })
   end)
@@ -149,16 +152,20 @@ local function translate_nocode(provider, bufnr, s, e, target)
   local pending = #ranges
   ---@type table<integer, string[]>
   local results = {}
+  ---@type table<integer, string[]>
+  local indents = {}
 
   for idx = 1, #ranges do
     local r = ranges[idx]
     local lines = api.nvim_buf_get_lines(bufnr, r.s - 1, r.e, false)
+    local dedented
+    dedented, indents[idx] = indent.strip(lines)
     local jobref
-    jobref = provider.translate(lines, target, nil, cfg(), function(ok, result)
+    jobref = provider.translate(dedented, target, nil, cfg(), function(ok, result)
       pending = pending - 1
       if ok then
         ---@cast result string[]
-        results[idx] = result
+        results[idx] = indent.restore(result, indents[idx])
       else
         notify.error(tostring(result))
       end
