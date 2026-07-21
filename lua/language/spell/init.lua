@@ -77,9 +77,13 @@ local function attach_keymaps(bufnr)
   end
   if type(km.fix1) == "string" and km.fix1 ~= "" then
     map("n", km.fix1, function()
+      local target_bufnr = bufnr
       vim.cmd("normal! 1z=")
       vim.defer_fn(function()
-        M.refresh()
+        if not buf_valid(target_bufnr) then
+          return
+        end
+        M.refresh(target_bufnr)
         M.goto_next()
       end, 60)
     end, opts, "[language] Accept first suggestion & advance")
@@ -138,17 +142,22 @@ end
 ---Open the z= suggestion menu for the word under cursor, then refresh & advance.
 ---@return nil
 function M.fix_current()
+  local bufnr = api.nvim_get_current_buf()
   vim.cmd("normal! z=")
   vim.defer_fn(function()
-    M.refresh()
+    if not buf_valid(bufnr) then
+      return
+    end
+    M.refresh(bufnr)
     M.goto_next()
   end, 60)
 end
 
----Re-scan the current buffer session and update diagnostics + list.
+---Re-scan the given (or current) buffer session and update diagnostics + list.
+---@param bufnr? integer
 ---@return nil
-function M.refresh()
-  local bufnr = api.nvim_get_current_buf()
+function M.refresh(bufnr)
+  bufnr = bufnr or api.nvim_get_current_buf()
   if not buf_valid(bufnr) or not sessions[bufnr] then
     return
   end
