@@ -15,6 +15,7 @@ require("language.spell.@types")
 local api = vim.api
 
 local notify = require("lib.nvim.notify").create("[language.spell]")
+local map = require("lib.nvim.map")
 local native = require("language.spell.providers.native")
 local collect = require("language.spell.core.collect")
 local list = require("language.spell.ui.list")
@@ -70,27 +71,23 @@ local function attach_keymaps(bufnr)
   local opts = { buffer = bufnr, silent = true }
 
   if type(km.fix) == "string" and km.fix ~= "" then
-    vim.keymap.set("n", km.fix, function()
+    map("n", km.fix, function()
       M.fix_current()
-    end, vim.tbl_extend("force", opts, { desc = "[language] Correct word & advance" }))
+    end, opts, "[language] Correct word & advance")
   end
   if type(km.fix1) == "string" and km.fix1 ~= "" then
-    vim.keymap.set("n", km.fix1, function()
+    map("n", km.fix1, function()
       vim.cmd("normal! 1z=")
       vim.defer_fn(function()
         M.refresh()
         M.goto_next()
       end, 60)
-    end, vim.tbl_extend(
-      "force",
-      opts,
-      { desc = "[language] Accept first suggestion & advance" }
-    ))
+    end, opts, "[language] Accept first suggestion & advance")
   end
   if type(km.next) == "string" and km.next ~= "" then
-    vim.keymap.set("n", km.next, function()
+    map("n", km.next, function()
       M.goto_next()
-    end, vim.tbl_extend("force", opts, { desc = "[language] Next spell error" }))
+    end, opts, "[language] Next spell error")
   end
 end
 
