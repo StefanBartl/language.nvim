@@ -20,7 +20,7 @@ registered with which-key automatically when `which_key.enable = true`
 
 `next`, `fix`, and `fix1` are attached per-buffer while a spell session is
 active (see `lua/language/spell/init.lua`); the rest are global, registered
-once in `lua/language/bindings/keymaps.lua`.
+once in `lua/language/bindings/keymaps/init.lua`.
 
 ## User commands
 
@@ -47,7 +47,7 @@ grammar classifies tokens by shape in any order (scope word, `path=<p>`,
 
 ## Autocmds
 
-All grouped under the `language_nvim` augroup (`lua/language/bindings/autocmds.lua`).
+All grouped under the `language_nvim` augroup (`lua/language/bindings/autocmds/init.lua`).
 
 | Event(s)                    | Condition                            | Purpose |
 |------------------------------|----------------------------------------|---------|

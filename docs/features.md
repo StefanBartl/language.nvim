@@ -23,7 +23,8 @@
   translate-shell, custom CLI — with a fallback chain. `:Translate <lang>
   cwd`/`path=<dir>` translates multiple files (multi-select via
   `lib.nvim.ui.kit`, output as a language suffix, in place or into a scratch
-  buffer).
+  buffer). Each line's leading indentation is preserved across the round trip
+  (providers like Google's `gtx` normalize it away otherwise).
 - **Thesaurus** — `require("language").synonyms()` replaces the word under
   the cursor with a synonym (Datamuse API, keyless; or your own
   source/language).
