@@ -86,6 +86,13 @@ input is otherwise unchanged.
         :Spellcheck de path=~/notes
         :Spellcheck clear
 <
+Both commands preserve each line's leading indentation across the round trip:
+providers (notably Google's `gtx` endpoint) normalize away leading whitespace,
+so a translated list item like `    - foo` would otherwise come back as
+`- bar` with the indent dropped to column 0. The indent is stripped before
+the request and re-applied to the matching output line (skipped when the
+provider merges/splits lines, since the 1:1 mapping no longer holds).
+
                                                                     *:Translate*
 :[range]Translate <lang> [--nocode] [--output=<mode>] [scope]
     Translate the given range/selection to <lang> and **show the result**
