@@ -110,6 +110,19 @@ Status of the phased build. ✅ done · 🔜 planned.
   `CLI_MODULES` next to typos/cspell/codespell — add `"custom"` to
   `spell.providers.cwd` to use it. Mirrors `translate.custom`'s pattern.
 
+- ✅ **Indent-preserving translate** (`translate/indent`): `:Translate`/
+  `:TranslateReplace` now capture each line's leading whitespace, translate
+  the dedented text, and re-prepend the indent to the matching output line —
+  closes a round-trip gap where providers (notably Google's `gtx`) normalize
+  away leading whitespace, dropping indented list items to column 0. Skipped
+  when the provider merges/splits lines (line counts no longer match 1:1).
+- ✅ **Bindings hardening**: split `lua/language/bindings/` into per-concern
+  subfolders (`keymaps/`, `autocmds/`, `usrcmds/`, `which_key/`, each an
+  `init.lua`); routed autocmd registration through `lib.nvim.autocmd` and the
+  session fix-keymaps through `lib.nvim.map`; fixed a stale-buffer race in
+  `fix_current`/`fix1` where the deferred refresh could resolve the wrong (or
+  no) session if the current buffer changed during the 60ms window.
+
 ## Planned
 
 _All roadmap items implemented._ Future ideas welcome.
