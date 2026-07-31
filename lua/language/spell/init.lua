@@ -90,7 +90,7 @@ local function attach_keymaps(bufnr)
   end
   if type(km.next) == "string" and km.next ~= "" then
     map("n", km.next, function()
-      M.goto_next()
+      M.goto_next(vim.v.count1)
     end, opts, "[language] Next spell error")
   end
 end
@@ -118,25 +118,27 @@ local function diag_jump(count)
     vim.diagnostic.jump({ count = count, float = false, namespace = list.ns })
   end)
   if not ok then
-    -- Older API fallback.
-    if count > 0 then
-      pcall(vim.diagnostic.goto_next, { namespace = list.ns, float = false })
-    else
-      pcall(vim.diagnostic.goto_prev, { namespace = list.ns, float = false })
+    -- Older API fallback: no built-in magnitude support, so step one
+    -- diagnostic at a time, `count` times, in the requested direction.
+    local step = count > 0 and vim.diagnostic.goto_next or vim.diagnostic.goto_prev
+    for _ = 1, math.abs(count) do
+      pcall(step, { namespace = list.ns, float = false })
     end
   end
 end
 
 ---Jump to the next spell diagnostic in our namespace.
+---@param count? integer number of diagnostics to skip forward (default 1)
 ---@return nil
-function M.goto_next()
-  diag_jump(1)
+function M.goto_next(count)
+  diag_jump(count or 1)
 end
 
 ---Jump to the previous spell diagnostic in our namespace.
+---@param count? integer number of diagnostics to skip backward (default 1)
 ---@return nil
-function M.goto_prev()
-  diag_jump(-1)
+function M.goto_prev(count)
+  diag_jump(-(count or 1))
 end
 
 ---Open the z= suggestion menu for the word under cursor, then refresh & advance.
