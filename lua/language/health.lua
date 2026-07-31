@@ -155,6 +155,10 @@ function M.check()
   check_translate()
   check_config()
   check_which_key()
+
+  require("lib.nvim.usercmd.composer").checkhealth("Spellcheck")
+  require("lib.nvim.usercmd.composer").checkhealth("Translate")
+  require("lib.nvim.usercmd.composer").checkhealth("TranslateReplace")
 end
 
 return M
