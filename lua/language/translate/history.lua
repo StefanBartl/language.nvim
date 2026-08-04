@@ -19,16 +19,19 @@ local M = {}
 ---@type Language.TranslateHistoryEntry[]|nil  -- newest first
 local ring = nil
 
+---@internal
 ---@return LanguageTranslateCfg
 local function cfg()
   return require("language.config").get().translate
 end
 
+---@internal
 ---@return { enable: boolean, max: integer, persist: boolean, file: string }
 local function hcfg()
   return cfg().history or { enable = false, max = 50, persist = false, file = "" }
 end
 
+---@internal
 ---Load persisted history into the ring (once).
 ---@return Language.TranslateHistoryEntry[]
 local function ensure_loaded()
@@ -46,7 +49,9 @@ local function ensure_loaded()
   return ring
 end
 
+---@internal
 ---Persist the ring to disk (best-effort) when enabled.
+---@return nil
 local function save()
   local h = hcfg()
   if not (h.persist and h.file and h.file ~= "") then

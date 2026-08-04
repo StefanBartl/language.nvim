@@ -36,6 +36,7 @@ local IGNORE_DIR = {
   ["__pycache__"] = true,
 }
 
+---@internal
 ---@return LanguageTranslateCfg
 local function cfg()
   return require("language.config").get().translate
@@ -81,6 +82,7 @@ function M.gather(dir, c)
   return out
 end
 
+---@internal
 ---Sibling path with the target language inserted before the extension.
 ---@param abs string
 ---@param target string
@@ -92,6 +94,7 @@ local function suffix_path(abs, target)
   return dir .. "/" .. stem .. "." .. target .. (ext ~= "" and ("." .. ext) or "")
 end
 
+---@internal
 ---Deliver one file's translation according to `mode`.
 ---@param mode string
 ---@param abs string
@@ -124,6 +127,7 @@ end
 ---@param target string
 ---@param mode string
 ---@param on_done fun()|nil
+---@return nil
 function M.process(provider, picked, target, mode, on_done)
   local prog = require("lib.nvim.progress").create({ title = "[language]" })
   local c = cfg()

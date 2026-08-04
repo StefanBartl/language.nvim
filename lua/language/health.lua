@@ -8,12 +8,16 @@ local err_s = vim.health.error or vim.health.report_error
 local info_s = vim.health.info or vim.health.report_info
 local start_s = vim.health.start or vim.health.report_start
 
+---@internal
 ---@param bin string
 ---@return boolean
 local function exe(bin)
   return vim.fn.executable(bin) == 1
 end
 
+---@internal
+---Reports Neovim version and native spell-check availability.
+---@return nil
 local function check_neovim()
   start_s("Neovim")
   local v = vim.version()
@@ -31,6 +35,9 @@ local function check_neovim()
   end
 end
 
+---@internal
+---Reports whether lib.nvim and its usercmd composer are installed.
+---@return nil
 local function check_lib()
   start_s("lib.nvim (required dependency)")
   if pcall(require, "lib.nvim.notify") then
@@ -45,6 +52,9 @@ local function check_lib()
   end
 end
 
+---@internal
+---Reports which optional external spell tools (typos/cspell/codespell) are on PATH.
+---@return nil
 local function check_spell_tools()
   start_s("Spell providers (optional external tools)")
   if exe("typos") then
@@ -70,6 +80,9 @@ local function check_spell_tools()
   end
 end
 
+---@internal
+---Reports whether a grammar LSP (harper_ls/ltex) is attached.
+---@return nil
 local function check_grammar()
   start_s("Grammar providers (optional LSP)")
   local clients = vim.lsp.get_clients and vim.lsp.get_clients() or {}
@@ -86,6 +99,9 @@ local function check_grammar()
   end
 end
 
+---@internal
+---Reports translate engine availability (curl, DeepL key, translate-shell).
+---@return nil
 local function check_translate()
   start_s("Translate engines")
   if exe("curl") then
@@ -114,6 +130,9 @@ local function check_translate()
   end
 end
 
+---@internal
+---Reports the effective configuration and `'spelllang'` state.
+---@return nil
 local function check_config()
   start_s("Configuration")
   local ok, cfg_mod = pcall(require, "language.config")
@@ -138,6 +157,9 @@ local function check_config()
   end
 end
 
+---@internal
+---Reports whether which-key is installed for group labels.
+---@return nil
 local function check_which_key()
   start_s("which-key (optional)")
   if require("language.bindings.which_key").available() then
@@ -147,6 +169,8 @@ local function check_which_key()
   end
 end
 
+---Run all `:checkhealth language` sections.
+---@return nil
 function M.check()
   check_neovim()
   check_lib()

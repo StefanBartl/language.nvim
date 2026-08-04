@@ -26,12 +26,15 @@ local M = {}
 ---@type Language.Job[]
 local active = {}
 
+---@internal
 ---@return LanguageTranslateCfg
 local function cfg()
   return require("language.config").get().translate
 end
 
+---@internal
 ---Cancel any in-flight jobs.
+---@return nil
 local function cancel_active()
   for _, j in ipairs(active) do
     pcall(j.cancel)
@@ -92,6 +95,7 @@ function M.run_region(target, opts)
   end
 end
 
+---@internal
 ---Resolve a scope to a concrete { bufnr, s, e } line range on an open buffer.
 ---@param scope LanguageScope|nil
 ---@return integer|nil bufnr, integer s, integer e
@@ -108,6 +112,7 @@ local function scope_range(scope)
   return bufnr, 1, total
 end
 
+---@internal
 ---Translate a range and deliver via `mode`.
 ---@param provider LanguageTranslateProvider
 ---@param bufnr integer
@@ -115,6 +120,7 @@ end
 ---@param e integer
 ---@param target string
 ---@param mode LanguageTranslateOutput
+---@return nil
 local function translate_range(provider, bufnr, s, e, target, mode)
   local lines = api.nvim_buf_get_lines(bufnr, s - 1, e, false)
   local dedented, indents = indent.strip(lines)
@@ -134,12 +140,14 @@ local function translate_range(provider, bufnr, s, e, target, mode)
   end
 end
 
+---@internal
 ---Translate the prose sub-ranges of [s,e] (skip code), replacing bottom-up.
 ---@param provider LanguageTranslateProvider
 ---@param bufnr integer
 ---@param s integer
 ---@param e integer
 ---@param target string
+---@return nil
 local function translate_nocode(provider, bufnr, s, e, target)
   local ranges = filter.translatable_ranges(bufnr, s, e)
   if #ranges == 0 then
@@ -231,7 +239,8 @@ function M.run(lang, opts)
 end
 
 ---Translate multiple files under a directory (cwd/path scope). Opens a
----multi-select picker; see `language.translate.files`.
+---multi-select picker.
+---@see language.translate.files
 ---@param lang string
 ---@param opts { dir: string, mode?: string }
 ---@return nil

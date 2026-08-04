@@ -17,12 +17,14 @@ local M = {}
 M.name = "harper"
 M.supports = { buffer = true, cwd = false, grammar = true }
 
+---@see LanguageSpellProvider
 ---@return boolean
 function M.available()
   local get = vim.lsp.get_clients or vim.lsp.get_active_clients
   return type(get) == "function"
 end
 
+---@internal
 ---Does diagnostic `d` come from one of the configured grammar servers?
 ---@param d table
 ---@param servers table<string, true>
@@ -50,6 +52,7 @@ local function from_grammar_server(d, servers)
   return false
 end
 
+---@internal
 ---Text covered by a diagnostic range on its line (best-effort display word).
 ---@param bufnr integer
 ---@param d table
@@ -64,6 +67,7 @@ local function range_text(bufnr, d)
   return d.message or "?"
 end
 
+---@internal
 ---@param source string
 ---@return LanguageSpellKind
 local function kind_of(source)

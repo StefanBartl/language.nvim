@@ -11,11 +11,13 @@ local M = {}
 ---@type table<string, true>|nil
 local set = nil
 
+---@internal
 ---@return string
 local function ignore_path()
   return require("language.config").get().spell.dictionary.ignore_file
 end
 
+---@internal
 ---Load the persistent ignore file into the in-memory set (once).
 ---@return table<string, true>
 local function ensure_loaded()

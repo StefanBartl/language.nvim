@@ -13,11 +13,13 @@ local M = {}
 ---@field sub    string   -- the subword
 ---@field offset integer  -- 0-based byte offset within the original word
 
+---@internal
 ---Split a maximal alphabetic run into CamelCase/PascalCase pieces.
 ---Boundaries: lower→upper (`getName`), and UPPER→Upperlower (`HTTPServer`).
 ---@param run string
 ---@param base integer   0-based offset of `run` within the original word
----@param out Language.Subword[]
+---@param out Language.Subword[]  appended to in place
+---@return nil
 local function split_alpha(run, base, out)
   local start = 1
   local len = #run

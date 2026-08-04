@@ -63,11 +63,13 @@ local TEXT_EXT = {
 }
 
 ---Is the native spell API present?
+---@see LanguageSpellProvider
 ---@return boolean
 function M.available()
   return type(vim.spell) == "table" and type(vim.spell.check) == "function"
 end
 
+---@internal
 ---Whole-word "is this misspelled" check for a lone (sub)word.
 ---@param word string
 ---@return boolean
@@ -76,6 +78,7 @@ local function is_bad(word)
   return #errs > 0 and errs[1][1] == word
 end
 
+---@internal
 ---Compute 1-based [start,end) byte spans on `line` that should be skipped
 ---(URLs, emails) per config. Returns nil when nothing is configured.
 ---@param line string
@@ -102,6 +105,7 @@ local function skip_spans(line, regions)
   return #spans > 0 and spans or nil
 end
 
+---@internal
 ---@param col integer                     1-based
 ---@param spans { [1]: integer, [2]: integer }[]|nil
 ---@return boolean
@@ -117,6 +121,7 @@ local function in_skip_span(col, spans)
   return false
 end
 
+---@internal
 ---Build a single issue.
 ---@param word string
 ---@param kind_key string
@@ -138,6 +143,7 @@ local function make_issue(word, kind_key, col, lnum, bufnr, path)
   }
 end
 
+---@internal
 ---Expand a flagged token into precise subword issues (word_split). Returns true
 ---if at least one real misspelling was emitted; false means the token was a
 ---code-identifier false positive and should be dropped.
@@ -161,6 +167,7 @@ local function emit_split(word, kind_key, col, lnum, bufnr, path, min_length, ou
   return emitted
 end
 
+---@internal
 ---Compute which line indices are silenced by inline `language:disable-*`
 ---directives, and whether the whole file is disabled.
 ---  `language:disable-file`       — skip the entire buffer
@@ -186,8 +193,16 @@ local function disabled_lines(lines)
   return disabled, whole_file
 end
 
+---@internal
+---Scan `lines` for spelling errors and append `LanguageSpellIssue`s to `out`.
+---@param lines string[]
+---@param first_lnum integer 1-based line number of `lines[1]` in the buffer
+---@param bufnr integer|nil nil = unloaded file, no attached buffer
+---@param path string
+---@param out LanguageSpellIssue[] appended to in place
 ---@param cfg LanguageSpellCfg
 ---@param spellable? fun(lnum: integer, col: integer): boolean  # nil = treat all text as spellable
+---@return nil
 local function scan_lines(lines, first_lnum, bufnr, path, out, cfg, spellable)
   local check = vim.spell.check
   local ws = cfg.word_split or {}
@@ -224,6 +239,7 @@ local function scan_lines(lines, first_lnum, bufnr, path, out, cfg, spellable)
   end
 end
 
+---@internal
 ---Should this buffer be scanned at all (readonly gate)?
 ---@param bufnr integer
 ---@param cfg LanguageSpellCfg
@@ -241,6 +257,7 @@ local function scannable(bufnr, cfg)
   return true
 end
 
+---@internal
 ---Build a spellable-position predicate from Treesitter @spell regions, or nil
 ---when region restriction is disabled/unavailable (then all text is spellable).
 ---@param bufnr integer
@@ -260,12 +277,14 @@ local function region_predicate(bufnr, cfg)
   end
 end
 
+---@internal
 ---Collect issues from a buffer line range (1-based, inclusive).
 ---@param bufnr integer
 ---@param s integer
 ---@param e integer
 ---@param out LanguageSpellIssue[]
 ---@param cfg LanguageSpellCfg
+---@return nil
 local function collect_buf_range(bufnr, s, e, out, cfg)
   if not scannable(bufnr, cfg) then
     return
@@ -281,10 +300,12 @@ local function collect_buf_range(bufnr, s, e, out, cfg)
   scan_lines(lines, s, bufnr, api.nvim_buf_get_name(bufnr), out, cfg, spellable)
 end
 
+---@internal
 ---Collect issues from a file on disk (not necessarily loaded).
 ---@param path string
 ---@param out LanguageSpellIssue[]
 ---@param cfg LanguageSpellCfg
+---@return nil
 local function collect_file(path, out, cfg)
   if fn.filereadable(path) ~= 1 then
     return
@@ -297,12 +318,14 @@ local function collect_file(path, out, cfg)
   scan_lines(lines, 1, nil, path, out, cfg, nil)
 end
 
+---@internal
 ---Iterate loaded, listed buffers whose path is under `prefix`. Cheap, but only
----sees buffers already open in this session — see `scan_tree` for a real
----recursive disk walk.
+---sees buffers already open in this session.
+---@see scan_tree
 ---@param prefix string
 ---@param out LanguageSpellIssue[]
 ---@param cfg LanguageSpellCfg
+---@return nil
 local function collect_loaded_under(prefix, out, cfg)
   prefix = prefix:gsub("[/\\]+$", "")
   for _, bufnr in ipairs(api.nvim_list_bufs()) do
@@ -346,6 +369,7 @@ local TREE_IGNORE_DIR = {
 ---`max_file_lines` config cap still applies after read for smaller files).
 local TREE_MAX_BYTES = 5 * 1024 * 1024
 
+---@internal
 ---Gather text files (by `TEXT_EXT`, skipping vendor dirs) under `dir`.
 ---@param dir string
 ---@return string[] absolute paths
@@ -375,6 +399,7 @@ end
 ---Files scanned per event-loop tick during a disk tree walk.
 local TREE_CHUNK = 20
 
+---@internal
 ---Recursively scan every text file under `dir` (not just open buffers).
 ---Cancellable; delivers the full issue list via `cb` when done.
 ---@param dir string

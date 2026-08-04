@@ -16,6 +16,7 @@ local M = {}
 
 local SOURCE = "language.spell"
 
+---@internal
 ---@param path string
 ---@return string
 local function file_tail(path)
@@ -25,6 +26,7 @@ local function file_tail(path)
   return vim.fn.fnamemodify(path, ":t")
 end
 
+---@internal
 ---Format one issue into a display row.
 ---@param issue LanguageSpellIssue
 ---@param multi_file boolean

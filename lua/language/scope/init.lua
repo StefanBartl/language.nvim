@@ -16,6 +16,7 @@ local M = {}
 ---@type table<string, true>
 local SCOPE_WORDS = { buffer = true, visible = true, cwd = true, selection = true }
 
+---@internal
 ---Build the visible line range of the current window (1-based, inclusive).
 ---@return integer s, integer e
 local function visible_range()

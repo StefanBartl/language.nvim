@@ -18,6 +18,7 @@ local M = {}
 M.name = "codespell"
 M.supports = { buffer = false, cwd = true, grammar = false }
 
+---@see LanguageSpellProvider
 ---@return boolean
 function M.available()
   return fn.executable("codespell") == 1

@@ -14,6 +14,7 @@ local M = {}
 
 M.name = "custom"
 
+---@see LanguageTranslateProvider
 ---@param cfg LanguageTranslateCfg
 ---@return boolean
 function M.available(cfg)

@@ -15,6 +15,7 @@ local M = {}
 
 M.name = "deepl"
 
+---@internal
 ---Resolve the API key from config or environment.
 ---@param cfg LanguageTranslateCfg
 ---@return string|nil
@@ -31,12 +32,14 @@ local function api_key(cfg)
 end
 
 ---Available when curl exists and a key is configured.
+---@see LanguageTranslateProvider
 ---@param cfg LanguageTranslateCfg
 ---@return boolean
 function M.available(cfg)
   return vim.fn.executable("curl") == 1 and api_key(cfg) ~= nil
 end
 
+---@internal
 ---@param key string
 ---@return string
 local function host(key)

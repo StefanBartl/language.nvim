@@ -73,6 +73,7 @@ function M.build(bufnr)
   return regions
 end
 
+---@internal
 ---Is position (row, col) — 0-based — inside any of `ranges`?
 ---@param ranges integer[][]
 ---@param row integer

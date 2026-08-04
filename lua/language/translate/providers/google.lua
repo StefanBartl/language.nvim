@@ -22,12 +22,14 @@ M.name = "google"
 local ENDPOINT = "https://translate.googleapis.com/translate_a/single"
 
 ---curl is the only requirement.
+---@see LanguageTranslateProvider
 ---@param _cfg LanguageTranslateCfg
 ---@return boolean
 function M.available(_cfg)
   return vim.fn.executable("curl") == 1
 end
 
+---@internal
 ---Parse the gtx JSON response into a single translated string.
 ---@param body string
 ---@return string|nil text, string|nil err

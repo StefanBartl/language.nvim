@@ -33,6 +33,7 @@ local TR_OUTPUT_MODES = {
 }
 local TR_FILES_MODES = { "suffix", "replace", "buffers" }
 
+---@internal
 ---@param arglead string
 ---@param candidates string[]
 ---@return string[]
@@ -77,8 +78,10 @@ composer.register_type("TRANSLATE_SCOPE", {
   complete = function(arglead) return filter_prefix(arglead, TR_SCOPES) end,
 })
 
+---@internal
 ---:Spellcheck [lang] [buffer|visible|cwd|path=<p>|clear|refresh]
 ---@param o table  composer's ctx.raw (same shape as the original nvim callback opts)
+---@return nil
 local function spellcheck_handler(o)
   local spell = require("language.spell")
   local tokens = vim.split(o.args or "", "%s+", { trimempty = true })
@@ -104,9 +107,11 @@ end
 -- Shared body for :Translate / :TranslateReplace. `force_output` (and
 -- `force_files_mode`) make :TranslateReplace always mutate, regardless of
 -- `--output=`/`--files=` or the configured default.
+---@internal
 ---@param o table
 ---@param force_output LanguageTranslateOutput|nil
 ---@param force_files_mode string|nil
+---@return nil
 local function dispatch_translate(o, force_output, force_files_mode)
   local tokens = vim.split(o.args or "", "%s+", { trimempty = true })
 

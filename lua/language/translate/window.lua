@@ -25,12 +25,15 @@ local M = {}
 ---@type Language.Translate.WinState
 local state = {}
 
+---@internal
 ---@return LanguageTranslateCfg
 local function cfg()
   return require("language.config").get().translate
 end
 
+---@internal
 ---@param win integer|nil
+---@return boolean|nil
 local function win_valid(win)
   return win and api.nvim_win_is_valid(win)
 end
@@ -66,8 +69,10 @@ function M._state()
   return state
 end
 
+---@internal
 ---Set the output window's lines (read-only buffer).
 ---@param lines string[]
+---@return nil
 local function set_output(lines)
   if not (state.output_buf and api.nvim_buf_is_valid(state.output_buf)) then
     return
@@ -112,7 +117,9 @@ function M.refresh()
   end)
 end
 
+---@internal
 ---Debounced refresh on input change.
+---@return nil
 local function on_change()
   local delay = cfg().timeout_ms and 300 or 300
   if not state.timer then
@@ -124,6 +131,7 @@ end
 
 ---Update the target language and re-translate.
 ---@param target string
+---@return nil
 function M.retarget(target)
   if type(target) ~= "string" or target == "" then
     return
@@ -135,7 +143,9 @@ function M.retarget(target)
   M.refresh()
 end
 
+---@internal
 ---Open a picker to change the target language.
+---@return nil
 local function pick_retarget()
   require("lib.nvim.ui.kit").select({
     items = cfg().default_langs or { "EN", "DE" },
@@ -178,9 +188,11 @@ function M.history()
   end)
 end
 
+---@internal
 ---Create the two floating windows for `target`, prefilled with `source_lines`.
 ---@param target string
 ---@param source_lines string[]|nil
+---@return nil
 local function launch(target, source_lines)
   M.close()
   state.target = target

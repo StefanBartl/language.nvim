@@ -40,6 +40,7 @@ local state = {
 }
 
 ---node + cspell must be present, and the sidecar must not have failed.
+---@see LanguageSpellProvider
 ---@return boolean
 function M.available()
   return fn.executable("node") == 1 and fn.executable("cspell") == 1 and not state.failed
@@ -47,7 +48,10 @@ end
 
 -- ── Resolution: find cspell-lib's entry + a cwd where its dicts resolve ──────
 
+---@internal
+---Locate cspell-lib's entry point and a cwd from which its dictionaries resolve.
 ---@param cb fun(ok: boolean)
+---@return nil
 local function resolve(cb)
   if state.resolved then
     cb(true)
@@ -89,6 +93,10 @@ end
 
 -- ── Process lifecycle ───────────────────────────────────────────────────────
 
+---@internal
+---Fires and clears all pending "sidecar started" callbacks with `ok`.
+---@param ok boolean
+---@return nil
 local function flush_start(ok)
   local cbs = state.start_cbs
   state.start_cbs = {}
@@ -98,8 +106,10 @@ local function flush_start(ok)
   end
 end
 
+---@internal
 ---Dispatch one complete JSON line from the sidecar.
 ---@param line string
+---@return nil
 local function handle_line(line)
   if line == "" then
     return
@@ -130,6 +140,11 @@ local function handle_line(line)
   end
 end
 
+---@internal
+---`jobstart` stdout handler: buffers partial output and dispatches whole lines.
+---@param _ integer job id (unused)
+---@param data string[]|nil
+---@return nil
 local function on_stdout(_, data)
   if not data then
     return
@@ -146,6 +161,8 @@ local function on_stdout(_, data)
   end
 end
 
+---@internal
+---Derive the two-letter spell language from config or `'spelllang'`.
 ---@param cfg LanguageSpellCfg
 ---@return string
 local function language(cfg)
@@ -155,9 +172,11 @@ local function language(cfg)
   return (tostring(sl):match("%a%a")) or "en"
 end
 
+---@internal
 ---Ensure the sidecar is running, then call `cb(ok)`.
 ---@param cfg LanguageSpellCfg
 ---@param cb fun(ok: boolean)
+---@return nil
 local function ensure_started(cfg, cb)
   if state.ready then
     cb(true)

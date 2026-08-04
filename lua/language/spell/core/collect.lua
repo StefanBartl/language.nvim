@@ -26,7 +26,9 @@ local cache = require("language.spell.core.cache")
 ---@type table<string, Language.Job>
 local active = {}
 
+---@internal
 ---@param key string
+---@return nil
 local function cancel_key(key)
   local j = active[key]
   if j then
@@ -35,6 +37,7 @@ local function cancel_key(key)
   end
 end
 
+---@internal
 ---@param scope LanguageScope
 ---@return string
 local function cancel_key_for(scope)
@@ -56,6 +59,7 @@ local CLI_MODULES = {
 
 local M = {}
 
+---@internal
 ---Deduplicate issues by (path, word), counting occurrences; keeps first hit.
 ---@param issues LanguageSpellIssue[]
 ---@return LanguageSpellIssue[]
@@ -78,6 +82,7 @@ local function dedupe(issues)
   return out
 end
 
+---@internal
 ---Apply ignore filter and (optional) dedupe.
 ---@param issues LanguageSpellIssue[]
 ---@param cfg LanguageSpellCfg
@@ -90,6 +95,7 @@ local function post(issues, cfg)
   return issues
 end
 
+---@internal
 ---@param cfg LanguageSpellCfg
 ---@param list string[]|nil
 ---@param name string
@@ -103,12 +109,14 @@ local function provider_enabled(cfg, list, name)
   return false
 end
 
+---@internal
 ---@param scope LanguageScope
 ---@return boolean
 local function is_single_buffer(scope)
   return scope.kind == "buffer" or scope.kind == "visible" or scope.kind == "selection"
 end
 
+---@internal
 ---Native scan for a single-buffer scope, with whole-buffer caching.
 ---@param scope LanguageScope
 ---@param cfg LanguageSpellCfg
@@ -126,6 +134,7 @@ local function native_cached(scope, cfg)
   return native.scan_scope(scope, cfg)
 end
 
+---@internal
 ---Raw synchronous collection for a single-buffer scope: native spelling (cached)
 ---plus fresh LSP grammar harvest (no post-processing). Returns a new list so
 ---post-processing never mutates the cached native issues in place.
@@ -156,6 +165,7 @@ function M.scan(scope, cfg)
   return post(native.scan_scope(scope, cfg), cfg)
 end
 
+---@internal
 ---Native async recursive disk-tree scan for a cwd/path scope (real fallback
 ---when no external CLI spell provider is available), with progress feedback.
 ---@param scope LanguageScope

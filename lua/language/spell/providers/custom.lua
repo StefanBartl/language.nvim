@@ -21,6 +21,7 @@ local M = {}
 M.name = "custom"
 M.supports = { buffer = false, cwd = true, grammar = false }
 
+---@see LanguageSpellProvider
 ---@param cfg LanguageSpellCfg
 ---@return boolean
 function M.available(cfg)
