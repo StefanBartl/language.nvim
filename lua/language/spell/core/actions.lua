@@ -10,6 +10,7 @@ local api = vim.api
 
 local M = {}
 
+---@internal
 ---@param bufnr integer|nil
 ---@return boolean
 local function editable(bufnr)

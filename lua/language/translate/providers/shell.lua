@@ -14,6 +14,7 @@ local M = {}
 
 M.name = "shell"
 
+---@see LanguageTranslateProvider
 ---@param _cfg LanguageTranslateCfg
 ---@return boolean
 function M.available(_cfg)

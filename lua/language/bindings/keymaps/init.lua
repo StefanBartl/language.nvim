@@ -7,12 +7,14 @@
 --- set to `false` is skipped.
 local M = {}
 
+---@internal
 ---Register a keymap via lib.nvim.map, falling back to vim.keymap.set.
 ---@param modes string|string[]
 ---@param lhs string
 ---@param rhs string|function
 ---@param desc string
 ---@param opts table|nil  extra keymap options (e.g. { expr = true })
+---@return nil
 local function map(modes, lhs, rhs, desc, opts)
   opts = opts or {}
   local ok, libmap = pcall(require, "lib.nvim.map")

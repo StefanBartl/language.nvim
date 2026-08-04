@@ -20,6 +20,7 @@ local M = {}
 M.name = "cspell"
 M.supports = { buffer = false, cwd = true, grammar = false }
 
+---@see LanguageSpellProvider
 ---@return boolean
 function M.available()
   return fn.executable("cspell") == 1

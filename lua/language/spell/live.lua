@@ -25,11 +25,13 @@ local timers = {}
 ---@type table<integer, true>
 local attached = {}
 
+---@internal
 ---@return LanguageSpellCfg
 local function cfg()
   return require("language.config").get().spell
 end
 
+---@internal
 ---@param bufnr integer
 ---@return boolean
 local function ft_enabled(bufnr)
@@ -66,6 +68,7 @@ function M.should_scan(bufnr)
   return true
 end
 
+---@internal
 ---Build the scope for a live scan (visible range when configured & focused).
 ---@param bufnr integer
 ---@return LanguageScope

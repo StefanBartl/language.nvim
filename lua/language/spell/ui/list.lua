@@ -26,6 +26,7 @@ local SEVERITY = {
   style = diag.severity.HINT,
 }
 
+---@internal
 ---Convert an issue to a vim.Diagnostic (0-based line/col).
 ---@param issue LanguageSpellIssue
 ---@param source string
@@ -85,6 +86,7 @@ end
 ---Reset diagnostics (and buffer highlight extmarks) in the namespace for the
 ---given buffers, or all.
 ---@param bufs table<integer, true>|nil
+---@return nil
 function M.clear(bufs)
   if bufs then
     for b in pairs(bufs) do
@@ -98,6 +100,7 @@ function M.clear(bufs)
   highlights.clear(bufs)
 end
 
+---@internal
 ---Build quickfix entries from issues.
 ---@param issues LanguageSpellIssue[]
 ---@return table[]
@@ -118,6 +121,7 @@ local function to_qf(issues)
   return entries
 end
 
+---@internal
 ---@return boolean
 local function trouble_ok()
   return pcall(require, "trouble")
@@ -126,6 +130,7 @@ end
 ---Open the appropriate list backend.
 ---@param issues LanguageSpellIssue[]
 ---@param opts { use_trouble: boolean, source: string, title: string }
+---@return nil
 function M.open(issues, opts)
   if opts.use_trouble and trouble_ok() then
     local ok, trouble = pcall(require, "trouble")
@@ -142,6 +147,7 @@ end
 ---Refresh whichever list is open.
 ---@param issues LanguageSpellIssue[]
 ---@param opts { use_trouble: boolean, source: string, title: string }
+---@return nil
 function M.refresh(issues, opts)
   if opts.use_trouble and trouble_ok() then
     vim.schedule(function()
@@ -157,6 +163,7 @@ end
 
 ---Close whichever list is open.
 ---@param use_trouble boolean
+---@return nil
 function M.close(use_trouble)
   if use_trouble and trouble_ok() then
     pcall(function()

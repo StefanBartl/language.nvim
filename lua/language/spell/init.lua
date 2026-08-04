@@ -34,23 +34,27 @@ local touched = {}
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 
+---@internal
 ---@return LanguageSpellCfg
 local function cfg()
   return require("language.config").get().spell
 end
 
+---@internal
 ---@param bufnr integer
 ---@return boolean
 local function buf_valid(bufnr)
   return type(bufnr) == "number" and api.nvim_buf_is_valid(bufnr)
 end
 
+---@internal
 ---@return boolean
 local function view_is_panel()
   local ui = cfg().ui
   return ui and ui.view == "picker"
 end
 
+---@internal
 ---Temporarily set spelllang for the current window/buffer, returning the prior.
 ---@param lang string
 ---@return string prev
@@ -65,7 +69,9 @@ end
 
 -- ── Fix keymaps (buffer-local, session scope) ───────────────────────────────
 
+---@internal
 ---@param bufnr integer
+---@return nil
 local function attach_keymaps(bufnr)
   local km = cfg().keymaps or {}
   local opts = { buffer = bufnr, silent = true }
@@ -95,7 +101,9 @@ local function attach_keymaps(bufnr)
   end
 end
 
+---@internal
 ---@param bufnr integer
+---@return nil
 local function detach_keymaps(bufnr)
   if not buf_valid(bufnr) then
     return
@@ -110,6 +118,7 @@ end
 
 -- ── Public API ──────────────────────────────────────────────────────────────
 
+---@internal
 ---Jump `count` diagnostics forward (negative = backward) in our namespace.
 ---@param count integer
 ---@return nil

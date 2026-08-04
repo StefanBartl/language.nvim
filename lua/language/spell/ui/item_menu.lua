@@ -16,10 +16,12 @@ local native = require("language.spell.providers.native")
 
 local M = {}
 
+---@internal
 ---Pick a suggestion for `issue`, then run `apply(chosen)`.
 ---@param issue LanguageSpellIssue
 ---@param title string
 ---@param apply fun(word: string)
+---@return nil
 local function pick_suggestion(issue, title, apply)
   local suggestions = issue.suggestions or native.suggest(issue)
   if #suggestions == 0 then
@@ -37,8 +39,10 @@ local function pick_suggestion(issue, title, apply)
   })
 end
 
+---@internal
 ---Jump the current window to an issue's location.
 ---@param issue LanguageSpellIssue
+---@return nil
 local function jump_to(issue)
   if issue.bufnr and api.nvim_buf_is_valid(issue.bufnr) then
     api.nvim_set_current_buf(issue.bufnr)
@@ -48,6 +52,7 @@ local function jump_to(issue)
   pcall(api.nvim_win_set_cursor, 0, { issue.lnum, math.max(0, issue.col - 1) })
 end
 
+---@internal
 ---Is this a grammar/style issue (fixed via LSP code actions, not spellsuggest)?
 ---@param issue LanguageSpellIssue
 ---@return boolean
@@ -58,11 +63,13 @@ local function is_grammar(issue)
     or issue.source == "ltex"
 end
 
+---@internal
 ---Apply an LSP code action at the issue location. Delegates to Neovim's own
 ---code_action (which handles resolve/apply/offset-encoding and the picker), then
 ---schedules `on_done` so the panel refreshes after a fix is applied.
 ---@param issue LanguageSpellIssue
 ---@param on_done fun()
+---@return nil
 local function apply_lsp_fix(issue, on_done)
   jump_to(issue)
   local ok = pcall(vim.lsp.buf.code_action)

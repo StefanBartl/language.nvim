@@ -20,11 +20,13 @@ local M = {}
 M.name = "typos"
 M.supports = { buffer = false, cwd = true, grammar = false }
 
+---@see LanguageSpellProvider
 ---@return boolean
 function M.available()
   return fn.executable("typos") == 1
 end
 
+---@internal
 ---Parse typos JSON-lines output into issues.
 ---@param out string
 ---@param base string|nil    directory the paths are relative to (nil = absolute)

@@ -48,7 +48,8 @@ function M.spellcheck(lang, scope)
 end
 
 ---Translate a range/selection. Default output is `translate.default_output`
----(popup, non-mutating). See `M.translate_replace` to force in-place replace.
+---(popup, non-mutating). Use `M.translate_replace` to force in-place replace.
+---@see M.translate_replace
 ---@param lang string  target language, e.g. "EN", "DE"
 ---@param opts table|nil  { nocode?, output?, scope? }
 ---@return nil
@@ -57,6 +58,7 @@ function M.translate(lang, opts)
 end
 
 ---Translate a range/selection and replace it in place (`:TranslateReplace`).
+---@see M.translate
 ---@param lang string  target language, e.g. "EN", "DE"
 ---@param opts table|nil  { nocode?, scope? }
 ---@return nil

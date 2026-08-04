@@ -23,6 +23,7 @@ M.ns = api.nvim_create_namespace("language_spell_highlights")
 ---@type boolean
 local hl_defined = false
 
+---@internal
 ---@param style "underline"|"undercurl"
 ---@return nil
 local function define_hl(style)
@@ -32,6 +33,7 @@ local function define_hl(style)
   hl_defined = true
 end
 
+---@internal
 ---@param kind LanguageSpellKind
 ---@return string
 local function hl_group(kind)

@@ -12,6 +12,7 @@ local M = {}
 ---@class Language.Job
 ---@field cancel fun(): nil    -- kill the process and drop the callback
 
+---@internal
 ---Windows can't spawn `.cmd`/`.bat` shims (e.g. npm-installed `cspell`) directly
 ---via libuv — they must go through `cmd.exe /c`. Real executables (curl.exe …)
 ---are spawned unchanged. Returns the argv to actually spawn.

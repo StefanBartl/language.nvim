@@ -10,6 +10,7 @@ local api = vim.api
 
 local M = {}
 
+---@internal
 ---@return LanguageThesaurusCfg
 local function cfg()
   return require("language.config").get().thesaurus

@@ -13,11 +13,13 @@ local api = vim.api
 
 local M = {}
 
+---@internal
 ---Replace a buffer line range with translated lines.
 ---@param bufnr integer
 ---@param s integer            1-based inclusive
 ---@param e integer            1-based inclusive
 ---@param lines string[]
+---@return nil
 local function out_replace(bufnr, s, e, lines)
   if not api.nvim_buf_is_valid(bufnr) then
     return
@@ -25,11 +27,13 @@ local function out_replace(bufnr, s, e, lines)
   api.nvim_buf_set_lines(bufnr, s - 1, e, false, lines)
 end
 
+---@internal
 ---Insert translated lines just below the range.
 ---@param bufnr integer
 ---@param _s integer
 ---@param e integer
 ---@param lines string[]
+---@return nil
 local function out_insert(bufnr, _s, e, lines)
   if not api.nvim_buf_is_valid(bufnr) then
     return
@@ -37,10 +41,12 @@ local function out_insert(bufnr, _s, e, lines)
   api.nvim_buf_set_lines(bufnr, e, e, false, lines)
 end
 
+---@internal
 ---Show translated lines in a read-only, cursor-anchored kit popup. Focusable
 ---(scrollable/yankable) and closes with q/<Esc> (kit's `nice_quit`).
 ---@param lines string[]
 ---@param title string|nil
+---@return nil
 local function out_popup(lines, title)
   local width = 1
   for _, l in ipairs(lines) do
@@ -62,11 +68,13 @@ local function out_popup(lines, title)
   })
 end
 
+---@internal
 ---Open `lines` in a fresh, normal (writable) unnamed buffer, optionally inside
 ---a new split/tab first. Inherits the source buffer's filetype when given.
 ---@param lines string[]
 ---@param layout "buffer"|"vsplit"|"split"|"tab"
 ---@param source_bufnr integer|nil
+---@return nil
 local function out_new_buffer(lines, layout, source_bufnr)
   if layout == "vsplit" then
     vim.cmd("vsplit")

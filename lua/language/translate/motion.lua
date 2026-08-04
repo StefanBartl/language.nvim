@@ -13,13 +13,16 @@ local api = vim.api
 
 local M = {}
 
+---@internal
 ---@return LanguageTranslateCfg
 local function cfg()
   return require("language.config").get().translate
 end
 
+---@internal
 ---Resolve the target language, then call `cb(lang)`.
 ---@param cb fun(lang: string)
+---@return nil
 local function choose_target(cb)
   local c = cfg()
   if type(c.default_target) == "string" and c.default_target ~= "" then
@@ -37,10 +40,12 @@ local function choose_target(cb)
   })
 end
 
+---@internal
 ---Translate a line range in `bufnr`, replacing it in place (rewrite operator).
 ---@param bufnr integer
 ---@param s integer
 ---@param e integer
+---@return nil
 local function translate_range(bufnr, s, e)
   choose_target(function(lang)
     require("language.translate").run(lang, {
@@ -50,6 +55,7 @@ local function translate_range(bufnr, s, e)
   end)
 end
 
+---@internal
 ---Translate a precise character-wise region, replacing it in place (0-based,
 ---end-exclusive).
 ---@param bufnr integer
@@ -57,6 +63,7 @@ end
 ---@param sc integer
 ---@param er integer
 ---@param ec integer
+---@return nil
 local function translate_region(bufnr, sr, sc, er, ec)
   choose_target(function(lang)
     require("language.translate").run_region(lang, {
@@ -70,6 +77,7 @@ local function translate_region(bufnr, sr, sc, er, ec)
   end)
 end
 
+---@internal
 ---Resolve two getpos-style positions into a bounding char-wise byte span using
 ---getregionpos (multibyte-safe). Returns 0-based rows/cols, end-exclusive, or
 ---nil when unavailable.
