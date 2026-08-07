@@ -1,0 +1,20 @@
+{
+  "tools": [
+    {
+      "bin": "curl",
+      "required": false,
+      "why": "Carries the HTTP requests for the thesaurus lookup provider. Usually already present.",
+      "pkg": {
+        "apt": "curl",
+        "dnf": "curl",
+        "pacman": "curl",
+        "zypper": "curl",
+        "apk": "curl",
+        "brew": "curl",
+        "winget": "cURL.cURL",
+        "scoop": "curl",
+        "choco": "curl"
+      }
+    }
+  ]
+}
