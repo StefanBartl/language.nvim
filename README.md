@@ -85,6 +85,9 @@ in [`docs/install.json`](docs/install.json) — parsed by
 A popup shows what's missing and why the first time `setup()` runs after
 installing this plugin; `:Lib deps show language.nvim` repeats it any time,
 `:Lib deps install language.nvim` composes and confirms an install command.
+Opt out with `vim.g.lib_nvim_deps_disable_first_run = true` (every plugin)
+or `vim.g.lib_nvim_deps_disabled_plugins = { "language.nvim" }` (just this
+one), set anywhere in your config.
 
 ## Documentation
 
