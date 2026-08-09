@@ -298,6 +298,10 @@ function M.clear()
 
   list.clear(touched)
   touched = {}
+  -- The panel view (default UI) publishes diagnostics/highlights outside
+  -- this module's session tracking (it can span buffers never registered in
+  -- `sessions`/`touched`), so it needs its own explicit cleanup here too.
+  require("language.spell.ui.panel").clear()
   sessions[bufnr] = nil
   detach_keymaps(bufnr)
 

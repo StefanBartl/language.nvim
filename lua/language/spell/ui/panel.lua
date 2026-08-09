@@ -16,6 +16,13 @@ local M = {}
 
 local SOURCE = "language.spell"
 
+---Buffers carrying diagnostics/highlights published by this panel, across
+---re-renders (each mutating action re-scans and re-opens). Tracked here
+---because the panel view bypasses `language.spell`'s session/`touched`
+---bookkeeping entirely (see `M.clear`).
+---@type table<integer, true>
+local touched = {}
+
 ---@internal
 ---@param path string
 ---@return string
@@ -65,7 +72,10 @@ function M._render(scope, cfg, issues)
   end
 
   -- Keep inline diagnostics in sync with the panel contents.
-  list.publish(issues, SOURCE, cfg.max_highlights, cfg.highlights)
+  local newly_touched = list.publish(issues, SOURCE, cfg.max_highlights, cfg.highlights)
+  for b in pairs(newly_touched) do
+    touched[b] = true
+  end
 
   -- Detect whether the list spans multiple files (adjust row layout).
   local first_path = issues[1].path
@@ -102,7 +112,18 @@ function M._render(scope, cfg, issues)
         end)
       end)
     end,
+    on_cancel = M.clear,
   })
+end
+
+---Clear the diagnostics/highlights published by this panel across its
+---renders. Called both when the picker is dismissed without a selection
+---(`on_cancel` above) and from `language.spell.clear` (`:Spellcheck clear`),
+---which otherwise has no visibility into buffers this view touched.
+---@return nil
+function M.clear()
+  list.clear(touched)
+  touched = {}
 end
 
 return M
