@@ -9,9 +9,13 @@
 ---@class LanguageTranslateProvider
 ---@field name      string
 ---@field available fun(cfg: LanguageTranslateCfg): boolean
+---@field translate LanguageTranslateFn
+
+---@alias LanguageTranslateResultCb fun(ok: boolean, result: string[]|string)
+
 --- Translate `lines` to `target` (optionally from `source`, else auto). Invokes
 --- `cb` exactly once with the translated lines, or ok=false + an error message.
----@field translate fun(lines: string[], target: string, source: string|nil, cfg: LanguageTranslateCfg, cb: fun(ok: boolean, result: string[]|string)): Language.Job|nil
+---@alias LanguageTranslateFn fun(lines: string[], target: string, source: string|nil, cfg: LanguageTranslateCfg, cb: LanguageTranslateResultCb): Language.Job?
 
 -- #####################################################################
 -- Run options
