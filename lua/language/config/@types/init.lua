@@ -16,7 +16,11 @@
 ---@field cwd    string[]                        -- providers used for cwd/path scope (CLI preferred)
 ---@field native { spelllang: string|nil }       -- nil = inherit vim 'spelllang'
 ---@field lsp    { enable: boolean, servers: string[] }
----@field custom { cmd: fun(scope: LanguageScope, cfg: LanguageSpellCfg): string[], parse: fun(out: string, base: string|nil): table[] }|nil
+---@field custom LanguageSpellCustomProviderCfg|nil
+
+---@class LanguageSpellCustomProviderCfg
+---@field cmd   fun(scope: LanguageScope, cfg: LanguageSpellCfg): string[]
+---@field parse fun(out: string, base: string|nil): table[]
 
 ---@class LanguageSpellWordSplitCfg
 ---@field enable     boolean                     -- split CamelCase/snake_case into subwords

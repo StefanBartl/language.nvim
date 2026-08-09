@@ -1,4 +1,18 @@
-# language.nvim
+```
+ _               _   _  _____ _    _         _____ ______
+| |        /\   | \ | |/ ____| |  | |  /\   / ____|  ____|
+| |       /  \  |  \| | |  __| |  | | /  \ | |  __| |__
+| |      / /\ \ | . ` | | |_ | |  | |/ /\ \| | |_ |  __|
+| |____ / ____ \| |\  | |__| | |__| / ____ \ |__| | |____
+|______/_/    \_\_| \_|\_____|\____/_/    \_\_____|______|
+                                                     .nvim
+```
+
+[![Neovim](https://img.shields.io/badge/Neovim-0.9+-57A143?logo=neovim&logoColor=white)](https://neovim.io)
+
+> Pairs well with [sessions.nvim](https://github.com/StefanBartl/sessions.nvim):
+> sessions.nvim restores your workspace by project + branch, so your
+> spell/translate settings pick up right where you left off.
 
 Language tools for Neovim in **one** plugin: check **spelling & grammar** and
 act on it directly, plus **translate text** — with a unified scope model
@@ -15,15 +29,27 @@ plugin — just `curl` (Google engine, keyless, works with zero configuration).
 
 ---
 
+## Table of Contents
+
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quickstart](#quickstart)
+- [Health](#health)
+- [Documentation](#documentation)
+
+---
+
 ## Requirements
 
-- Neovim ≥ 0.9 (0.10+ recommended for `vim.system`)
+- Neovim >= 0.9 (0.10+ recommended for `vim.system`)
 - [lib.nvim](https://github.com/StefanBartl/lib.nvim)
 - `curl` (for translation)
 - optional: `folke/trouble.nvim` (nicer list), external spell CLIs/LSP (see
   [Features](docs/features.md))
 
-## Installation (lazy.nvim)
+## Installation
+
+lazy.nvim:
 
 ```lua
 {

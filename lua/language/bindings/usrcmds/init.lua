@@ -29,7 +29,15 @@ local SPELL_SCOPES = { "buffer", "visible", "cwd", "clear", "refresh" }
 local TR_LANGS = { "EN", "DE", "FR", "ZH", "JA", "ES", "IT" }
 local TR_SCOPES = { "selection", "buffer", "cwd" }
 local TR_OUTPUT_MODES = {
-  "popup", "replace", "buffer", "vsplit", "split", "tab", "insert", "clipboard", "notify",
+  "popup",
+  "replace",
+  "buffer",
+  "vsplit",
+  "split",
+  "tab",
+  "insert",
+  "clipboard",
+  "notify",
 }
 local TR_FILES_MODES = { "suffix", "replace", "buffers" }
 
@@ -49,14 +57,20 @@ end
 
 -- 1st positional for :Spellcheck.
 composer.register_type("SPELL_LANG", {
-  validate = function(raw) return true, raw, nil end,
-  complete = function(arglead) return filter_prefix(arglead, SPELL_LANGS) end,
+  validate = function(raw)
+    return true, raw, nil
+  end,
+  complete = function(arglead)
+    return filter_prefix(arglead, SPELL_LANGS)
+  end,
 })
 
 -- 2nd+ positional for :Spellcheck: scope words + directory completion
 -- (skipped once the lead looks like a flag, matching the original guard).
 composer.register_type("SPELL_SCOPE", {
-  validate = function(raw) return true, raw, nil end,
+  validate = function(raw)
+    return true, raw, nil
+  end,
   complete = function(arglead)
     local out = filter_prefix(arglead, SPELL_SCOPES)
     if not arglead:match("^%-") then
@@ -68,14 +82,22 @@ composer.register_type("SPELL_SCOPE", {
 
 -- 1st positional shared by :Translate / :TranslateReplace.
 composer.register_type("TRANSLATE_LANG", {
-  validate = function(raw) return true, raw, nil end,
-  complete = function(arglead) return filter_prefix(arglead, TR_LANGS) end,
+  validate = function(raw)
+    return true, raw, nil
+  end,
+  complete = function(arglead)
+    return filter_prefix(arglead, TR_LANGS)
+  end,
 })
 
 -- 2nd+ positional shared by :Translate / :TranslateReplace.
 composer.register_type("TRANSLATE_SCOPE", {
-  validate = function(raw) return true, raw, nil end,
-  complete = function(arglead) return filter_prefix(arglead, TR_SCOPES) end,
+  validate = function(raw)
+    return true, raw, nil
+  end,
+  complete = function(arglead)
+    return filter_prefix(arglead, TR_SCOPES)
+  end,
 })
 
 ---@internal
@@ -167,14 +189,18 @@ function M.setup()
     desc = "Spell/grammar review  [lang] [buffer|visible|cwd|path=<p>|clear|refresh]",
     range = true,
     routes = {
-      { path = {},
+      {
+        path = {},
         args = {
-          { name = "lang",  type = "SPELL_LANG",  optional = true },
+          { name = "lang", type = "SPELL_LANG", optional = true },
           { name = "scope", type = "SPELL_SCOPE", optional = true },
         },
         range = true,
         desc = "Spell/grammar review",
-        run  = function(ctx) spellcheck_handler(ctx.raw) end },
+        run = function(ctx)
+          spellcheck_handler(ctx.raw)
+        end,
+      },
     },
   })
 
@@ -186,20 +212,24 @@ function M.setup()
     bang = true,
     range = true,
     routes = {
-      { path = {},
+      {
+        path = {},
         args = {
-          { name = "lang",  type = "TRANSLATE_LANG",  optional = true },
+          { name = "lang", type = "TRANSLATE_LANG", optional = true },
           { name = "scope", type = "TRANSLATE_SCOPE", optional = true },
         },
         flags = {
           { name = "nocode", bool = true },
           { name = "output", type = "STRING", enum = TR_OUTPUT_MODES },
-          { name = "files",  type = "STRING", enum = TR_FILES_MODES },
+          { name = "files", type = "STRING", enum = TR_FILES_MODES },
         },
         range = true,
-        bang  = true,
-        desc  = "Translate (popup by default; ! = interactive window)",
-        run   = function(ctx) dispatch_translate(ctx.raw, nil, nil) end },
+        bang = true,
+        desc = "Translate (popup by default; ! = interactive window)",
+        run = function(ctx)
+          dispatch_translate(ctx.raw, nil, nil)
+        end,
+      },
     },
   })
 
@@ -210,17 +240,21 @@ function M.setup()
     desc = "Translate and replace in place  <lang> [--nocode] [selection|buffer|cwd|path=<p>]",
     range = true,
     routes = {
-      { path = {},
+      {
+        path = {},
         args = {
-          { name = "lang",  type = "TRANSLATE_LANG",  optional = true },
+          { name = "lang", type = "TRANSLATE_LANG", optional = true },
           { name = "scope", type = "TRANSLATE_SCOPE", optional = true },
         },
         flags = {
           { name = "nocode", bool = true },
         },
         range = true,
-        desc  = "Translate and replace in place",
-        run   = function(ctx) dispatch_translate(ctx.raw, "replace", "replace") end },
+        desc = "Translate and replace in place",
+        run = function(ctx)
+          dispatch_translate(ctx.raw, "replace", "replace")
+        end,
+      },
     },
   })
 end

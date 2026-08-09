@@ -35,15 +35,16 @@ function M.translatable_ranges(bufnr, start_line, end_line)
     if line:match("^%s*```") then
       in_fence = not in_fence
       flush(lnum - 1)
-    elseif in_fence then
-      -- inside a fenced block: skip
-    elseif line:find("`", 1, true) then
-      flush(lnum - 1)
-    else
-      if not cur_s then
-        cur_s = lnum
+    elseif not in_fence then
+      -- outside a fenced block: track inline code / plain-text runs
+      if line:find("`", 1, true) then
+        flush(lnum - 1)
+      else
+        if not cur_s then
+          cur_s = lnum
+        end
+        cur_e = lnum
       end
-      cur_e = lnum
     end
   end
 

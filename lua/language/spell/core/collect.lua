@@ -96,11 +96,10 @@ local function post(issues, cfg)
 end
 
 ---@internal
----@param cfg LanguageSpellCfg
 ---@param list string[]|nil
 ---@param name string
 ---@return boolean
-local function provider_enabled(cfg, list, name)
+local function provider_enabled(list, name)
   for _, n in ipairs(list or {}) do
     if n == name then
       return true
@@ -146,7 +145,7 @@ local function raw_buffer(scope, cfg)
   local issues = {}
   vim.list_extend(issues, native_cached(scope, cfg))
   local buffer_providers = cfg.providers and cfg.providers.buffer
-  if provider_enabled(cfg, buffer_providers, "lsp") and lsp.available() then
+  if provider_enabled(buffer_providers, "lsp") and lsp.available() then
     vim.list_extend(issues, lsp.scan_scope(scope, cfg))
   end
   return issues
@@ -202,7 +201,7 @@ function M.gather(scope, cfg, cb)
   if is_single_buffer(scope) then
     local raw = raw_buffer(scope, cfg)
     local buffer_providers = cfg.providers and cfg.providers.buffer
-    if provider_enabled(cfg, buffer_providers, "cspell_server") then
+    if provider_enabled(buffer_providers, "cspell_server") then
       local server = require("language.spell.providers.cspell_server")
       if server.available() then
         active[key] = server.check(scope, cfg, function(server_issues)
