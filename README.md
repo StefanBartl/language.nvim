@@ -78,6 +78,14 @@ See [Usage](docs/usage.md) for the full command reference.
 :checkhealth language
 ```
 
+Optional external tools (`curl`, `trans`, spell/grammar CLIs) are declared
+in [`docs/install.json`](docs/install.json) — parsed by
+[lib.nvim](https://github.com/StefanBartl/lib.nvim)'s
+[`deps` module](https://github.com/StefanBartl/lib.nvim/blob/main/lua/lib/nvim/deps/README.md).
+A popup shows what's missing and why the first time `setup()` runs after
+installing this plugin; `:Lib deps show language.nvim` repeats it any time,
+`:Lib deps install language.nvim` composes and confirms an install command.
+
 ## Documentation
 
 - [Features](docs/features.md) — spellcheck, grammar, translate, thesaurus, highlights, scoping, and async behavior.

@@ -169,6 +169,21 @@ local function check_which_key()
   end
 end
 
+---@internal
+---Reports language.nvim's own docs/install.json via lib.nvim.deps — the
+---same `curl` check_translate() already probes, but with its declared
+---`why` and a pointer to `:Lib deps show`. Does nothing if lib.nvim.deps
+---is unavailable (older lib.nvim).
+---@return nil
+local function check_lib_deps()
+  local ok, deps_health = pcall(require, "lib.nvim.deps.health")
+  if not ok then
+    return
+  end
+  start_s("declared tools (lib.nvim.deps)")
+  deps_health.report_for("language.nvim")
+end
+
 ---Run all `:checkhealth language` sections.
 ---@return nil
 function M.check()
@@ -179,6 +194,7 @@ function M.check()
   check_translate()
   check_config()
   check_which_key()
+  check_lib_deps()
 
   require("lib.nvim.usercmd.composer").checkhealth("Spellcheck")
   require("lib.nvim.usercmd.composer").checkhealth("Translate")

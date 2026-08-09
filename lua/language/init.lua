@@ -38,6 +38,16 @@ function M.setup(opts)
   if cfg.spell and cfg.spell.extra_wordlists then
     require("language.spell.extra_dict").ensure(cfg.spell.extra_wordlists)
   end
+
+  -- One-time (persisted across restarts) popup on the first setup() after
+  -- installing this plugin: which CLI tools unlock which provider, and why
+  -- (docs/install.json). `:Lib deps show language.nvim` thereafter. pcall'd:
+  -- an older lib.nvim without lib.nvim.deps mustn't break setup() over an
+  -- informational popup.
+  local ok_deps, deps = pcall(require, "lib.nvim.deps")
+  if ok_deps then
+    deps.show_once("language.nvim")
+  end
 end
 
 -- Public façade for direct Lua use ------------------------------------------------
