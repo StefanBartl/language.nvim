@@ -115,5 +115,6 @@
 ---@field thesaurus  LanguageThesaurusCfg
 ---@field commands   boolean
 ---@field which_key  { enable: boolean }
+---@field deps_popup? boolean  # Show the lib.nvim.deps "declared tools" popup once, ever, on first setup() after install (default true; needs lib.nvim.deps — a no-op without it)
 
 return {}
