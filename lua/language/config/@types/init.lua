@@ -59,6 +59,7 @@
 ---@field skip_readonly    boolean
 ---@field regions          LanguageSpellRegionsCfg
 ---@field programming_dict boolean
+---@field extra_wordlists  table<string, string[]>
 ---@field ui               LanguageSpellUiCfg
 ---@field dictionary       LanguageSpellDictionaryCfg
 ---@field guard            { block_write_on_error: boolean }
