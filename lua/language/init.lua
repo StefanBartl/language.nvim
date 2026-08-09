@@ -35,6 +35,9 @@ function M.setup(opts)
   if cfg.spell and cfg.spell.programming_dict then
     require("language.spell.programming_dict").ensure()
   end
+  if cfg.spell and cfg.spell.extra_wordlists then
+    require("language.spell.extra_dict").ensure(cfg.spell.extra_wordlists)
+  end
 end
 
 -- Public façade for direct Lua use ------------------------------------------------

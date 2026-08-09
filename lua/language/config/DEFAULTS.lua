@@ -35,6 +35,11 @@ local defaults = {
     -- Only check spellable regions (Treesitter @spell / predicate):
     regions = { treesitter_spell = true, skip_urls = true, skip_emails = true },
     programming_dict = false, -- opt-in: extra technical wordlist appended to spelllang
+    -- User-supplied session wordlists, applied the same way as
+    -- programming_dict (`:spellgood!`) but independent of it and of
+    -- `spelllang` — e.g. domain vocabulary that keeps getting flagged when
+    -- writing non-English technical prose. { ["my-list"] = { "word1", ... } }
+    extra_wordlists = {},
     ui = { view = "picker", preview = true, group_by = "file", dedupe = true },
     dictionary = {
       ignore_file = vim.fn.stdpath("state") .. "/language/spell_ignore.txt",
