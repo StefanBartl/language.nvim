@@ -15,9 +15,9 @@
 > spell/translate settings pick up right where you left off.
 
 Language tools for Neovim in **one** plugin: check **spelling & grammar** and
-act on it directly, plus **translate text** — with a unified scope model
-(buffer / visible range / cwd / path / selection) and fully asynchronous
-throughout.
+act on it directly, **translate text**, and look up **synonyms** to replace
+the word under the cursor — with a unified scope model (buffer / visible
+range / cwd / path / selection) and fully asynchronous throughout.
 
 Built on [lib.nvim](https://github.com/StefanBartl/lib.nvim) as a
 deliberately shared dependency. Translation needs **no** external Neovim
@@ -45,7 +45,7 @@ plugin — just `curl` (Google engine, keyless, works with zero configuration).
 - [lib.nvim](https://github.com/StefanBartl/lib.nvim)
 - `curl` (for translation)
 - optional: `folke/trouble.nvim` (nicer list), external spell CLIs/LSP (see
-  [Features](docs/features.md))
+  [Features](docs/FEATURES/README.md))
 
 ## Installation
 
@@ -93,7 +93,7 @@ work, for turning it off without touching any plugin's config.
 
 ## Documentation
 
-- [Features](docs/features.md) — spellcheck, grammar, translate, thesaurus, highlights, scoping, and async behavior.
+- [Features](docs/FEATURES/README.md) — spellcheck, grammar, translate, thesaurus, highlights, scoping, and async behavior.
 - [Configuration](docs/configuration.md) — all `setup()` options with defaults and comments.
 - [Usage](docs/usage.md) — full command reference and default keymaps.
 - [Roadmap](docs/ROADMAP/ROADMAP.md) — build phases done and future ideas.
