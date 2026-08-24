@@ -19,12 +19,37 @@ local function cfg()
   return require("language.config").get().translate
 end
 
+---Target language forced for the next operator/visual run, set by a
+---per-language keymap. One-shot: consumed by the next `choose_target`, so a
+---forced run never leaks into the following unforced one.
+---@type string|nil
+local forced_target = nil
+
+---Force the target language for the next translate run.
+---
+--- The operator mapping cannot take a count for this -- a count there belongs
+--- to the motion (`3<leader>tw` is three words, which is the point of an
+--- operator) -- so picking a language is a separate key rather than a prefix.
+---@param lang string
+---@return nil
+function M.force_target(lang)
+  forced_target = lang
+end
+
 ---@internal
 ---Resolve the target language, then call `cb(lang)`.
 ---@param cb fun(lang: string)
 ---@return nil
 local function choose_target(cb)
   local c = cfg()
+
+  if forced_target then
+    local lang = forced_target
+    forced_target = nil
+    cb(lang)
+    return
+  end
+
   if type(c.default_target) == "string" and c.default_target ~= "" then
     cb(c.default_target)
     return

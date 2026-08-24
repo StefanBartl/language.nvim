@@ -70,7 +70,30 @@ Both always replace in place regardless of the popup default used by
 `:Translate`.
 
 - **Module:** `translate/motion.lua`
-- **Config:** `opts.translate.keymaps.operator` (default `false`), `opts.translate.keymaps.visual` (default `false`), `opts.translate.default_target`
+- **Config:** `opts.translate.keymaps.operator` (default `false`), `opts.translate.keymaps.visual` (default `false`), `opts.translate.keymaps.to` (default `{}`), `opts.translate.default_target`
+
+### Choosing the target from the keymap (2026-08-24)
+
+With `default_target` set the operator always used it and never asked;
+without one it always asked. Neither is "translate this bit into Spanish,
+just now" — the flag/option audit's entry.
+
+`translate.keymaps.to` is one key per language:
+
+```lua
+translate = { keymaps = { to = { EN = "<leader>tE", DE = "<leader>tD" } } },
+```
+
+Each key works in normal (operator) and visual mode and forces that target
+for a **single** run — the force is consumed by the next `choose_target`, so
+it never leaks into the following unforced one.
+
+A count could not carry the language: on an operator the count belongs to the
+motion (`3{lhs}w` is three words), which is the whole point of having an
+operator. Hence a key per language, which is what the audit suggested as well.
+Unset by default.
+
+- **Module:** `translate/motion.lua` (`force_target`, `choose_target`)
 
 ## Interactive translate window
 

@@ -16,7 +16,36 @@ registered with which-key automatically when `which_key.enable = true`
 | n    | `<leader>z1`         | `spell.keymaps.fix1`      | Apply the first suggestion directly (session-local) |
 | n    | *(off by default)*   | `translate.keymaps.operator` | Operator: `{lhs}{motion}` translates the moved-over text |
 | x    | *(off by default)*   | `translate.keymaps.visual`   | Translate the current visual selection            |
-| n    | *(off by default)*   | `thesaurus.keymap`        | Replace word under cursor with a synonym           |
+| n, x | *(off by default)*   | `translate.keymaps.to.<LANG>` | Translate into that language for one run, whatever `default_target` says |
+| n    | *(off by default)*   | `thesaurus.keymap`        | Replace word under cursor with a synonym; `3{lhs}` takes the third directly |
+
+### Picking a translation target (2026-08-24)
+
+With `default_target` set the operator always used it and never asked;
+without one it always asked. Neither is "translate this bit into Spanish,
+just now".
+
+`translate.keymaps.to` is one key per language — `to = { EN = "<leader>tE",
+DE = "<leader>tD" }` — forcing that target for a single run in both normal
+(operator) and visual mode. The force is one-shot: it is consumed by the next
+run, so it never leaks into the following unforced one.
+
+A count could not carry the language here. On an operator the count belongs
+to the motion (`3{lhs}w` is three words), which is the whole point of having
+an operator — so it is a key per language, which is what the audit suggested
+too. Unset by default.
+
+### Taking the Nth synonym (2026-08-24)
+
+`3{thesaurus.keymap}` replaces the word with the third synonym without
+opening the menu, the way `3z=` takes the third spelling suggestion. The list
+already exists at that point; the menu was only ever the way to choose from
+it.
+
+`vim.v.count` is read raw, since 0 has to stay distinguishable from 1 — no
+count opens the menu, `1` takes the first synonym outright. Out of range is
+reported rather than clamped: substituting a different word than the one you
+counted would be an edit you did not ask for, and `z=` errors too.
 
 `next`, `fix`, and `fix1` are attached per-buffer while a spell session is
 active (see `lua/language/spell/init.lua`); the rest are global, registered

@@ -79,7 +79,12 @@ local defaults = {
     -- Opt-in motion/visual keymaps (off by default to avoid clobbering keys):
     --   operator: `<lhs>{motion}` translates the moved-over text (e.g. gtrip)
     --   visual:   `<lhs>` translates the visual selection
-    keymaps = { operator = false, visual = false },
+    --   to:       one key per language, forcing that target for a single run
+    --             (e.g. to = { EN = "<lhs>", DE = "<lhs>" }). Works in both
+    --             normal (operator) and visual mode. Unset by default.
+    --             A count cannot carry the language on an operator -- there it
+    --             belongs to the motion -- hence a key per language.
+    keymaps = { operator = false, visual = false, to = {} },
     -- Multi-file translation (:Translate cwd / path=<dir>): pick files (kit
     -- multi-select, <Tab>), then per file:
     --   "suffix"  → write a sibling file  name.<TARGET>.ext  (non-destructive, default)

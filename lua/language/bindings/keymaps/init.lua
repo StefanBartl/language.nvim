@@ -54,11 +54,37 @@ function M.setup(cfg)
     end, "[language] Translate selection")
   end
 
+  -- Per-language operator/visual keys. With `default_target` set, the
+  -- operator always used it and never asked; without one it always asked.
+  -- Neither is "translate this bit into Spanish, just now".
+  --
+  -- A count could not carry the language here: on an operator the count
+  -- belongs to the motion (`3<leader>tw` is three words), which is the whole
+  -- point of having an operator. So it is a key per language, which is also
+  -- what the audit suggested. Unset by default.
+  for lang, lhs in pairs(tk.to or {}) do
+    if type(lhs) == "string" and lhs ~= "" and type(lang) == "string" then
+      map("n", lhs, function()
+        require("language.translate.motion").force_target(lang)
+        return require("language.translate.motion").expr()
+      end, ("[language] Translate motion to %s"):format(lang), { expr = true })
+
+      map("x", lhs, function()
+        require("language.translate.motion").force_target(lang)
+        require("language.translate.motion").visual()
+      end, ("[language] Translate selection to %s"):format(lang))
+    end
+  end
+
   -- Thesaurus: replace the word under the cursor with a synonym.
   local th = (cfg.thesaurus and cfg.thesaurus.keymap) or false
   if type(th) == "string" and th ~= "" then
     map("n", th, function()
-      require("language.thesaurus").replace_under_cursor()
+      -- Raw count: 0 means "no count" and has to stay distinguishable from
+      -- 1, since no count opens the menu while `1` takes the first synonym
+      -- outright.
+      local n = vim.v.count
+      require("language.thesaurus").replace_under_cursor(n > 0 and n or nil)
     end, "[language] Synonyms for word under cursor")
   end
 end

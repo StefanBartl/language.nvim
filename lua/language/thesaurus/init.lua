@@ -116,7 +116,8 @@ end
 
 ---Replace the word under the cursor with a synonym picked from a list.
 ---@return nil
-function M.replace_under_cursor()
+---@param nth integer|nil  # pick the Nth synonym directly, skipping the menu
+function M.replace_under_cursor(nth)
   if not cfg().enable then
     return
   end
@@ -127,19 +128,40 @@ function M.replace_under_cursor()
     return
   end
   local bufnr = api.nvim_get_current_buf()
+
+  ---@param item string
+  local function apply(item)
+    if type(item) == "string" and item ~= "" and api.nvim_buf_is_valid(bufnr) then
+      pcall(api.nvim_buf_set_text, bufnr, sr, sc, er, ec, { item })
+    end
+  end
+
   M.synonyms(word, function(syns)
     if #syns == 0 then
       notify.info(("No synonyms for '%s'"):format(word))
       return
     end
+
+    -- `3<leader>th` takes the third synonym without opening the menu, the way
+    -- `3z=` takes the third spelling suggestion. The list already exists at
+    -- this point; the menu was only ever the way to choose from it.
+    --
+    -- Out of range is reported rather than clamped: `z=` errors too, and
+    -- silently substituting a different word than the one counted would be
+    -- an edit you did not ask for.
+    if nth and nth > 0 then
+      if nth > #syns then
+        notify.info(("Only %d synonym(s) for '%s'"):format(#syns, word))
+        return
+      end
+      apply(syns[nth])
+      return
+    end
+
     require("lib.nvim.ui.kit").select({
       items = syns,
       title = "Synonyms for '" .. word .. "'",
-      on_select = function(item)
-        if type(item) == "string" and item ~= "" and api.nvim_buf_is_valid(bufnr) then
-          pcall(api.nvim_buf_set_text, bufnr, sr, sc, er, ec, { item })
-        end
-      end,
+      on_select = apply,
     })
   end)
 end
