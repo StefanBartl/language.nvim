@@ -56,9 +56,7 @@ lazy.nvim:
   "StefanBartl/language.nvim",
   dependencies = { "StefanBartl/lib.nvim", "folke/trouble.nvim" }, -- trouble optional
   event = "VeryLazy",
-  config = function()
-    require("language").setup({})
-  end,
+  opts = {},
 }
 ```
 
