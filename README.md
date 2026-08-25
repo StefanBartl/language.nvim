@@ -49,6 +49,9 @@ plugin — just `curl` (Google engine, keyless, works with zero configuration).
 
 ## Installation
 
+For packer.nvim, vim-plug and the full prerequisite list, see
+[docs/installation.md](docs/installation.md).
+
 lazy.nvim:
 
 ```lua
