@@ -18,7 +18,7 @@ local M = {}
 local function map(modes, lhs, rhs, desc, opts)
   opts = opts or {}
   local ok, libmap = pcall(require, "lib.nvim.bindings.keymap")
-  if ok and type(libmap) == "function" then
+  if ok and vim.is_callable(libmap) then
     libmap(modes, lhs, rhs, opts, desc)
   else
     vim.keymap.set(
