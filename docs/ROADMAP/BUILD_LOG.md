@@ -1,3 +1,12 @@
+# Build log — the phases, as they shipped
+
+Which phase of the original build plan landed and what it contained. A record,
+not a backlog: [`ROADMAP.md`](ROADMAP.md) is where open work lives.
+
+Moved out of `docs/FEATURES/` on 2026-08-26, where it was called `TEMP.md`.
+Only theme files belong there — the features parser reads every `##` in that
+folder as a feature, and this file's `Done` heading was being counted as one.
+
 ## Done
 
 - ✅ **Phase 1 — Scaffold**: plugin entry, `setup()`, config tree (`spell` +
