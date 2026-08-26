@@ -64,7 +64,7 @@
 ---@field dictionary       LanguageSpellDictionaryCfg
 ---@field guard            { block_write_on_error: boolean }
 ---@field highlights       LanguageSpellHighlightsCfg
----@field keymaps          table<string, string|false>
+---@field keymaps          LanguageSpellKeymaps
 
 -- #####################################################################
 -- Translate subtree
@@ -93,7 +93,7 @@
 ---@field timeout_ms     integer
 ---@field deepl          { api_key: string|nil }
 ---@field custom         { cmd: fun(text: string[], target: string): string[], parse: fun(out: string): string[] }|nil
----@field keymaps        { operator: string|false, visual: string|false }
+---@field keymaps        LanguageTranslateKeymaps
 ---@field history        { enable: boolean, max: integer, persist: boolean, file: string }
 ---@field files          { output: "suffix"|"replace"|"buffers", extensions: string[], max_kb: integer }
 
@@ -106,7 +106,7 @@
 ---@field source     "datamuse"|"custom"
 ---@field max        integer
 ---@field timeout_ms integer
----@field keymap     string|false
+---@field keymap     string|string[]|false  # `replace`: synonyms for the word under the cursor
 ---@field custom     fun(word: string, cb: fun(synonyms: string[]))|nil
 
 ---@class LanguageConfig
@@ -118,3 +118,28 @@
 ---@field deps_popup? boolean  # Show the lib.nvim.deps "declared tools" popup once, ever, on first setup() after install (default true; needs lib.nvim.deps — a no-op without it)
 
 return {}
+
+-- #####################################################################
+-- Keymap tables
+--
+-- Every field is one lhs, a list of them, or `false`/unset for "do not bind".
+-- The field name is the action name the registry reports typos against, so a
+-- misspelled key says so instead of silently binding nothing.
+
+--- `panel` is global; `fix`, `fix1` and `next` are buffer-local and exist
+--- only while a spell session is running on that buffer.
+---@class LanguageSpellKeymaps
+---@field panel? string|string[]|false  # toggle the spell session (default `<leader>ss`)
+---@field fix?   string|string[]|false  # correct word & advance (default `<leader>z=`)
+---@field fix1?  string|string[]|false  # accept first suggestion & advance (default `<leader>z1`)
+---@field next?  string|string[]|false  # next spell error (default `]s`)
+
+--- All opt-in: unset by default, so nothing of yours is clobbered.
+---
+--- `to` is one key per language, working in both normal (operator) and visual
+--- mode -- a count cannot carry the language on an operator, where it belongs
+--- to the motion.
+---@class LanguageTranslateKeymaps
+---@field operator? string|string[]|false  # `<lhs>{motion}` translates the moved-over text
+---@field visual?   string|string[]|false  # translate the visual selection
+---@field to?       table<string, string|string[]|false>  # e.g. `{ EN = "<leader>te" }`

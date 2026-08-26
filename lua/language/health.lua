@@ -162,7 +162,7 @@ end
 ---@return nil
 local function check_which_key()
   start_s("which-key (optional)")
-  if require("language.bindings.which_key").available() then
+  if pcall(require, "which-key") then
     ok_s("which-key installed — group labels registered")
   else
     info_s("which-key not found (optional; keymap `desc` fields still work standalone)")

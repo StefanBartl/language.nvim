@@ -4,7 +4,14 @@ All keymaps are opt-in (disable any of them by setting the config key to
 `false`) and carry a `desc`, so they show up in which-key (if installed) and
 `:map` without further work. Group labels ("Spell", "Grammar fix") are
 registered with which-key automatically when `which_key.enable = true`
-(default).
+(default), on whatever prefix the keys you configured actually share.
+
+Every entry below is a **named action**, declared through
+[`lib.nvim.bindings.keymap`](https://github.com/StefanBartl/lib.nvim): the
+config key is the action's name, an lhs may be a list of keys
+(`panel = { "<leader>ss", "z=" }`), and a misspelled name is reported with
+its nearest match instead of silently binding nothing. `to` becomes one
+action per language, named `to_<LANG>`.
 
 ## Keymaps
 

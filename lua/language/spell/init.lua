@@ -15,7 +15,6 @@ require("language.spell.@types")
 local api = vim.api
 
 local notify = require("lib.nvim.notify").create("[language.spell]")
-local map = require("lib.nvim.bindings.keymap")
 local native = require("language.spell.providers.native")
 local collect = require("language.spell.core.collect")
 local list = require("language.spell.ui.list")
@@ -70,48 +69,87 @@ end
 -- ── Fix keymaps (buffer-local, session scope) ───────────────────────────────
 
 ---@internal
+---What was bound in which buffer, so detaching deletes exactly those keys.
+---
+---Reading the config again at detach time was almost right and wrong in the
+---one case that matters: a user who changes `spell.keymaps` while a session
+---is open would have the old keys left behind forever.
+---@type table<integer, Lib.Keymap.Registered[]>
+local session_bound = {}
+
+---@internal
+---The session keys, declared as named actions.
+---
+---They live in the same `spell.keymaps` table as `panel`, but are bound
+---buffer-locally and only while a session is running -- so they are declared
+---here, beside the code that binds them, and `panel` is declared in
+---`language.bindings.keymaps` beside the code that binds that.
 ---@param bufnr integer
 ---@return nil
 local function attach_keymaps(bufnr)
   local km = cfg().keymaps or {}
-  local opts = { buffer = bufnr, silent = true }
 
-  if type(km.fix) == "string" and km.fix ~= "" then
-    map("n", km.fix, function()
-      M.fix_current()
-    end, opts, "[language] Correct word & advance")
+  ---@type table<string, Lib.Keymap.Action>
+  local actions = {
+    fix = {
+      desc = "Correct word & advance",
+      opts = { silent = true },
+      rhs = function()
+        M.fix_current()
+      end,
+    },
+    fix1 = {
+      desc = "Accept first suggestion & advance",
+      opts = { silent = true },
+      rhs = function()
+        local target_bufnr = bufnr
+        vim.cmd("normal! 1z=")
+        vim.defer_fn(function()
+          if not buf_valid(target_bufnr) then
+            return
+          end
+          M.refresh(target_bufnr)
+          M.goto_next()
+        end, 60)
+      end,
+    },
+    next = {
+      desc = "Next spell error",
+      opts = { silent = true },
+      rhs = function()
+        M.goto_next(vim.v.count1)
+      end,
+    },
+  }
+
+  ---@type table<string, string|string[]|false>
+  local user = {}
+  for _, name in ipairs({ "fix", "fix1", "next" }) do
+    if km[name] ~= nil then
+      user[name] = km[name]
+    end
   end
-  if type(km.fix1) == "string" and km.fix1 ~= "" then
-    map("n", km.fix1, function()
-      local target_bufnr = bufnr
-      vim.cmd("normal! 1z=")
-      vim.defer_fn(function()
-        if not buf_valid(target_bufnr) then
-          return
-        end
-        M.refresh(target_bufnr)
-        M.goto_next()
-      end, 60)
-    end, opts, "[language] Accept first suggestion & advance")
-  end
-  if type(km.next) == "string" and km.next ~= "" then
-    map("n", km.next, function()
-      M.goto_next(vim.v.count1)
-    end, opts, "[language] Next spell error")
-  end
+
+  session_bound[bufnr] = require("lib.nvim.bindings.keymap").register(
+    "language",
+    { order = { "fix", "fix1", "next" }, actions = actions },
+    user,
+    { buffer = bufnr, surface = "spell/session" }
+  )
 end
 
 ---@internal
 ---@param bufnr integer
 ---@return nil
 local function detach_keymaps(bufnr)
-  if not buf_valid(bufnr) then
+  local bound = session_bound[bufnr]
+  session_bound[bufnr] = nil
+  if not bound or not buf_valid(bufnr) then
     return
   end
-  local km = cfg().keymaps or {}
-  for _, lhs in ipairs({ km.fix, km.fix1, km.next }) do
-    if type(lhs) == "string" and lhs ~= "" then
-      pcall(vim.keymap.del, "n", lhs, { buffer = bufnr })
+  for _, e in ipairs(bound) do
+    if e.bound and e.lhs then
+      pcall(vim.keymap.del, e.mode, e.lhs, { buffer = bufnr })
     end
   end
 end
@@ -290,10 +328,32 @@ function M.run(lang, scope)
   notify.info(("%d spelling issue(s) found (%s)"):format(#issues, scope_label))
 end
 
+---@internal
+---Which buffer `clear()` should act on.
+---
+---The current one, when it has a session. Otherwise the only active session,
+---if there is exactly one: `list.open` leaves the cursor in the quickfix /
+---Trouble window, so "toggle the session off" pressed from there used to
+---resolve to that window's buffer, find no session, and leave the real one
+---running with its keymaps still attached. With several sessions open there
+---is no such single answer, and the current buffer stays the honest one.
+---@return integer
+local function resolve_session_buf()
+  local cur = api.nvim_get_current_buf()
+  if sessions[cur] then
+    return cur
+  end
+  local only, count = nil, 0
+  for bufnr in pairs(sessions) do
+    only, count = bufnr, count + 1
+  end
+  return (count == 1 and buf_valid(only)) and only or cur
+end
+
 ---Deactivate the session for the current buffer and restore options.
 ---@return nil
 function M.clear()
-  local bufnr = api.nvim_get_current_buf()
+  local bufnr = resolve_session_buf()
   local st = sessions[bufnr]
 
   list.clear(touched)

@@ -25,12 +25,11 @@ function M.setup(opts)
     require("language.bindings.usrcmds").setup()
   end
 
-  require("language.bindings.keymaps").setup(cfg)
+  require("language.bindings.keymaps").setup(
+    cfg,
+    not (cfg.which_key and cfg.which_key.enable == false)
+  )
   require("language.bindings.autocmds").setup(cfg)
-
-  if cfg.which_key and cfg.which_key.enable then
-    pcall(require("language.bindings.which_key").setup, cfg)
-  end
 
   if cfg.spell and cfg.spell.programming_dict then
     require("language.spell.programming_dict").ensure()
