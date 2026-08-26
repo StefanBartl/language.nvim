@@ -45,10 +45,10 @@ local function check_lib()
   else
     err_s("lib.nvim not found — install StefanBartl/lib.nvim")
   end
-  if pcall(require, "lib.nvim.usercmd.composer") then
-    ok_s("lib.nvim.usercmd.composer available (:Spellcheck/:Translate/:TranslateReplace)")
+  if pcall(require, "lib.nvim.bindings.usercmd.composer") then
+    ok_s("lib.nvim.bindings.usercmd.composer available (:Spellcheck/:Translate/:TranslateReplace)")
   else
-    err_s("lib.nvim.usercmd.composer not found — commands will fail to register")
+    err_s("lib.nvim.bindings.usercmd.composer not found — commands will fail to register")
   end
 end
 
@@ -196,9 +196,9 @@ function M.check()
   check_which_key()
   check_lib_deps()
 
-  require("lib.nvim.usercmd.composer").checkhealth("Spellcheck")
-  require("lib.nvim.usercmd.composer").checkhealth("Translate")
-  require("lib.nvim.usercmd.composer").checkhealth("TranslateReplace")
+  require("lib.nvim.bindings.usercmd.composer").checkhealth("Spellcheck")
+  require("lib.nvim.bindings.usercmd.composer").checkhealth("Translate")
+  require("lib.nvim.bindings.usercmd.composer").checkhealth("TranslateReplace")
 end
 
 return M

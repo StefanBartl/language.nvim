@@ -123,7 +123,7 @@ folder as a feature, and this file's `Done` heading was being counted as one.
   when the provider merges/splits lines (line counts no longer match 1:1).
 - ✅ **Bindings hardening**: split `lua/language/bindings/` into per-concern
   subfolders (`keymaps/`, `autocmds/`, `usrcmds/`, `which_key/`, each an
-  `init.lua`); routed autocmd registration through `lib.nvim.autocmd` and the
-  session fix-keymaps through `lib.nvim.map`; fixed a stale-buffer race in
+  `init.lua`); routed autocmd registration through `lib.nvim.bindings.autocmd` and the
+  session fix-keymaps through `lib.nvim.bindings.keymap`; fixed a stale-buffer race in
   `fix_current`/`fix1` where the deferred refresh could resolve the wrong (or
   no) session if the current buffer changed during the 60ms window.

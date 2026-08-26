@@ -15,7 +15,7 @@ require("language.spell.@types")
 local api = vim.api
 
 local notify = require("lib.nvim.notify").create("[language.spell]")
-local map = require("lib.nvim.map")
+local map = require("lib.nvim.bindings.keymap")
 local native = require("language.spell.providers.native")
 local collect = require("language.spell.core.collect")
 local list = require("language.spell.ui.list")

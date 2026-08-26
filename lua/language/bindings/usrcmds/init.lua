@@ -1,6 +1,6 @@
 ---@module 'language.bindings.usrcmds'
 ---@brief Registers the top-level commands: :Spellcheck, :Translate,
----@brief :TranslateReplace — built via lib.nvim.usercmd.composer.
+---@brief :TranslateReplace — built via lib.nvim.bindings.usercmd.composer.
 ---@description
 --- Each is its own composer verb with a `path = {}` root route (a flat
 --- grammar, no subcommand word — same trick pdfport.nvim/replacer.nvim use).
@@ -18,7 +18,7 @@
 --- repo for the full design writeup (mirrors replacer.nvim's identical
 --- ctx.raw-bypass technique, `lua/replacer/command.lua`).
 
-local composer = require("lib.nvim.usercmd.composer")
+local composer = require("lib.nvim.bindings.usercmd.composer")
 
 require("language.config.@types")
 

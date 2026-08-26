@@ -6,7 +6,7 @@
 --- so there is no overhead otherwise. Live scanning is decoupled from the
 --- on-demand panel/session — it keeps inline diagnostics fresh for configured
 --- filetypes as you edit (see `language.spell.live`).
-local autocmd = require("lib.nvim.autocmd")
+local autocmd = require("lib.nvim.bindings.autocmd")
 
 local M = {}
 
@@ -88,7 +88,7 @@ function M.setup(cfg)
 
     -- Stays on the raw API deliberately: this callback calls error() to abort
     -- the write, relying on Neovim's native "an erroring BufWritePre callback
-    -- cancels the write" behavior. lib.nvim.autocmd.create pcalls callbacks
+    -- cancels the write" behavior. lib.nvim.bindings.autocmd.create pcalls callbacks
     -- and only notifies on error, which would swallow that abort signal.
     vim.api.nvim_create_autocmd("BufWritePre", {
       group = group,

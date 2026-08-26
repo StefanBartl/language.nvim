@@ -53,7 +53,7 @@ once in `lua/language/bindings/keymaps/init.lua`.
 
 ## User commands
 
-Each is its own [`lib.nvim.usercmd.composer`](https://github.com/StefanBartl/lib.nvim)
+Each is its own [`lib.nvim.bindings.usercmd.composer`](https://github.com/StefanBartl/lib.nvim)
 verb (a flat `path = {}` root route — no subcommand tree), defined in
 `lua/language/bindings/usrcmds/init.lua`.
 

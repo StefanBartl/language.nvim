@@ -8,7 +8,7 @@
 local M = {}
 
 ---@internal
----Register a keymap via lib.nvim.map, falling back to vim.keymap.set.
+---Register a keymap via lib.nvim.bindings.keymap, falling back to vim.keymap.set.
 ---@param modes string|string[]
 ---@param lhs string
 ---@param rhs string|function
@@ -17,7 +17,7 @@ local M = {}
 ---@return nil
 local function map(modes, lhs, rhs, desc, opts)
   opts = opts or {}
-  local ok, libmap = pcall(require, "lib.nvim.map")
+  local ok, libmap = pcall(require, "lib.nvim.bindings.keymap")
   if ok and type(libmap) == "function" then
     libmap(modes, lhs, rhs, opts, desc)
   else

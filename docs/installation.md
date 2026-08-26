@@ -5,7 +5,7 @@
 - Neovim 0.9+ (0.10+ recommended, for `vim.system`)
 - [`lib.nvim`](https://github.com/StefanBartl/lib.nvim) — **required**;
   `:Spellcheck`, `:Translate` and `:TranslateReplace` are registered through
-  `lib.nvim.usercmd.composer`, and the notify/cross-platform helpers come from
+  `lib.nvim.bindings.usercmd.composer`, and the notify/cross-platform helpers come from
   there too.
 - `curl` — required for translation only; everything else works without it.
 - Optional: [trouble.nvim](https://github.com/folke/trouble.nvim) for a nicer

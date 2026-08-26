@@ -32,9 +32,9 @@ composes and confirms an install command.
 
 - **Config:** `opts.deps_popup` (default `true`), `vim.g.lib_nvim_deps_disable_first_run`, `vim.g.lib_nvim_deps_disabled_plugins`
 
-## Bindings via `lib.nvim.usercmd.composer`
+## Bindings via `lib.nvim.bindings.usercmd.composer`
 
-Every user command is a `lib.nvim.usercmd.composer` verb (a flat root
+Every user command is a `lib.nvim.bindings.usercmd.composer` verb (a flat root
 route, no subcommand tree) with tab-completion for language codes, scopes,
 and flags, defined in `bindings/usrcmds/init.lua`. Keymaps carry a `desc`
 and register with which-key automatically when `which_key.enable = true`
