@@ -255,20 +255,23 @@ local function launch(target, source_lines)
     require("lib.nvim.notify").create("[language.translate]").info("Translation copied")
   end, mo)
 
-  local group = api.nvim_create_augroup("language_translate_window", { clear = true })
-  api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
+  -- Cleared through lib rather than nvim_create_augroup: `group(name, true)`
+  -- drops the previous window's records along with its autocmds, so re-opening
+  -- the translate window replaces its two rows in the generated bindings table
+  -- instead of adding another pair.
+  local autocmd = require("lib.nvim.bindings.autocmd")
+  local group = autocmd.group("language_translate_window", true)
+  autocmd.create({ "TextChanged", "TextChangedI" }, on_change, {
     group = group,
     buffer = state.input_buf,
-    callback = on_change,
     desc = "[language] live translate on input change",
   })
-  api.nvim_create_autocmd("WinClosed", {
+  autocmd.create("WinClosed", function(ev)
+    if tonumber(ev.match) == state.input_win then
+      M.close()
+    end
+  end, {
     group = group,
-    callback = function(ev)
-      if tonumber(ev.match) == state.input_win then
-        M.close()
-      end
-    end,
     desc = "[language] close translate window",
   })
 

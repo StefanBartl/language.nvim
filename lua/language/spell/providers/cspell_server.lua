@@ -229,12 +229,12 @@ local function ensure_started(cfg, cb)
 end
 
 -- Kill the sidecar when Neovim exits.
-api.nvim_create_autocmd("VimLeavePre", {
-  callback = function()
-    if state.jid and state.jid > 0 then
-      pcall(fn.jobstop, state.jid)
-    end
-  end,
+require("lib.nvim.bindings.autocmd").create("VimLeavePre", function()
+  if state.jid and state.jid > 0 then
+    pcall(fn.jobstop, state.jid)
+  end
+end, {
+  group = "language_nvim_cspell_server",
   desc = "[language] stop cspell sidecar",
 })
 

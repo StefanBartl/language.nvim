@@ -86,29 +86,31 @@ function M.setup(cfg)
       return false
     end
 
-    -- Stays on the raw API deliberately: this callback calls error() to abort
-    -- the write, relying on Neovim's native "an erroring BufWritePre callback
-    -- cancels the write" behavior. lib.nvim.bindings.autocmd.create pcalls callbacks
-    -- and only notifies on error, which would swallow that abort signal.
-    vim.api.nvim_create_autocmd("BufWritePre", {
+    -- `raw = true`: this callback calls error() to abort the write, relying on
+    -- Neovim's native "an erroring BufWritePre callback cancels the write"
+    -- behavior. lib.nvim.bindings.autocmd.create pcalls callbacks by default
+    -- and only notifies on error, which would swallow that abort signal --
+    -- `raw` skips the wrapper while still recording the autocmd, so the guard
+    -- appears in the generated bindings table like every other one.
+    autocmd.create("BufWritePre", function(ev)
+      if not ft_matches(ev.buf) then
+        return
+      end
+      local scope = { kind = "buffer", bufnr = ev.buf }
+      local sp = require("language.config").get().spell
+      local issues = require("language.spell.providers.native").scan_scope(scope, sp)
+      issues = require("language.spell.core.ignore").filter(issues)
+      if #issues > 0 then
+        error(
+          ("[language] %d spelling issue(s) — write aborted (:noautocmd w to bypass)"):format(
+            #issues
+          ),
+          0
+        )
+      end
+    end, {
       group = group,
-      callback = function(ev)
-        if not ft_matches(ev.buf) then
-          return
-        end
-        local scope = { kind = "buffer", bufnr = ev.buf }
-        local sp = require("language.config").get().spell
-        local issues = require("language.spell.providers.native").scan_scope(scope, sp)
-        issues = require("language.spell.core.ignore").filter(issues)
-        if #issues > 0 then
-          error(
-            ("[language] %d spelling issue(s) — write aborted (:noautocmd w to bypass)"):format(
-              #issues
-            ),
-            0
-          )
-        end
-      end,
+      raw = true,
       desc = "[language] block write on spelling errors",
     })
   end
