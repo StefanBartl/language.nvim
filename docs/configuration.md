@@ -10,7 +10,14 @@ require("language").setup({
     live = false,                -- true = continuous inline diagnostics while typing
     live_scope = "visible",      -- "visible" (visible range only) | "buffer"
     scan_debounce_ms = 400,
-    ui = { view = "picker", preview = true }, -- "quickfix" forces the qf fallback
+    ui = {
+      view = "picker",        -- "quickfix" forces the qf fallback
+      preview = true,
+      -- How long to wait after an LSP code action before re-reading the
+      -- buffer. There is no completion signal to hook, so this is a guess at
+      -- the server's latency -- raise it for a slow one.
+      lsp_refresh_delay_ms = 500,
+    },
 
     -- Code features
     word_split = { enable = true, min_length = 4 }, -- split CamelCase/snake_case into sub-words
