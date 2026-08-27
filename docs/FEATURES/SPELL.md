@@ -13,9 +13,20 @@ native `vim.spell`, publishing issues as diagnostics with a Trouble panel
 next issue afterward. Ending the session (`:Spellcheck clear`) restores the
 buffer's original `spelllang` and clears diagnostics.
 
+The review panel opened by `:Spellcheck`/`<leader>ss` is a chooser list, one
+row per issue. `<CR>` opens the full action menu on the issue under cursor
+(suggestions, replace-all, add to dictionary, ignore, jump, or an LSP fix for
+grammar/style issues) — the same menu also reachable directly by key, without
+the extra round-trip: `a` add to dictionary, `i`/`I` ignore (session/
+persistent), `L` apply an LSP fix, `gd`/`o` jump to the word under cursor
+(closes the panel). `?` opens a cheatsheet of every key available in the
+panel. A key not applicable to the issue under cursor (e.g. `a` on a grammar
+issue) is reported rather than silently ignored.
+
 - **Tab:** true
 - **Module:** `spell/init.lua`, `spell/ui/{panel,item_menu,list}.lua`, `spell/core/{collect,actions}.lua`
 - **Keymaps:** `<leader>ss` (toggle), `]s` (next), `<leader>z=` (fix), `<leader>z1` (fix1) — see [keymaps](../BINDINGS.md#keymaps)
+- **Panel keys:** `<CR>` menu, `a` add to dictionary, `i`/`I` ignore (session/persistent), `L` LSP fix, `gd`/`o` jump, `?` help
 - **Usercmds:** `:Spellcheck [lang] [buffer|visible|cwd|path=<p>|clear|refresh]` — [user commands](../BINDINGS.md#user-commands)
 - **Config:** `opts.spell.default_scope` (default `"buffer"`), `opts.spell.ui.view` (`"picker"`/`"quickfix"`)
 

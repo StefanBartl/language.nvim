@@ -39,11 +39,12 @@ local function pick_suggestion(issue, title, apply)
   })
 end
 
----@internal
----Jump the current window to an issue's location.
+---Jump the current window to an issue's location. Public so the review panel
+---(`spell/ui/panel.lua`) can offer the same jump as a direct key, without
+---going through the action menu.
 ---@param issue LanguageSpellIssue
 ---@return nil
-local function jump_to(issue)
+function M.jump_to(issue)
   if issue.bufnr and api.nvim_buf_is_valid(issue.bufnr) then
     api.nvim_set_current_buf(issue.bufnr)
   elseif issue.path and issue.path ~= "" then
@@ -84,7 +85,7 @@ end
 ---@param on_done fun()
 ---@return nil
 local function apply_lsp_fix(issue, on_done)
-  jump_to(issue)
+  M.jump_to(issue)
   local ok = pcall(vim.lsp.buf.code_action)
   if not ok then
     notify.warn("No LSP client provides code actions here")
@@ -100,10 +101,12 @@ end
 
 ---Build the action list for `issue`. Grammar/style issues (harper/ltex) are
 ---fixed via LSP code actions; spelling issues use suggestion replacement.
----Public for testing.
+---Public for testing, and reused by `spell/ui/panel.lua` to drive its own
+---direct keymaps (`id` is the stable lookup key for that; `label` is only
+---for display).
 ---@param issue LanguageSpellIssue
 ---@param on_done fun()
----@return { label: string, action: fun() }[]
+---@return { id: string, label: string, action: fun() }[]
 function M._items(issue, on_done)
   local function done_msg(ok, err, ok_msg)
     if ok then
@@ -116,6 +119,7 @@ function M._items(issue, on_done)
 
   local ignore_items = {
     {
+      id = "ignore_session",
       label = "Ignore (session)",
       action = function()
         ignore.add_session(issue.word)
@@ -124,6 +128,7 @@ function M._items(issue, on_done)
       end,
     },
     {
+      id = "ignore_persistent",
       label = "Ignore (persistent)",
       action = function()
         done_msg(
@@ -134,19 +139,21 @@ function M._items(issue, on_done)
       end,
     },
     {
+      id = "jump",
       label = "Jump to location",
       action = function()
-        jump_to(issue)
+        M.jump_to(issue)
       end,
     },
   }
 
-  ---@type { label: string, action: fun() }[]
+  ---@type { id: string, label: string, action: fun() }[]
   local items
 
   if is_grammar(issue) then
     items = {
       {
+        id = "lsp_fix",
         label = "Apply LSP fix…",
         action = function()
           apply_lsp_fix(issue, on_done)
@@ -156,6 +163,7 @@ function M._items(issue, on_done)
   else
     items = {
       {
+        id = "suggest",
         label = "Choose suggestion…",
         action = function()
           -- With dictionary.replace_all, a chosen suggestion is applied to every
@@ -184,6 +192,7 @@ function M._items(issue, on_done)
         end,
       },
       {
+        id = "replace_all",
         label = "Replace all in buffer…",
         action = function()
           pick_suggestion(issue, "Replace all '" .. issue.word .. "'", function(word)
@@ -198,6 +207,7 @@ function M._items(issue, on_done)
         end,
       },
       {
+        id = "add_dict",
         label = "Add to dictionary",
         action = function()
           done_msg(

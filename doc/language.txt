@@ -238,7 +238,7 @@ operators (like `gu`/`gq`) — they always replace, independent of
 8. THE REVIEW PANEL                                            *language-panel*
 
 With `spell.ui.view = "picker"` (default), :Spellcheck opens an interactive
-panel listing every issue. Select an item to open its action menu.
+panel listing every issue. `<CR>` on an item opens its action menu:
 
 Spelling issues:
     Choose suggestion…     pick a replacement (fuzzy)
@@ -251,6 +251,16 @@ Spelling issues:
 Grammar/style issues (harper_ls/ltex):
     Apply LSP fix…         run the language server's code actions at the issue
     Ignore (session/persistent), Jump to location
+
+The panel list itself also has direct keys for the actions above, so common
+ones don't need the menu round-trip:
+    a       Add to dictionary
+    i / I   Ignore (session / persistent)
+    L       Apply LSP fix (grammar/style issues)
+    gd, o   Jump to location (closes the panel)
+    ?       Show this cheatsheet
+A key not applicable to the issue under cursor (e.g. `a` on a grammar issue)
+is reported rather than silently ignored.
 
                                                        *language-translate-window*
 Interactive translation window~
