@@ -41,6 +41,7 @@
 ---@field preview  boolean
 ---@field group_by "file"|"none"
 ---@field dedupe   boolean
+---@field lsp_refresh_delay_ms integer  Wait after an LSP code action before re-reading the buffer, in ms (default 500)
 
 ---@class LanguageSpellHighlightsCfg
 ---@field enable boolean

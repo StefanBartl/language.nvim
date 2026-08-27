@@ -40,7 +40,16 @@ local defaults = {
     -- `spelllang` — e.g. domain vocabulary that keeps getting flagged when
     -- writing non-English technical prose. { ["my-list"] = { "word1", ... } }
     extra_wordlists = {},
-    ui = { view = "picker", preview = true, group_by = "file", dedupe = true },
+    ui = {
+      view = "picker",
+      preview = true,
+      group_by = "file",
+      dedupe = true,
+      -- How long to wait after an LSP code action before re-reading the
+      -- buffer. There is no completion signal to hook, so this is a guess at
+      -- the server's latency -- raise it for a slow one.
+      lsp_refresh_delay_ms = 500,
+    },
     dictionary = {
       ignore_file = vim.fn.stdpath("state") .. "/language/spell_ignore.txt",
       use_spellfile = true,

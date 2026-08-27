@@ -64,6 +64,19 @@ local function is_grammar(issue)
 end
 
 ---@internal
+---How long to wait after an LSP code action before re-reading the buffer.
+---@return integer
+local function lsp_refresh_delay_ms()
+  local ok, config = pcall(require, "language.config")
+  if not ok or type(config.get) ~= "function" then
+    return 500
+  end
+  local cfg = config.get() or {}
+  local n = ((cfg.spell or {}).ui or {}).lsp_refresh_delay_ms
+  return (type(n) == "number" and n >= 0) and n or 500
+end
+
+---@internal
 ---Apply an LSP code action at the issue location. Delegates to Neovim's own
 ---code_action (which handles resolve/apply/offset-encoding and the picker), then
 ---schedules `on_done` so the panel refreshes after a fix is applied.
@@ -77,8 +90,12 @@ local function apply_lsp_fix(issue, on_done)
     notify.warn("No LSP client provides code actions here")
     return
   end
-  -- The action is applied asynchronously by the user's pick; refresh shortly.
-  vim.defer_fn(on_done, 500)
+  -- The action is applied asynchronously by the user's pick, so the refresh
+  -- can only wait a plausible while and look again -- there is no completion
+  -- signal to hook. Half a second is a guess at *someone else's* latency,
+  -- which is exactly the kind of number that is wrong on a slow server and
+  -- wasteful on a fast one, so `spell.ui.lsp_refresh_delay_ms` owns it.
+  vim.defer_fn(on_done, lsp_refresh_delay_ms())
 end
 
 ---Build the action list for `issue`. Grammar/style issues (harper/ltex) are
