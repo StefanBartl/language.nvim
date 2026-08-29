@@ -24,8 +24,7 @@ deliberately shared dependency. Translation needs **no** external Neovim
 plugin — just `curl` (Google engine, keyless, works with zero configuration).
 
 > Status: **Beta** — the spell panel, grammar (LSP), multiple providers, and
-> multiple translation engines all work. More ideas: see the
-> [ROADMAP](docs/ROADMAP/ROADMAP.md).
+> multiple translation engines all work.
 
 ---
 
@@ -97,5 +96,4 @@ work, for turning it off without touching any plugin's config.
 - [Features](docs/FEATURES/README.md) — spellcheck, grammar, translate, thesaurus, highlights, scoping, and async behavior.
 - [Configuration](docs/configuration.md) — all `setup()` options with defaults and comments.
 - [Usage](docs/usage.md) — full command reference and default keymaps.
-- [Roadmap](docs/ROADMAP/ROADMAP.md) — build phases done and future ideas.
 - [Bindings](docs/BINDINGS.md) — every keymap, user command, and autocmd.
