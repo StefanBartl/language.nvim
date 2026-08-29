@@ -16,7 +16,7 @@ local defaults = require("language.config.DEFAULTS")
 local current = vim.deepcopy(defaults)
 
 ---Merge user options over the defaults.
----@param opts LanguageConfig|table|nil
+---@param opts LanguageOpts|nil
 ---@return nil
 function M.setup(opts)
   current = vim.tbl_deep_extend("force", defaults, opts or {})

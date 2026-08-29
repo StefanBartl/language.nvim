@@ -14,7 +14,7 @@
 local M = {}
 
 ---Configure and activate the plugin. Idempotent-ish: re-runs merge config.
----@param opts LanguageConfig|table|nil
+---@param opts LanguageOpts|nil
 ---@return nil
 function M.setup(opts)
   require("language.config").setup(opts or {})

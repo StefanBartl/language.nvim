@@ -10,7 +10,7 @@
 -- Spell subtree
 -- #####################################################################
 
----@class LanguageSpellProvidersCfg
+---@class LanguageSpellProvidersCfg : LanguageSpellProvidersOpts
 ---@field order  string[]                       -- provider resolution order
 ---@field buffer string[]                       -- providers used for buffer/visible scope
 ---@field cwd    string[]                        -- providers used for cwd/path scope (CLI preferred)
@@ -22,32 +22,32 @@
 ---@field cmd   fun(scope: LanguageScope, cfg: LanguageSpellCfg): string[]
 ---@field parse fun(out: string, base: string|nil): table[]
 
----@class LanguageSpellWordSplitCfg
+---@class LanguageSpellWordSplitCfg : LanguageSpellWordSplitOpts
 ---@field enable     boolean                     -- split CamelCase/snake_case into subwords
 ---@field min_length integer                     -- ignore subwords shorter than this
 
----@class LanguageSpellRegionsCfg
+---@class LanguageSpellRegionsCfg : LanguageSpellRegionsOpts
 ---@field treesitter_spell boolean               -- only check Treesitter @spell regions when available
 ---@field skip_urls        boolean
 ---@field skip_emails      boolean
 
----@class LanguageSpellDictionaryCfg
+---@class LanguageSpellDictionaryCfg : LanguageSpellDictionaryOpts
 ---@field ignore_file   string                   -- persistent ignore list path
 ---@field use_spellfile boolean                  -- also write to nvim spellfile on add-to-dict
 ---@field replace_all   boolean                  -- apply a chosen suggestion to all identical errors in scope
 
----@class LanguageSpellUiCfg
+---@class LanguageSpellUiCfg : LanguageSpellUiOpts
 ---@field view     "picker"|"select"|"quickfix"
 ---@field preview  boolean
 ---@field group_by "file"|"none"
 ---@field dedupe   boolean
 ---@field lsp_refresh_delay_ms integer  Wait after an LSP code action before re-reading the buffer, in ms (default 500)
 
----@class LanguageSpellHighlightsCfg
+---@class LanguageSpellHighlightsCfg : LanguageSpellHighlightsOpts
 ---@field enable boolean
 ---@field style  "underline"|"undercurl"
 
----@class LanguageSpellCfg
+---@class LanguageSpellCfg : LanguageSpellOpts
 ---@field providers        LanguageSpellProvidersCfg
 ---@field filetypes        string[]
 ---@field default_scope    LanguageScopeKind
@@ -83,7 +83,7 @@
 ---| "notify"   # show via vim.notify
 ---@alias LanguageTranslateInput  "selection"|"clipboard"|"input"
 
----@class LanguageTranslateCfg
+---@class LanguageTranslateCfg : LanguageTranslateOpts
 ---@field engine         string                  -- "google"|"deepl"|"shell"|<custom key>
 ---@field fallback       string[]                -- engine fallback chain
 ---@field default_output LanguageTranslateOutput
@@ -102,7 +102,7 @@
 -- Root
 -- #####################################################################
 
----@class LanguageThesaurusCfg
+---@class LanguageThesaurusCfg : LanguageThesaurusOpts
 ---@field enable     boolean
 ---@field source     "datamuse"|"custom"
 ---@field max        integer
@@ -110,7 +110,7 @@
 ---@field keymap     string|string[]|false  # `replace`: synonyms for the word under the cursor
 ---@field custom     fun(word: string, cb: fun(synonyms: string[]))|nil
 
----@class LanguageConfig
+---@class LanguageConfig : LanguageOpts
 ---@field spell      LanguageSpellCfg
 ---@field translate  LanguageTranslateCfg
 ---@field thesaurus  LanguageThesaurusCfg
@@ -118,6 +118,93 @@
 ---@field which_key  { enable: boolean }
 ---@field deps_popup? boolean  # Show the lib.nvim.deps "declared tools" popup once, ever, on first setup() after install (default true; needs lib.nvim.deps — a no-op without it)
 
+--- What `setup()` accepts: the shape of `LanguageConfig` with every field
+--- optional, nested tables included. The resolved `LanguageConfig` stays
+--- strict, so a partial call is legal without every read of
+--- `cfg.spell.live` becoming a nil check.
+---@class LanguageOpts
+---@field spell?      LanguageSpellOpts
+---@field translate?  LanguageTranslateOpts
+---@field thesaurus?  LanguageThesaurusOpts
+---@field commands?   boolean
+---@field which_key?  { enable: boolean }
+---@field deps_popup? boolean  # Show the lib.nvim.deps "declared tools" popup once, ever, on first setup() after install (default true; needs lib.nvim.deps — a no-op without it)
+
+---@class LanguageSpellOpts
+---@field providers?        LanguageSpellProvidersOpts
+---@field filetypes?        string[]
+---@field default_scope?    LanguageScopeKind
+---@field live?             boolean
+---@field live_scope?       LanguageScopeKind
+---@field scan_debounce_ms? integer
+---@field word_split?       LanguageSpellWordSplitOpts
+---@field max_highlights?   integer
+---@field max_file_lines?   integer
+---@field skip_readonly?    boolean
+---@field regions?          LanguageSpellRegionsOpts
+---@field programming_dict? boolean
+---@field extra_wordlists?  table<string, string[]>
+---@field ui?               LanguageSpellUiOpts
+---@field dictionary?       LanguageSpellDictionaryOpts
+---@field guard?            { block_write_on_error: boolean }
+---@field highlights?       LanguageSpellHighlightsOpts
+---@field keymaps?          LanguageSpellKeymaps
+
+---@class LanguageSpellUiOpts
+---@field view?                 "picker"|"select"|"quickfix"
+---@field preview?              boolean
+---@field group_by?             "file"|"none"
+---@field dedupe?               boolean
+---@field lsp_refresh_delay_ms? integer  Wait after an LSP code action before re-reading the buffer, in ms (default 500)
+
+---@class LanguageSpellProvidersOpts
+---@field order?  string[]                       -- provider resolution order
+---@field buffer? string[]                       -- providers used for buffer/visible scope
+---@field cwd?    string[]                        -- providers used for cwd/path scope (CLI preferred)
+---@field native? { spelllang: string|nil }       -- nil = inherit vim 'spelllang'
+---@field lsp?    { enable: boolean, servers: string[] }
+---@field custom? LanguageSpellCustomProviderCfg|nil
+
+---@class LanguageSpellWordSplitOpts
+---@field enable?     boolean                     -- split CamelCase/snake_case into subwords
+---@field min_length? integer                     -- ignore subwords shorter than this
+
+---@class LanguageSpellRegionsOpts
+---@field treesitter_spell? boolean               -- only check Treesitter @spell regions when available
+---@field skip_urls?        boolean
+---@field skip_emails?      boolean
+
+---@class LanguageSpellDictionaryOpts
+---@field ignore_file?   string                   -- persistent ignore list path
+---@field use_spellfile? boolean                  -- also write to nvim spellfile on add-to-dict
+---@field replace_all?   boolean                  -- apply a chosen suggestion to all identical errors in scope
+
+---@class LanguageSpellHighlightsOpts
+---@field enable? boolean
+---@field style?  "underline"|"undercurl"
+
+---@class LanguageTranslateOpts
+---@field engine?         string                  -- "google"|"deepl"|"shell"|<custom key>
+---@field fallback?       string[]                -- engine fallback chain
+---@field default_output? LanguageTranslateOutput
+---@field default_input?  LanguageTranslateInput
+---@field default_langs?  string[]
+---@field default_target? string|nil              -- fixed target for motion/visual maps; nil = prompt
+---@field nocode_default? boolean
+---@field timeout_ms?     integer
+---@field deepl?          { api_key: string|nil }
+---@field custom?         { cmd: fun(text: string[], target: string): string[], parse: fun(out: string): string[] }|nil
+---@field keymaps?        LanguageTranslateKeymaps
+---@field history?        { enable: boolean, max: integer, persist: boolean, file: string }
+---@field files?          { output: "suffix"|"replace"|"buffers", extensions: string[], max_kb: integer }
+
+---@class LanguageThesaurusOpts
+---@field enable?     boolean
+---@field source?     "datamuse"|"custom"
+---@field max?        integer
+---@field timeout_ms? integer
+---@field keymap?     string|string[]|false  # `replace`: synonyms for the word under the cursor
+---@field custom?     fun(word: string, cb: fun(synonyms: string[]))|nil
 return {}
 
 -- #####################################################################

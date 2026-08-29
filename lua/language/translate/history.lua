@@ -14,7 +14,7 @@ local M = {}
 ---@field input  string[]  -- source lines
 ---@field output string[]  -- translated lines
 ---@field target string    -- target language
----@field time   integer   -- os.time()
+---@field time?  integer   -- os.time(); stamped by `push` when the caller omits it
 
 ---@type Language.TranslateHistoryEntry[]|nil  -- newest first
 local ring = nil

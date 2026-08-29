@@ -1,3 +1,6 @@
+---@diagnostic disable: missing-fields
+-- The config tables below carry only the fields the case exercises; a
+-- resolved LanguageConfig per case would be noise, not coverage.
 -- TESTS/config_spec.lua — language.config: the merge, and that DEFAULTS is not
 -- mutated by it.
 
