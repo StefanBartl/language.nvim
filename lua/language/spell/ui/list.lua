@@ -11,6 +11,7 @@ require("language.spell.@types")
 local api = vim.api
 local diag = vim.diagnostic
 local highlights = require("language.spell.ui.highlights")
+local list = require("lib.nvim.ui.list")
 
 local M = {}
 
@@ -139,9 +140,9 @@ function M.open(issues, opts)
       return
     end
   end
-  vim.fn.setqflist(to_qf(issues), "r")
-  vim.fn.setqflist({}, "a", { title = opts.title })
-  vim.cmd("copen")
+  -- `action = "r"`: the spell list is a live view of one buffer's issues, so a
+  -- re-check updates it instead of stacking a second one behind `:colder`.
+  list.qf(to_qf(issues), opts.title, { action = "r" })
 end
 
 ---Refresh whichever list is open.
@@ -157,8 +158,7 @@ function M.refresh(issues, opts)
     end)
     return
   end
-  vim.fn.setqflist(to_qf(issues), "r")
-  vim.fn.setqflist({}, "a", { title = opts.title })
+  list.qf(to_qf(issues), opts.title, { action = "r", open = false })
 end
 
 ---Close whichever list is open.
