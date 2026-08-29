@@ -31,7 +31,7 @@
 -- #####################################################################
 
 ---@class Language.Module
----@field setup       fun(opts?: LanguageConfig): nil
+---@field setup       fun(opts?: LanguageOpts): nil
 ---@field spellcheck  fun(lang?: string, scope?: string): nil
 ---@field translate   fun(lang: string, opts?: table): nil
 ---@field open_panel  fun(scope?: string): nil
