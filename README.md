@@ -101,3 +101,7 @@ work, for turning it off without touching any plugin's config.
 - [Configuration](docs/configuration.md) — all `setup()` options with defaults and comments.
 - [Usage](docs/usage.md) — full command reference and default keymaps.
 - [Bindings](docs/BINDINGS.md) — every keymap, user command, and autocmd.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
