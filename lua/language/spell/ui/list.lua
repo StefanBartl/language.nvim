@@ -63,13 +63,13 @@ function M.publish(issues, source, max, highlights_cfg)
   for _, issue in ipairs(issues) do
     local b = issue.bufnr
     if b and api.nvim_buf_is_valid(b) then
-      local list = by_buf[b]
-      if not list then
-        list = {}
-        by_buf[b] = list
+      local bucket = by_buf[b]
+      if not bucket then
+        bucket = {}
+        by_buf[b] = bucket
       end
-      if not (max and #list >= max) then
-        list[#list + 1] = to_diagnostic(issue, source)
+      if not (max and #bucket >= max) then
+        bucket[#bucket + 1] = to_diagnostic(issue, source)
       end
     end
   end
