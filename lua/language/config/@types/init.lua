@@ -93,7 +93,7 @@
 ---@field nocode_default boolean
 ---@field timeout_ms     integer
 ---@field deepl          { api_key: string|nil }
----@field custom         { cmd: fun(text: string[], target: string): string[], parse: fun(out: string): string[] }|nil
+---@field custom         LanguageTranslateCustomProviderCfg|nil
 ---@field keymaps        LanguageTranslateKeymaps
 ---@field history        { enable: boolean, max: integer, persist: boolean, file: string }
 ---@field files          { output: "suffix"|"replace"|"buffers", extensions: string[], max_kb: integer }
@@ -193,7 +193,7 @@
 ---@field nocode_default? boolean
 ---@field timeout_ms?     integer
 ---@field deepl?          { api_key: string|nil }
----@field custom?         { cmd: fun(text: string[], target: string): string[], parse: fun(out: string): string[] }|nil
+---@field custom?         LanguageTranslateCustomProviderCfg|nil
 ---@field keymaps?        LanguageTranslateKeymaps
 ---@field history?        { enable: boolean, max: integer, persist: boolean, file: string }
 ---@field files?          { output: "suffix"|"replace"|"buffers", extensions: string[], max_kb: integer }
@@ -227,6 +227,10 @@ return {}
 --- `to` is one key per language, working in both normal (operator) and visual
 --- mode -- a count cannot carry the language on an operator, where it belongs
 --- to the motion.
+---@class LanguageTranslateCustomProviderCfg
+---@field cmd   fun(lines: string[], target: string, source: string|nil): string[]
+---@field parse fun(out: string): string[]
+
 ---@class LanguageTranslateKeymaps
 ---@field operator? string|string[]|false  # `<lhs>{motion}` translates the moved-over text
 ---@field visual?   string|string[]|false  # translate the visual selection

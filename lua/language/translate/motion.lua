@@ -102,6 +102,12 @@ local function translate_region(bufnr, sr, sc, er, ec)
   end)
 end
 
+---@class Language.Translate.Span
+---@field sr integer  # start row, 0-based
+---@field sc integer  # start col, 0-based byte
+---@field er integer  # end row, 0-based
+---@field ec integer  # end col, 0-based byte, exclusive
+
 ---@internal
 ---Resolve two getpos-style positions into a bounding char-wise byte span using
 ---getregionpos (multibyte-safe). Returns 0-based rows/cols, end-exclusive, or
@@ -109,7 +115,7 @@ end
 ---@param pos1 integer[]
 ---@param pos2 integer[]
 ---@param mode_type string  "v" | "V" | "\22"
----@return integer?, integer?, integer?, integer?
+---@return Language.Translate.Span|nil
 local function region_bounds(pos1, pos2, mode_type)
   if type(vim.fn.getregionpos) ~= "function" then
     return nil
@@ -122,7 +128,7 @@ local function region_bounds(pos1, pos2, mode_type)
   local e = segs[#segs][2]
   -- getregionpos end col is the last byte (1-based, inclusive) → 0-based
   -- exclusive is that same number.
-  return s[2] - 1, s[3] - 1, e[2] - 1, e[3]
+  return { sr = s[2] - 1, sc = s[3] - 1, er = e[2] - 1, ec = e[3] }
 end
 
 ---operatorfunc target: translate the text spanned by the last motion.
@@ -138,9 +144,9 @@ function M.operator(motion_type)
   if motion_type == "char" then
     local p1 = { 0, a[1], a[2] + 1, 0 }
     local p2 = { 0, b[1], b[2] + 1, 0 }
-    local sr, sc, er, ec = region_bounds(p1, p2, "v")
-    if sr then
-      translate_region(bufnr, sr, sc, er, ec)
+    local span = region_bounds(p1, p2, "v")
+    if span then
+      translate_region(bufnr, span.sr, span.sc, span.er, span.ec)
       return
     end
   end
@@ -172,9 +178,9 @@ function M.visual()
   api.nvim_feedkeys(api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
 
   if mode_type == "v" then
-    local sr, sc, er, ec = region_bounds(p1, p2, "v")
-    if sr then
-      translate_region(bufnr, sr, sc, er, ec)
+    local span = region_bounds(p1, p2, "v")
+    if span then
+      translate_region(bufnr, span.sr, span.sc, span.er, span.ec)
       return
     end
   end

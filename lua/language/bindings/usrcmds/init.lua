@@ -174,7 +174,7 @@ local function dispatch_translate(o, force_output, force_files_mode)
   -- write per translate.files.output / --files=<mode> / forced mode).
   local is_dir_path = scope.kind == "path" and scope.path and vim.fn.isdirectory(scope.path) == 1
   if scope.kind == "cwd" or is_dir_path then
-    local dir = scope.kind == "cwd" and vim.fn.getcwd() or scope.path
+    local dir = scope.kind == "cwd" and vim.fn.getcwd() or (scope.path or vim.fn.getcwd())
     require("language.translate").run_files(rest[1], { dir = dir, mode = files_mode })
     return
   end

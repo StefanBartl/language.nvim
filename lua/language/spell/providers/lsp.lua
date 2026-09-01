@@ -20,6 +20,7 @@ M.supports = { buffer = true, cwd = false, grammar = true }
 ---@see LanguageSpellProvider
 ---@return boolean
 function M.available()
+  ---@diagnostic disable-next-line: deprecated
   local get = vim.lsp.get_clients or vim.lsp.get_active_clients
   return type(get) == "function"
 end

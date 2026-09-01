@@ -269,10 +269,12 @@ function M.check(scope, cfg, cb)
 
     local timer = vim.uv.new_timer()
     state.pending[id] = function(raw_issues)
-      pcall(function()
-        timer:stop()
-        timer:close()
-      end)
+      if timer then
+        pcall(function()
+          timer:stop()
+          timer:close()
+        end)
+      end
       ---@type LanguageSpellIssue[]
       local out = {}
       for _, is in ipairs(raw_issues) do
@@ -285,14 +287,17 @@ function M.check(scope, cfg, cb)
       cb(out)
     end
 
-    timer:start(cfg.scan_debounce_ms and 6000 or 6000, 0, function()
-      vim.schedule(function()
-        if state.pending[id] then
-          state.pending[id] = nil
-          cb({})
-        end
+    -- No timer means no 6s guard; a reply from the server still resolves it.
+    if timer then
+      timer:start(cfg.scan_debounce_ms and 6000 or 6000, 0, function()
+        vim.schedule(function()
+          if state.pending[id] then
+            state.pending[id] = nil
+            cb({})
+          end
+        end)
       end)
-    end)
+    end
 
     fn.chansend(
       state.jid,

@@ -20,6 +20,7 @@ return function(H)
   -- Invalid input is a no-op rather than an error: `add_session` is reached
   -- from a keymap over whatever is under the cursor, which can be nothing.
   ignore.add_session("")
+  ---@diagnostic disable-next-line: param-type-mismatch
   ignore.add_session(nil)
   H.falsy(ignore.has(""), "an empty word is not added")
 

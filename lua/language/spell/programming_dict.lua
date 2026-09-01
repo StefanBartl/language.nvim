@@ -26,7 +26,9 @@ function M.ensure()
 
   vim.schedule(function()
     for _, w in ipairs(words) do
-      pcall(vim.cmd, "silent spellgood! " .. w)
+      pcall(function()
+        vim.cmd("silent spellgood! " .. w)
+      end)
     end
   end)
 end

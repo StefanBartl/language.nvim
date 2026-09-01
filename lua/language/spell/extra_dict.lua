@@ -44,7 +44,9 @@ function M.ensure(wordlists)
   vim.schedule(function()
     for _, w in ipairs(pending) do
       if type(w) == "string" and w ~= "" then
-        pcall(vim.cmd, "silent spellgood! " .. w)
+        pcall(function()
+          vim.cmd("silent spellgood! " .. w)
+        end)
       end
     end
   end)

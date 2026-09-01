@@ -33,9 +33,9 @@ end
 
 ---@internal
 ---@param win integer|nil
----@return boolean|nil
+---@return boolean
 local function win_valid(win)
-  return win and api.nvim_win_is_valid(win)
+  return win ~= nil and api.nvim_win_is_valid(win)
 end
 
 ---Tear down the window and all its resources (idempotent).

@@ -107,6 +107,7 @@ function M.apply(mode, lines, ctx)
   elseif mode == "insert" then
     out_insert(ctx.bufnr, ctx.s, ctx.e, lines)
   elseif mode == "buffer" or mode == "vsplit" or mode == "split" or mode == "tab" then
+    ---@cast mode "buffer"|"vsplit"|"split"|"tab"
     out_new_buffer(lines, mode, ctx.bufnr)
   elseif mode == "clipboard" then
     local text = table.concat(lines, "\n")

@@ -167,6 +167,7 @@ local function diag_jump(count)
   if not ok then
     -- Older API fallback: no built-in magnitude support, so step one
     -- diagnostic at a time, `count` times, in the requested direction.
+    ---@diagnostic disable-next-line: deprecated
     local step = count > 0 and vim.diagnostic.goto_next or vim.diagnostic.goto_prev
     for _ = 1, math.abs(count) do
       pcall(step, { namespace = list.ns, float = false })

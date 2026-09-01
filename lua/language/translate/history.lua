@@ -51,13 +51,14 @@ end
 
 ---@internal
 ---Persist the ring to disk (best-effort) when enabled.
+---@param entries Language.TranslateHistoryEntry[]
 ---@return nil
-local function save()
+local function save(entries)
   local h = hcfg()
   if not (h.persist and h.file and h.file ~= "") then
     return
   end
-  json.write(h.file, ring)
+  json.write(h.file, entries)
 end
 
 ---Record a successful translation (newest first, capped, deduped by input+target).
@@ -87,7 +88,7 @@ function M.record(entry)
   while #r > max do
     table.remove(r)
   end
-  save()
+  save(r)
 end
 
 ---Return the history entries (newest first).
@@ -99,8 +100,10 @@ end
 ---Clear the history (memory + disk).
 ---@return nil
 function M.clear()
-  ring = {}
-  save()
+  ---@type Language.TranslateHistoryEntry[]
+  local cleared = {}
+  ring = cleared
+  save(cleared)
 end
 
 ---One-line label for an entry.

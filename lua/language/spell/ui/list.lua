@@ -170,7 +170,9 @@ function M.close(use_trouble)
       require("trouble").close()
     end)
   else
-    pcall(vim.cmd, "cclose")
+    pcall(function()
+      vim.cmd("cclose")
+    end)
   end
 end
 

@@ -112,8 +112,12 @@ function M.on_change(bufnr)
   local delay = cfg().scan_debounce_ms or 400
   local t = timers[bufnr]
   if not t then
-    t = vim.uv.new_timer()
-    timers[bufnr] = t
+    local fresh = vim.uv.new_timer()
+    if not fresh then
+      return
+    end
+    t = fresh
+    timers[bufnr] = fresh
   end
   t:stop()
   t:start(

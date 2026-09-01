@@ -24,6 +24,7 @@ return function(H)
   local changed = (type(original) == "boolean") and not original
     or (type(original) == "number") and (original + 1)
     or (tostring(original) .. "-changed")
+  ---@diagnostic disable-next-line: assign-type-mismatch
   config.setup({ [key] = changed })
   H.eq(config.get()[key], changed, "a user value wins")
   H.eq(DEFAULTS[key], original, "DEFAULTS itself was not mutated")

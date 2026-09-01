@@ -88,7 +88,9 @@ function M.add_to_dict(word)
   -- `:spellgood`  writes to the spellfile (persistent, like zg)
   -- `:spellgood!` adds to the internal word list only (session, like zG)
   local cmd = use_spellfile and "silent spellgood " or "silent spellgood! "
-  local ok, err = pcall(vim.cmd, cmd .. word)
+  local ok, err = pcall(function()
+    vim.cmd(cmd .. word)
+  end)
   if not ok then
     return false, tostring(err)
   end

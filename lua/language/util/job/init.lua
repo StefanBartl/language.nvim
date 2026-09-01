@@ -83,18 +83,22 @@ function M.run(argv, opts)
         end)
       end
     end
-    if opts.timeout_ms and opts.timeout_ms > 0 then
+    local timeout_ms = opts.timeout_ms
+    if timeout_ms and timeout_ms > 0 then
+      -- No timer means no timeout guard; the job still runs and still reports.
       timer = vim.uv.new_timer()
-      timer:start(opts.timeout_ms, 0, function()
-        vim.schedule(function()
-          if not finished then
-            pcall(function()
-              proc:kill("sigterm")
-            end)
-            finish(false, "", "timeout")
-          end
+      if timer then
+        timer:start(timeout_ms, 0, function()
+          vim.schedule(function()
+            if not finished then
+              pcall(function()
+                proc:kill("sigterm")
+              end)
+              finish(false, "", "timeout")
+            end
+          end)
         end)
-      end)
+      end
     end
     return job
   end
@@ -128,16 +132,20 @@ function M.run(argv, opts)
       pcall(vim.fn.jobstop, jid)
     end
   end
-  if opts.timeout_ms and opts.timeout_ms > 0 then
+  local timeout_ms = opts.timeout_ms
+  if timeout_ms and timeout_ms > 0 then
+    -- No timer means no timeout guard; the job still runs and still reports.
     timer = vim.uv.new_timer()
-    timer:start(opts.timeout_ms, 0, function()
-      vim.schedule(function()
-        if not finished then
-          pcall(vim.fn.jobstop, jid)
-          finish(false, "", "timeout")
-        end
+    if timer then
+      timer:start(timeout_ms, 0, function()
+        vim.schedule(function()
+          if not finished then
+            pcall(vim.fn.jobstop, jid)
+            finish(false, "", "timeout")
+          end
+        end)
       end)
-    end)
+    end
   end
   return job
 end
