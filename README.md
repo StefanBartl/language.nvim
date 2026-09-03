@@ -87,8 +87,9 @@ See [Usage](docs/usage.md) for the full command reference.
 :checkhealth language
 ```
 
-Optional external tools (`curl`, `trans`, spell/grammar CLIs) are declared
-in [`docs/install.json`](docs/install.json) — parsed by
+The optional external tools installable through your system's package
+manager — `curl` and `node` — are declared in
+[`docs/install.json`](docs/install.json), parsed by
 [lib.nvim](https://github.com/StefanBartl/lib.nvim)'s
 [`deps` module](https://github.com/StefanBartl/lib.nvim/blob/main/lua/lib/nvim/deps/README.md).
 A popup shows what's missing and why the first time `setup()` runs after
@@ -99,6 +100,12 @@ Disable it **right in this plugin's own spec**:
 `vim.g.lib_nvim_deps_disable_first_run = true` (every plugin) /
 `vim.g.lib_nvim_deps_disabled_plugins = { "language.nvim" }` also still
 work, for turning it off without touching any plugin's config.
+
+The provider CLIs — `trans`, `cspell`, `codespell`, `typos` — are **not** in
+that spec yet; `:checkhealth language` is where they are reported. Two of
+them (`cspell`, `typos`) live in npm and cargo rather than in any of the
+nine OS package managers the spec composes commands for, so declaring the
+set is not the one-line addition it looks like.
 
 ## Documentation
 

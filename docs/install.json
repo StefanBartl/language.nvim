@@ -15,6 +15,22 @@
         "scoop": "curl",
         "choco": "curl"
       }
+    },
+    {
+      "bin": "node",
+      "required": false,
+      "why": "Keeps the persistent cspell sidecar alive (`node/cspell_server.js`), which makes buffer and live spell checks fast and code-aware. Only useful alongside cspell itself: without node the one-shot cspell provider still works, it just pays process startup on every check.",
+      "pkg": {
+        "apt": "nodejs",
+        "dnf": "nodejs",
+        "pacman": "nodejs",
+        "zypper": "nodejs",
+        "apk": "nodejs",
+        "brew": "node",
+        "winget": "OpenJS.NodeJS",
+        "scoop": "nodejs",
+        "choco": "nodejs"
+      }
     }
   ]
 }
