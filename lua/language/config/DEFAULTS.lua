@@ -67,6 +67,13 @@ local defaults = {
     },
   },
 
+  -- Register a position preview with hover.nvim, so `:Hover show` over a word
+  -- answers with its translation. `on_request` there, so the automatic hover
+  -- trigger never asks -- every answer is a network request carrying the word
+  -- under the cursor, and that belongs to a deliberate press rather than to a
+  -- quiet moment. A no-op without hover.nvim installed; see lua/language/hover.lua.
+  hover = true,
+
   translate = {
     engine = "google", -- "google"|"deepl"|"shell"|<custom>
     fallback = { "google" }, -- engine fallback chain (graceful degradation)

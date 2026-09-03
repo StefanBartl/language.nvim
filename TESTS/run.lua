@@ -45,6 +45,7 @@ local specs = {
   "scope_spec.lua",
   "ignore_spec.lua",
   "config_spec.lua",
+  "hover_spec.lua",
 }
 
 local failed = 0

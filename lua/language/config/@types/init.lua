@@ -89,7 +89,7 @@
 ---@field default_output LanguageTranslateOutput
 ---@field default_input  LanguageTranslateInput
 ---@field default_langs  string[]
----@field default_target string|nil              -- fixed target for motion/visual maps; nil = prompt
+---@field default_target string|nil              -- fixed target for motion/visual maps; nil = prompt. `language.hover` falls back to "EN" instead, because a hover has nowhere to ask from.
 ---@field nocode_default boolean
 ---@field timeout_ms     integer
 ---@field deepl          { api_key: string|nil }
@@ -111,6 +111,7 @@
 ---@field custom     fun(word: string, cb: fun(synonyms: string[]))|nil
 
 ---@class LanguageConfig : LanguageOpts
+---@field hover boolean # Register the `on_request` position preview with hover.nvim, so `:Hover show` over a word answers with its translation. Default true, and a no-op without hover.nvim installed. `false` registers nothing at all.
 ---@field spell      LanguageSpellCfg
 ---@field translate  LanguageTranslateCfg
 ---@field thesaurus  LanguageThesaurusCfg
@@ -123,6 +124,7 @@
 --- strict, so a partial call is legal without every read of
 --- `cfg.spell.live` becoming a nil check.
 ---@class LanguageOpts
+---@field hover? boolean # Register the `on_request` position preview with hover.nvim, so `:Hover show` over a word answers with its translation. Default true, and a no-op without hover.nvim installed. `false` registers nothing at all.
 ---@field spell?      LanguageSpellOpts
 ---@field translate?  LanguageTranslateOpts
 ---@field thesaurus?  LanguageThesaurusOpts

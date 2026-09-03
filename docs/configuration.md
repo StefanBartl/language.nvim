@@ -5,6 +5,11 @@ Excerpt:
 
 ```lua
 require("language").setup({
+  -- Register an on-request position preview with hover.nvim: `:Hover show`
+  -- over a word answers with its translation. Never on hover's automatic
+  -- trigger -- every answer is a network request carrying that word. A no-op
+  -- without hover.nvim installed. See docs/FEATURES/HOVER.md.
+  hover = true,
   spell = {
     default_scope = "buffer",
     live = false,                -- true = continuous inline diagnostics while typing
@@ -40,6 +45,7 @@ require("language").setup({
     fallback = { "google" },     -- engine chain used if the selected engine is unavailable
     default_output = "popup",    -- popup | replace | buffer | vsplit | split | tab | insert | clipboard | notify
     default_target = nil,        -- fixed target language for motion/visual maps; nil = selection
+                                 -- (the hover falls back to "EN" instead: it has nowhere to ask from)
     timeout_ms = 8000,
     deepl = { api_key = nil },   -- or $DEEPL_API_KEY
     -- Opt-in motion/visual keymaps (off by default, to avoid claiming keys):

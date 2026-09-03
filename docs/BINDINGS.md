@@ -67,8 +67,21 @@ verb (a flat `path = {}` root route — no subcommand tree), defined in
 | Command             | Defined in                          | Purpose |
 |----------------------|--------------------------------------|---------|
 | `:Spellcheck`        | `lua/language/bindings/usrcmds/init.lua`  | Spell/grammar review — `[lang] [buffer\|visible\|cwd\|path=<p>\|clear\|refresh]` |
-| `:Translate`         | `lua/language/bindings/usrcmds/init.lua`  | Translate (popup by default) — `<lang> [--nocode\|--output=<m>\|--files=<m>] [scope]`; `!` opens the interactive window |
+| `:Translate`         | `lua/language/bindings/usrcmds/init.lua`  | Translate (popup by default) — `<lang> [--nocode\|--output=<m>\|--files=<m>] [cword\|selection\|buffer\|cwd\|path=<p>]`; `!` opens the interactive window |
 | `:TranslateReplace`  | `lua/language/bindings/usrcmds/init.lua`  | Translate and replace in place — `<lang> [--nocode] [selection\|buffer\|cwd\|path=<p>]` |
+
+`cword` is the scope for a single word: `:Translate DE cword` translates the
+word the cursor is on and nothing else. It is a **character** region rather
+than a line range — rounding a word up to its line would translate the line,
+which is a different command. `:Spellcheck` declines the word by name rather
+than falling through to the buffer, which would be a wrong answer in the shape
+of a right one.
+
+The same word-finding answers `:Hover show` when
+[hover.nvim](https://github.com/StefanBartl/hover.nvim) is installed — asked
+only on an explicit request, never on its automatic trigger, because every
+answer is a network request carrying the word under the cursor. See
+[FEATURES/HOVER.md](FEATURES/HOVER.md).
 
 All three support tab-completion for language codes, scopes, and flags. Set
 `commands = false` in `setup()` to skip registering them entirely.

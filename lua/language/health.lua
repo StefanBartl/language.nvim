@@ -184,6 +184,78 @@ local function check_lib_deps()
   deps_health.report_for("language.nvim")
 end
 
+---@internal
+---The hover.nvim contribution, and the four states that look alike from outside.
+---
+--- "`:Hover show` says nothing over a word" has four unrelated causes and one
+--- appearance, which is the whole reason this section exists: the switch is
+--- off, hover.nvim is not installed, it is installed but too old to honour
+--- `on_request`, or everything is wired and the endpoint is the problem. Only
+--- the third is a defect, and the last one is reported by the float itself.
+---@return nil
+local function check_hover()
+  start_s("hover.nvim integration (optional)")
+
+  local ok_cfg, config = pcall(require, "language.config")
+  if ok_cfg and config.get().hover == false then
+    info_s("hover = false -- nothing registered")
+    return
+  end
+
+  if not pcall(require, "hover.registry") then
+    info_s("hover.nvim not installed -- nothing registered, nothing missing")
+    return
+  end
+
+  local ok_mod, hover = pcall(require, "language.hover")
+  if not ok_mod then
+    err_s("language.hover failed to load -- the contribution cannot be registered")
+    return
+  end
+
+  if not hover.registered() then
+    warn_s("hover.nvim is installed, but nothing is registered", {
+      "setup() registers this; call require('language').setup({}) if you have not.",
+    })
+    return
+  end
+
+  -- The flag is reported rather than assumed. An older hover.nvim ignores an
+  -- unknown `on_request` and asks the contribution on the *automatic* trigger
+  -- -- which would turn every quiet moment over a word into a request to a
+  -- translation endpoint carrying that word. That is the one failure here
+  -- nobody would notice from the outside, so it is checked rather than trusted.
+  local honoured = false
+  local ok_reg, registry = pcall(require, "hover.registry")
+  if ok_reg and type(registry.contributors) == "function" then
+    for _, c in ipairs(registry.contributors() or {}) do
+      if c.name == "language.nvim" and (c.on_request or 0) > 0 then
+        honoured = true
+      end
+    end
+  end
+
+  if not honoured then
+    warn_s("hover.nvim does not report the contribution as on_request", {
+      "This one is worth acting on: without the flag the automatic hover",
+      "trigger asks for a translation, and every quiet moment over a word",
+      "becomes a network request carrying that word. Update hover.nvim.",
+    })
+    return
+  end
+
+  ok_s(
+    ("registered, on request only -- `:Hover show` over a word translates it to %s"):format(
+      hover.target()
+    )
+  )
+  if not (ok_cfg and type(config.get().translate.default_target) == "string") then
+    info_s(
+      "translate.default_target is unset, so the hover falls back to EN -- set it to translate into your own language"
+    )
+  end
+end
+
 ---Run all `:checkhealth language` sections.
 ---@return nil
 function M.check()
@@ -194,6 +266,7 @@ function M.check()
   check_translate()
   check_config()
   check_which_key()
+  check_hover()
   check_lib_deps()
 
   require("lib.nvim.bindings.usercmd.composer").checkhealth("Spellcheck")

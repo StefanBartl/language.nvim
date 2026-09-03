@@ -31,6 +31,13 @@ function M.setup(opts)
   )
   require("language.bindings.autocmds").setup(cfg)
 
+  -- Soft in both directions and silent about it: no hover.nvim is a machine
+  -- without the optional half, not a failure. `:checkhealth language` tells
+  -- the four possible states apart.
+  pcall(function()
+    require("language.hover").setup()
+  end)
+
   if cfg.spell and cfg.spell.programming_dict then
     require("language.spell.programming_dict").ensure()
   end

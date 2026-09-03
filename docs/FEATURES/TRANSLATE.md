@@ -17,7 +17,8 @@ code spans (relevant to replace-style output only).
 
 - **Tab:** true
 - **Module:** `translate/init.lua`, `translate/output/init.lua`
-- **Usercmds:** `:Translate <lang> [--nocode|--output=<m>|--files=<m>] [scope]`, `:TranslateReplace <lang> [--nocode] [selection|buffer|cwd|path=<p>]` — [user commands](../BINDINGS.md#user-commands)
+- **Usercmds:** `:Translate <lang> [--nocode|--output=<m>|--files=<m>] [cword|selection|buffer|cwd|path=<p>]`, `:TranslateReplace <lang> [--nocode] [selection|buffer|cwd|path=<p>]` — [user commands](../BINDINGS.md#user-commands)
+- **One word:** the `cword` scope, and — with hover.nvim installed — `:Hover show` over a word. See [HOVER.md](HOVER.md).
 - **Config:** `opts.translate.default_output` (default `"popup"`), `opts.translate.engine` (default `"google"`)
 
 An unrecognized `--flag` is now a reported error (composer's declared-flags

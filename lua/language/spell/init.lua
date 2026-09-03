@@ -227,6 +227,27 @@ function M.refresh(bufnr)
   end
 end
 
+---@internal
+---Whether `scope` is one this domain cannot act on, having said so.
+---
+--- `cword` is a translate scope. It lives in the *shared* scope word set so
+--- that `:Translate DE cword` cannot read `cword` as a second language code --
+--- and the price of sharing it is this refusal. Without it a `:Spellcheck
+--- cword` falls through to the buffer branch and checks the whole buffer,
+--- which is a wrong answer wearing the shape of a right one.
+---
+--- Called from both entry points that normalize a scope. Written once because
+--- it was very nearly written in only one of them.
+---@param scope LanguageScope
+---@return boolean rejected
+local function rejects(scope)
+  if scope.kind == "cword" then
+    notify.warn("`cword` is a :Translate scope -- :Spellcheck takes a buffer, a range or a path")
+    return true
+  end
+  return false
+end
+
 ---Run a spell check over `scope`. String scope kinds are also accepted for the
 ---Lua facade (`M.spellcheck`).
 ---@param lang? string
@@ -249,6 +270,9 @@ function M.run(lang, scope)
   end
   ---@cast scope LanguageScope|nil
   scope = scope or { kind = cfg().default_scope or "buffer", bufnr = api.nvim_get_current_buf() }
+  if rejects(scope) then
+    return
+  end
 
   lang = (type(lang) == "string" and lang ~= "") and lang or nil
 
@@ -391,6 +415,9 @@ function M.open_panel(scope)
   end
   ---@cast scope LanguageScope|nil
   scope = scope or { kind = cfg().default_scope or "buffer", bufnr = api.nvim_get_current_buf() }
+  if rejects(scope) then
+    return
+  end
   require("language.spell.ui.panel").open(scope, cfg())
 end
 

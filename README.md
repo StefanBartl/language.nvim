@@ -75,6 +75,8 @@ lazy.nvim:
 :Spellcheck                 " check the current buffer (toggle session on/off)
 :'<,'>Translate DE           " popup with the translation, buffer untouched
 :'<,'>TranslateReplace DE    " selection to German, REPLACES the text
+:Translate DE cword          " just the word under the cursor
+:Hover show                  " the same word, in a hover.nvim float (optional)
 ```
 
 See [Usage](docs/usage.md) for the full command reference.
@@ -104,6 +106,9 @@ work, for turning it off without touching any plugin's config.
 - [Configuration](docs/configuration.md) — all `setup()` options with defaults and comments.
 - [Usage](docs/usage.md) — full command reference and default keymaps.
 - [Bindings](docs/BINDINGS.md) — every keymap, user command, and autocmd.
+- [Hover](docs/FEATURES/HOVER.md) — the word under the cursor, translated into a
+  [hover.nvim](https://github.com/StefanBartl/hover.nvim) float: why it is asked
+  only on request, and what a measurement found behind the keyless endpoint.
 
 ## License
 

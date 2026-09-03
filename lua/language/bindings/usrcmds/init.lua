@@ -27,7 +27,7 @@ local M = {}
 local SPELL_LANGS = { "en", "de", "fr", "es", "it", "pt", "nl", "en,de" }
 local SPELL_SCOPES = { "buffer", "visible", "cwd", "clear", "refresh" }
 local TR_LANGS = { "EN", "DE", "FR", "ZH", "JA", "ES", "IT" }
-local TR_SCOPES = { "selection", "buffer", "cwd" }
+local TR_SCOPES = { "cword", "selection", "buffer", "cwd" }
 local TR_OUTPUT_MODES = {
   "popup",
   "replace",
@@ -208,7 +208,7 @@ function M.setup()
   -- without touching the buffer). :Translate![lang] opens the interactive
   -- translation window instead.
   composer.verb("Translate", {
-    desc = "Translate (popup by default)  <lang> [--nocode|--output=<m>|--files=<m>] [scope]  (! = window)",
+    desc = "Translate (popup by default)  <lang> [--nocode|--output=<m>|--files=<m>] [cword|selection|buffer|cwd|path=<p>]  (! = window)",
     bang = true,
     range = true,
     routes = {

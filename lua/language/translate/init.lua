@@ -211,6 +211,32 @@ function M.run(lang, opts)
   end
 
   local scope = opts.scope
+
+  -- A word is a character region, not a line range, so it does not go through
+  -- `scope_range` at all -- it goes through `run_region`, which already exists
+  -- for exactly this shape and is what the operator maps use. Rounding a word
+  -- up to its line would translate the line, which is a different command.
+  if scope and scope.kind == "cword" then
+    -- Bound before it is tested rather than after: a guard on the *field*
+    -- narrows nothing for a later read of it, and the four reads below would
+    -- each be an unchecked nil (`need-check-nil` x4, found by the LuaLS scan
+    -- after a green suite).
+    local r = scope.region
+    if not r then
+      notify.warn("No word under the cursor")
+      return
+    end
+    M.run_region(lang, {
+      bufnr = scope.bufnr or api.nvim_get_current_buf(),
+      sr = r.sr,
+      sc = r.sc,
+      er = r.er,
+      ec = r.ec,
+      output = opts.output,
+    })
+    return
+  end
+
   if scope and (scope.kind == "cwd" or scope.kind == "path") then
     notify.warn("Translate over cwd/path is not supported yet — use a buffer or selection")
     return

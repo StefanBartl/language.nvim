@@ -7,4 +7,7 @@ fully asynchronously throughout.
 
 Themes: **SPELL** (checking, providers, live scan, silencing, highlights),
 **TRANSLATE** (engines, output modes, window, history, files), **THESAURUS**,
-and **CORE** (scoping, async job layer, bindings).
+**CORE** (scoping, async job layer, bindings), and **[HOVER](HOVER.md)** --
+the word under the cursor, translated into a hover.nvim float: why it is asked
+only on request, what it costs to block for, and the HTTP 429 that measurement
+found waiting behind the keyless endpoint.

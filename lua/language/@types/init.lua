@@ -16,6 +16,7 @@
 ---| "cwd"       # Recursively across the project working directory (always async)
 ---| "path"      # A given file OR directory (recursive) passed as `path=<p>`
 ---| "selection" # A visual/line range (mainly :Translate)
+---| "cword"     # The single word under the cursor (:Translate only)
 
 ---@class LanguageScope
 --- A single, explicit description of *where* an action operates. Parsed once
@@ -25,6 +26,7 @@
 ---@field bufnr integer|nil                    -- set for buffer/visible/selection
 ---@field path  string|nil                     -- set for path: file or directory
 ---@field range { s: integer, e: integer }|nil -- set for selection/visible (1-based, inclusive)
+---@field region { sr: integer, sc: integer, er: integer, ec: integer }|nil -- set for cword: a character region, 0-based rows and byte columns, end-exclusive (the shape nvim_buf_get_text takes). A word is not a line range, and rounding it to one would translate the whole line.
 
 -- #####################################################################
 -- Public facade
