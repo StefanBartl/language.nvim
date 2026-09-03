@@ -59,7 +59,18 @@ function M.synonyms(word, cb)
     return
   end
 
-  if vim.fn.executable("curl") ~= 1 then
+  -- Reported out of docs/install.json rather than as a bare "curl not
+  -- found": the spec already holds the reason and a package name for nine
+  -- managers, and this is the moment a user actually wants both. Notifies
+  -- itself (this path has no error channel of its own -- `cb({})` returns
+  -- an empty result set, not a failure), so `check`, not `lines`.
+  local ok_rt, rt = pcall(require, "lib.nvim.deps.require_tool")
+  if ok_rt then
+    if not rt.check("language.nvim", "curl") then
+      cb({})
+      return
+    end
+  elseif vim.fn.executable("curl") ~= 1 then
     require("lib.nvim.notify").create("[language.thesaurus]").error("curl not found")
     cb({})
     return
