@@ -109,10 +109,14 @@ set is not the one-line addition it looks like.
 
 ## Documentation
 
+Start at [docs/README.md](docs/README.md), which says what is where and which
+question each page answers.
+
 - [Features](docs/FEATURES/README.md) — spellcheck, grammar, translate, thesaurus, highlights, scoping, and async behavior.
 - [Configuration](docs/configuration.md) — all `setup()` options with defaults and comments.
 - [Usage](docs/usage.md) — full command reference and default keymaps.
 - [Bindings](docs/BINDINGS.md) — every keymap, user command, and autocmd.
+- [Workflow](docs/WORKFLOW.md) — how the pieces combine into a habit rather than three commands you reach for once something is already wrong.
 - [Hover](docs/FEATURES/HOVER.md) — the word under the cursor, translated into a
   [hover.nvim](https://github.com/StefanBartl/hover.nvim) float: why it is asked
   only on request, and what a measurement found behind the keyless endpoint.
