@@ -15,7 +15,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Neovim](https://img.shields.io/badge/Neovim-0.9%2B-57A143?logo=neovim&logoColor=white)](https://neovim.io)
 [![Lua](https://img.shields.io/badge/Lua-5.1%2FLuaJIT-2C2D72?logo=lua&logoColor=white)](https://www.lua.org)
-![Status](https://img.shields.io/badge/status-beta-orange)
+![Status](https://img.shields.io/badge/status-alpha-red)
 
 > Pairs well with [sessions.nvim](https://github.com/StefanBartl/sessions.nvim):
 > sessions.nvim restores your workspace by project + branch, so your
@@ -30,8 +30,8 @@ Built on [lib.nvim](https://github.com/StefanBartl/lib.nvim) as a
 deliberately shared dependency. Translation needs **no** external Neovim
 plugin — just `curl` (Google engine, keyless, works with zero configuration).
 
-> Status: **Beta** — the spell panel, grammar (LSP), multiple providers, and
-> multiple translation engines all work.
+> **What already works:** the spell panel, grammar (LSP), multiple providers,
+> and multiple translation engines.
 
 ---
 
