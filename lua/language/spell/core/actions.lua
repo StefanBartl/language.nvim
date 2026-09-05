@@ -87,9 +87,18 @@ function M.add_to_dict(word)
   local use_spellfile = require("language.config").get().spell.dictionary.use_spellfile
   -- `:spellgood`  writes to the spellfile (persistent, like zg)
   -- `:spellgood!` adds to the internal word list only (session, like zG)
-  local cmd = use_spellfile and "silent spellgood " or "silent spellgood! "
+  -- Table form (`nvim_cmd`) passes `word` as a real argv element, not a
+  -- string spliced into a command line -- `issue.word` can come from a
+  -- cwd/path scan of files this plugin did not author (cspell/codespell/
+  -- typos output), so a flagged "word" containing e.g. `|` must not be able
+  -- to chain a second Ex command the way `cmd .. word` would have allowed.
   local ok, err = pcall(function()
-    vim.cmd(cmd .. word)
+    vim.cmd({
+      cmd = "spellgood",
+      bang = not use_spellfile,
+      args = { word },
+      mods = { silent = true },
+    })
   end)
   if not ok then
     return false, tostring(err)
