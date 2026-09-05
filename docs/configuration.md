@@ -55,5 +55,22 @@ require("language").setup({
     -- custom = { cmd = function(lines, target) return { "trans", "-b", ... } end,
     --           parse = function(out) return vim.split(out, "\n") end },
   },
+  thesaurus = {
+    enable = true,
+    source = "datamuse", -- "datamuse" | "custom"
+    max = 20,
+    timeout_ms = 6000,
+    keymap = false, -- opt-in: replace the word under the cursor with a synonym
+    -- custom = function(word, cb) cb({ "syn1", "syn2" }) end,
+  },
+
+  commands = true,           -- false = register no user commands at all
+  which_key = { enable = true },
+
+  -- One-time "which CLI tools does this plugin want, and why" popup on
+  -- first setup() after install (via lib.nvim.deps). false disables it for
+  -- this plugin specifically, right here in the spec passed to setup() —
+  -- no vim.g needed. See README "Health".
+  deps_popup = true,
 })
 ```

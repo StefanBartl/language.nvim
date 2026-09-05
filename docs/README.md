@@ -9,6 +9,7 @@ is the short version of all of it.
 | --- | --- |
 | [installation.md](installation.md) | What has to be there before this works — the Neovim version, `lib.nvim` as a hard dependency, and which external tools are optional — then a spec per plugin manager and how to check that it took |
 | [configuration.md](configuration.md) | Every option `setup()` takes, over the defaults in `lua/language/config/DEFAULTS.lua` |
+| [health.md](health.md) | The nine `:checkhealth language` sections, and which findings are actually problems |
 
 ## Using it
 
