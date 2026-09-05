@@ -107,6 +107,9 @@ them (`cspell`, `typos`) live in npm and cargo rather than in any of the
 nine OS package managers the spec composes commands for, so declaring the
 set is not the one-line addition it looks like.
 
+See [docs/health.md](docs/health.md) for what each of the nine sections
+actually checks.
+
 ## Documentation
 
 Start at [docs/README.md](docs/README.md), which says what is where and which
@@ -114,6 +117,7 @@ question each page answers.
 
 - [Features](docs/FEATURES/README.md) — spellcheck, grammar, translate, thesaurus, highlights, scoping, and async behavior.
 - [Configuration](docs/configuration.md) — all `setup()` options with defaults and comments.
+- [Health](docs/health.md) — the nine `:checkhealth language` sections, and which findings are actually problems.
 - [Usage](docs/usage.md) — full command reference and default keymaps.
 - [Bindings](docs/BINDINGS.md) — every keymap, user command, and autocmd.
 - [Workflow](docs/WORKFLOW.md) — how the pieces combine into a habit rather than three commands you reach for once something is already wrong.
