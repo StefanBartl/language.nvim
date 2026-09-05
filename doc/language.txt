@@ -1,4 +1,5 @@
 *language.txt*                     Spell, grammar and translation tooling
+                                                               *language.nvim*
 
                          language.nvim manual~
 
