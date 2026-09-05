@@ -25,13 +25,16 @@ local function check_neovim()
     ok_s(string.format("Neovim %d.%d.%d (>= 0.9 required)", v.major, v.minor, v.patch))
   else
     err_s(
-      string.format("Neovim %d.%d.%d — language.nvim requires 0.9+", v.major, v.minor, v.patch)
+      string.format("Neovim %d.%d.%d — language.nvim requires 0.9+", v.major, v.minor, v.patch),
+      { "Upgrade Neovim to 0.9+" }
     )
   end
   if type(vim.spell) == "table" and type(vim.spell.check) == "function" then
     ok_s("vim.spell.check available (native spell provider)")
   else
-    err_s("vim.spell.check missing — native spell provider unavailable")
+    err_s("vim.spell.check missing — native spell provider unavailable", {
+      "Upgrade Neovim — vim.spell.check is the native spell backend",
+    })
   end
 end
 
@@ -43,12 +46,14 @@ local function check_lib()
   if pcall(require, "lib.nvim.notify") then
     ok_s("lib.nvim installed (notify + cross-platform helpers)")
   else
-    err_s("lib.nvim not found — install StefanBartl/lib.nvim")
+    err_s("lib.nvim not found", { "Install StefanBartl/lib.nvim as a dependency" })
   end
   if pcall(require, "lib.nvim.bindings.usercmd.composer") then
     ok_s("lib.nvim.bindings.usercmd.composer available (:Spellcheck/:Translate/:TranslateReplace)")
   else
-    err_s("lib.nvim.bindings.usercmd.composer not found — commands will fail to register")
+    err_s("lib.nvim.bindings.usercmd.composer not found — commands will fail to register", {
+      "Update StefanBartl/lib.nvim",
+    })
   end
 end
 
@@ -107,7 +112,7 @@ local function check_translate()
   if exe("curl") then
     ok_s("curl — google (default, no key) + deepl engines ready")
   else
-    err_s("curl not found — google/deepl translate engines will not work")
+    err_s("curl not found — google/deepl translate engines will not work", { "Install curl" })
   end
 
   local ok, cfg_mod = pcall(require, "language.config")
@@ -137,7 +142,7 @@ local function check_config()
   start_s("Configuration")
   local ok, cfg_mod = pcall(require, "language.config")
   if not ok then
-    err_s("cannot load language.config")
+    err_s("cannot load language.config", { "Call require('language').setup() in your config" })
     return
   end
   local cfg = cfg_mod.get()
@@ -153,7 +158,7 @@ local function check_config()
   if sl and sl ~= "" then
     ok_s("'spelllang' = " .. sl)
   else
-    warn_s("'spelllang' is empty — set it (e.g. `vim.o.spelllang = 'en'`)")
+    warn_s("'spelllang' is empty", { "Set it, e.g. `vim.o.spelllang = 'en'`" })
   end
 end
 
@@ -209,7 +214,9 @@ local function check_hover()
 
   local ok_mod, hover = pcall(require, "language.hover")
   if not ok_mod then
-    err_s("language.hover failed to load -- the contribution cannot be registered")
+    err_s("language.hover failed to load -- the contribution cannot be registered", {
+      "Reinstall language.nvim",
+    })
     return
   end
 
