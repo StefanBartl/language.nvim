@@ -31,6 +31,7 @@ misleading failures.
 | `scope_spec.lua` | turning the words after a command into the region it acts on, and handing the caller's own arguments back |
 | `ignore_spec.lua` | the session ignore set and the filter that applies it |
 | `config_spec.lua` | the merge, and that `DEFAULTS` survives it unmutated |
+| `hover_spec.lua` | the word under the cursor as a hover.nvim float — the word finder, the target language, decline-vs-fail, the rate-limit failure path, and `on_request` registration (translate provider and hover.nvim both stubbed) |
 
 Adding one: write `TESTS/<name>_spec.lua` returning `function(H) ... end`, then
 list it in `run.lua`. `H` is the harness — `eq`, `ok`, `falsy`, `contains`,

@@ -21,7 +21,7 @@
 ---@class LanguageScope
 --- A single, explicit description of *where* an action operates. Parsed once
 --- from the command arguments and threaded through scan/translate so no module
---- re-derives the target (Zentrale-Prinzipien §3: context over repeated API calls).
+--- re-derives the target from repeated API calls.
 ---@field kind  LanguageScopeKind
 ---@field bufnr integer|nil                    -- set for buffer/visible/selection
 ---@field path  string|nil                     -- set for path: file or directory

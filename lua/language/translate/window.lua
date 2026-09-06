@@ -121,6 +121,9 @@ end
 ---Debounced refresh on input change.
 ---@return nil
 local function on_change()
+  --- CDX: `cfg().timeout_ms and 300 or 300` always evaluates to 300 -- the
+  --- debounce is not actually configurable. Likely meant to read a debounce
+  --- setting that does not exist in the config.
   local delay = cfg().timeout_ms and 300 or 300
   if not state.timer then
     state.timer = vim.uv.new_timer()

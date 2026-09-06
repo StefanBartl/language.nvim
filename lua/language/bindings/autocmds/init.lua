@@ -1,9 +1,9 @@
 ---@module 'language.bindings.autocmds'
 ---@brief Autocommands: per-buffer spell-session GC and optional live scan.
 ---@description
---- Event-bundled under a single augroup (Zentrale-Prinzipien §1/§4). The live
---- scan is opt-in (`spell.live`) and debounced; it is only armed when enabled
---- so there is no overhead otherwise. Live scanning is decoupled from the
+--- Event-bundled under a single augroup. The live scan is opt-in
+--- (`spell.live`) and debounced; it is only armed when enabled so there is no
+--- overhead otherwise. Live scanning is decoupled from the
 --- on-demand panel/session — it keeps inline diagnostics fresh for configured
 --- filetypes as you edit (see `language.spell.live`).
 local autocmd = require("lib.nvim.bindings.autocmd")
