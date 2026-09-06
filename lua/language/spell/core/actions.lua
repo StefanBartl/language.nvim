@@ -29,6 +29,23 @@ function M.replace_at(issue, word)
     return false, "invalid replacement"
   end
   local lnum = issue.lnum - 1
+
+  -- The issue's byte range was computed by a scan that can be arbitrarily
+  -- stale by the time this runs: the caller (item_menu.lua) opens an async
+  -- suggestion picker in between, and the buffer may have changed underneath
+  -- it (an edit in another window, an LSP fix, undo). Re-verify the range
+  -- still holds `issue.word` right before writing; otherwise the range may
+  -- now denote unrelated text and a blind `nvim_buf_set_text` would silently
+  -- overwrite it instead of failing loudly.
+  local ok_get, current =
+    pcall(api.nvim_buf_get_text, issue.bufnr, lnum, issue.col - 1, lnum, issue.end_col - 1, {})
+  if not ok_get then
+    return false, "issue position is no longer valid (buffer changed)"
+  end
+  if table.concat(current, "\n") ~= issue.word then
+    return false, "issue is stale: buffer text changed since the scan"
+  end
+
   local ok, err = pcall(
     api.nvim_buf_set_text,
     issue.bufnr,
