@@ -5,8 +5,8 @@
 --- `vim.diagnostic` entries. This provider collects those (for the configured
 --- servers) and maps them into the shared issue model so they appear in the
 --- panel/list next to native spelling issues. Fixes for grammar issues are LSP
---- code actions; this phase surfaces and navigates them (jump), full
---- code-action application is a follow-up.
+--- code actions, applied from the panel/action menu via `vim.lsp.buf.code_action`
+--- (see `spell/ui/item_menu.lua`).
 
 require("language.spell.@types")
 

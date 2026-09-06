@@ -2,7 +2,7 @@
 ---@brief Shared scope parser for both domains (spell + translate).
 ---@description
 --- Turns raw command tokens into a single `LanguageScope` object, so no domain
---- module re-derives the target buffer/range/path (Zentrale-Prinzipien §3).
+--- module re-derives the target buffer/range/path.
 --- Recognized scope tokens: `buffer`, `visible`, `cwd`, `path=<p>`, `selection`.
 --- Any token that is not a scope token is returned in `rest` for the caller to
 --- interpret (e.g. language code, flags).

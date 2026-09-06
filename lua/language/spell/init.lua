@@ -1,10 +1,9 @@
 ---@module 'language.spell'
 ---@brief Spell/grammar domain entry point: sessions, scope orchestration, output.
 ---@description
---- Phase-2 scope: native provider + diagnostics + Trouble/quickfix output with
---- functional parity to the prior config/trouble/spell implementation, now
---- generalized over the shared scope model (buffer/visible/cwd/path). The
---- lib.nvim.ui.kit review panel and further providers arrive in later phases.
+--- The single place both entry points (`:Spellcheck` and the Lua facade) go
+--- through: it normalizes the scope, applies the language, and routes to the
+--- right UI (the review panel by default, or the quickfix/Trouble list).
 ---
 --- Buffer-scope runs a toggleable *session* (spell/spelllang saved & restored,
 --- per-buffer fix keymaps). Wider scopes (cwd/path) produce a one-shot overview.

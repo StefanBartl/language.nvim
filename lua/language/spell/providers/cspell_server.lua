@@ -288,6 +288,9 @@ function M.check(scope, cfg, cb)
     end
 
     -- No timer means no 6s guard; a reply from the server still resolves it.
+    --- CDX: `cfg.scan_debounce_ms and 6000 or 6000` always evaluates to 6000 --
+    --- the sidecar timeout is not actually configurable. Likely meant to derive
+    --- the guard from a config value.
     if timer then
       timer:start(cfg.scan_debounce_ms and 6000 or 6000, 0, function()
         vim.schedule(function()

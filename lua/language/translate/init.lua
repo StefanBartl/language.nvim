@@ -108,7 +108,8 @@ local function scope_range(scope)
   if scope and (scope.kind == "selection" or scope.kind == "visible") and scope.range then
     return bufnr, math.max(1, scope.range.s), math.min(total, scope.range.e)
   end
-  -- buffer (default). cwd/path file translation is a later phase.
+  -- buffer (default). A cwd/path scope never reaches here: the command layer
+  -- routes it to `run_files`, and `M.run` rejects it before this call.
   return bufnr, 1, total
 end
 

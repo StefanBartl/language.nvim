@@ -1,10 +1,11 @@
 ---@module 'language.spell.ui.list'
 ---@brief Diagnostics publishing + Trouble/quickfix list output for spell issues.
 ---@description
---- Phase-2 output layer: publishes issues into an isolated diagnostics
---- namespace and opens either trouble.nvim (when available and enabled) or the
---- quickfix list. The richer lib.nvim.ui.kit review panel is added in a later
---- phase; this keeps functional parity with the prior implementation.
+--- The output layer for the quickfix/Trouble view (`spell.ui.view = "quickfix"`):
+--- publishes issues into an isolated diagnostics namespace and opens either
+--- trouble.nvim (when available and enabled) or the quickfix list. The default
+--- view is the interactive panel in `spell/ui/panel.lua`, which reuses
+--- `publish`/`clear` from here for its inline diagnostics.
 
 require("language.spell.@types")
 

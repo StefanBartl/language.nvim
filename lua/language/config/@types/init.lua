@@ -224,15 +224,15 @@ return {}
 ---@field fix1?  string|string[]|false  # accept first suggestion & advance (default `<leader>z1`)
 ---@field next?  string|string[]|false  # next spell error (default `]s`)
 
+---@class LanguageTranslateCustomProviderCfg
+---@field cmd   fun(lines: string[], target: string, source: string|nil): string[]
+---@field parse fun(out: string): string[]
+
 --- All opt-in: unset by default, so nothing of yours is clobbered.
 ---
 --- `to` is one key per language, working in both normal (operator) and visual
 --- mode -- a count cannot carry the language on an operator, where it belongs
 --- to the motion.
----@class LanguageTranslateCustomProviderCfg
----@field cmd   fun(lines: string[], target: string, source: string|nil): string[]
----@field parse fun(out: string): string[]
-
 ---@class LanguageTranslateKeymaps
 ---@field operator? string|string[]|false  # `<lhs>{motion}` translates the moved-over text
 ---@field visual?   string|string[]|false  # translate the visual selection

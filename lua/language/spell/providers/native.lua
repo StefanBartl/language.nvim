@@ -6,7 +6,7 @@
 --- cwd/path scan text files (open buffers preferred; unopened files are read
 --- with `vim.fn.readfile`).
 ---
---- Phase-5 additions (all config-gated):
+--- Config-gated refinements:
 ---   • word_split — split CamelCase/snake_case tokens and only report real
 ---     misspelled subwords (precise spans), dropping code-identifier false
 ---     positives.
