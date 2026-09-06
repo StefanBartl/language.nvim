@@ -44,6 +44,7 @@ local specs = {
   "split_spec.lua",
   "scope_spec.lua",
   "ignore_spec.lua",
+  "actions_spec.lua",
   "config_spec.lua",
   "hover_spec.lua",
 }
