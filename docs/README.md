@@ -25,6 +25,12 @@ is the short version of all of it.
 | --- | --- |
 | [FEATURES/](FEATURES/README.md) | One page per theme — spell, translate, thesaurus, the shared core, and the hover integration — each about what the feature is for rather than only that it exists |
 
+## Working on it
+
+| Page | Answers |
+| --- | --- |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Ground rules, project layout, and how to add a spell or translate provider |
+
 ## Here, but not prose
 
 **`install.json`** declares the external tools this plugin can use, machine-readably,
