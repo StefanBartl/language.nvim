@@ -7,7 +7,10 @@ is the short version of all of it.
 
 | Page | Answers |
 | --- | --- |
-| [installation.md](installation.md) | What has to be there before this works — the Neovim version, `lib.nvim` as a hard dependency, and which external tools are optional — then a spec per plugin manager and how to check that it took |
+| [requirements.md](requirements.md) | The Neovim version, `lib.nvim` as a hard dependency, and which external tools are optional and what each buys you |
+| [installation.md](installation.md) | A spec per plugin manager and how to check that it took |
+| [quickstart.md](quickstart.md) | The first thing to run after installing |
+| [what-you-get.md](what-you-get.md) | The full command/key surface at a glance |
 | [configuration.md](configuration.md) | Every option `setup()` takes, over the defaults in `lua/language/config/DEFAULTS.lua` |
 | [health.md](health.md) | The nine `:checkhealth language` sections, and which findings are actually problems |
 
