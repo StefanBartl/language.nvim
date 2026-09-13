@@ -1,17 +1,6 @@
 # Installation
 
-## Prerequisites
-
-- Neovim 0.9+ (0.10+ recommended, for `vim.system`)
-- [`lib.nvim`](https://github.com/StefanBartl/lib.nvim) — **required**;
-  `:Spellcheck`, `:Translate` and `:TranslateReplace` are registered through
-  `lib.nvim.bindings.usercmd.composer`, and the notify/cross-platform helpers come from
-  there too.
-- `curl` — required for translation only; everything else works without it.
-- Optional: [trouble.nvim](https://github.com/folke/trouble.nvim) for a nicer
-  result list, and external spell CLIs or an LSP — see
-  [Features](FEATURES/README.md).
-
+See [requirements.md](requirements.md) for the full required/optional list.
 Run `:checkhealth language` after installing: it reports each dependency
 separately, with what it is used for, so a missing optional one is not
 mistaken for a broken install.
