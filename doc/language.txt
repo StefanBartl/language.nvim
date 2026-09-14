@@ -29,7 +29,7 @@ language.nvim bundles three text-language tools behind a small set of commands:
     :TranslateReplace   translate a range/selection and replace it in place
 
 It is built on lib.nvim as a hard dependency — including for UI (the
-translation popup, pickers, menus use `lib.nvim.ui.kit`). Translation is
+translation popup, pickers, menus use `ui.kit`). Translation is
 native — no external Neovim plugin is required; only `curl` (the default
 Google engine is keyless and works out of the box).
 
@@ -90,7 +90,7 @@ input is otherwise unchanged.
 :[range]Translate <lang> [--nocode] [--output=<mode>] [scope]
     Translate the given range/selection to <lang> and **show the result**
     without touching the buffer (default output: `popup`, a read-only,
-    focusable, closable (q/<Esc>) `lib.nvim.ui.kit` float near the cursor —
+    focusable, closable (q/<Esc>) `ui.kit` float near the cursor —
     scroll/yank freely, nothing is written back). Options:
         --nocode            skip fenced code blocks and inline-code lines
                             (only takes effect together with --output=replace)
