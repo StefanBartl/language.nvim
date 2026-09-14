@@ -54,7 +54,7 @@ local function choose_target(cb)
     cb(c.default_target)
     return
   end
-  require("lib.nvim.ui.kit").select({
+  require("ui.kit").select({
     items = c.default_langs or { "EN", "DE" },
     title = "Translate to…",
     on_select = function(item)

@@ -72,7 +72,7 @@
 -- #####################################################################
 
 ---@alias LanguageTranslateOutput
----| "popup"    # default: read-only kit popup near the cursor (lib.nvim.ui.kit)
+---| "popup"    # default: read-only kit popup near the cursor (ui.kit)
 ---| "replace"  # overwrite the source range in place
 ---| "buffer"   # open the translation in a new unnamed buffer
 ---| "vsplit"   # like "buffer", in a new vertical split

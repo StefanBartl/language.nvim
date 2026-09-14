@@ -2,7 +2,7 @@
 ---@brief Delivers translated text to its destination (popup/replace/buffer/…).
 ---@description
 --- `popup` (the default) is read-only and non-mutating, shown via
---- `lib.nvim.ui.kit` (hard dependency, matches the rest of the plugin's UI).
+--- `ui.kit` (hard dependency, matches the rest of the plugin's UI).
 --- `replace`/`insert` mutate the source buffer; `buffer`/`vsplit`/`split`/`tab`
 --- open the translation in a new, normal (writable, named-on-save) buffer;
 --- `clipboard`/`notify` are non-mutating side channels.
@@ -55,7 +55,7 @@ local function out_popup(lines, title)
   width = math.min(width + 2, math.floor(vim.o.columns * 0.8))
   local height = math.min(#lines, math.floor(vim.o.lines * 0.6))
 
-  require("lib.nvim.ui.kit").surface.open({
+  require("ui.kit").surface.open({
     lines = lines,
     title = title and (" " .. title .. " ") or nil,
     relative = "cursor",

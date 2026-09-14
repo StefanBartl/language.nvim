@@ -204,7 +204,7 @@ function M.run(target, opts)
     items[idx] = f.rel
   end
 
-  require("lib.nvim.ui.kit").select({
+  require("ui.kit").select({
     items = items,
     multi = true,
     title = ("Translate → %s  (<Tab> select, <CR> confirm) [%s]"):format(target, mode),

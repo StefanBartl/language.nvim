@@ -1,5 +1,5 @@
 ---@module 'language.spell.ui.item_menu'
----@brief Cursor-anchored action menu for a single spell issue (lib.nvim.ui.kit).
+---@brief Cursor-anchored action menu for a single spell issue (ui.kit).
 ---@description
 --- Presents the per-issue actions (choose suggestion, replace all, add to
 --- dictionary, ignore, jump). Each action mutates via language.spell.core.actions
@@ -8,7 +8,7 @@
 
 local api = vim.api
 
-local kit = require("lib.nvim.ui.kit")
+local kit = require("ui.kit")
 local notify = require("lib.nvim.notify").create("[language.spell]")
 local actions = require("language.spell.core.actions")
 local ignore = require("language.spell.core.ignore")

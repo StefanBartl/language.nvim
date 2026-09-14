@@ -20,6 +20,7 @@ Each detected at runtime and degrading to nothing when absent:
 | `trans` (translate-shell) | An engine in the fallback chain, alongside Google and DeepL |
 | [trouble.nvim](https://github.com/folke/trouble.nvim) | A nicer list for the session's diagnostics |
 | [hover.nvim](https://github.com/StefanBartl/hover.nvim) | The word under the cursor, translated in a float |
+| [ui.nvim](https://github.com/StefanBartl/ui.nvim) | Backs `ui.kit` -- the spell issue panel/item menu and the translate history/window/output pickers. Everything else (the checks themselves, `:checkhealth`) works without it; only opening one of those UIs needs it |
 
 `curl` and `node` are declared in [install.json](install.json) and
 read by lib.nvim's
