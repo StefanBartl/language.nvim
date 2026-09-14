@@ -7,7 +7,7 @@ keyless engine.
 ## `:Translate` / `:TranslateReplace`
 
 `:Translate` translates a range/selection and, by default, shows the
-result in a read-only, focusable `lib.nvim.ui.kit` popup — the buffer
+result in a read-only, focusable `ui.kit` popup — the buffer
 stays untouched. `--output=` selects an alternative destination:
 `replace`/`buffer`/`vsplit`/`split`/`tab`/`insert`/`clipboard`/`notify`.
 `:TranslateReplace` is the direct, mutating counterpart — always
@@ -119,7 +119,7 @@ with optional JSON persistence across restarts. Recall via the window's
 ## Multi-file translation
 
 `:Translate <lang> cwd` (or `path=<dir>`) gathers translatable files under
-the target, multi-selects via the `lib.nvim.ui.kit` chooser (`<Tab>`), and
+the target, multi-selects via the `ui.kit` chooser (`<Tab>`), and
 translates each — writing a language-suffixed sibling file by default
 (`name.DE.ext`), overwriting in place with `--files=replace` (confirmed),
 or opening scratch buffers with `--files=buffers`.

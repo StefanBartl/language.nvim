@@ -169,7 +169,7 @@ function M.replace_under_cursor(nth)
       return
     end
 
-    require("lib.nvim.ui.kit").select({
+    require("ui.kit").select({
       items = syns,
       title = "Synonyms for '" .. word .. "'",
       on_select = apply,

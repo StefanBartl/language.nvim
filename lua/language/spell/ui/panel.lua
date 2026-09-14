@@ -1,12 +1,12 @@
 ---@module 'language.spell.ui.panel'
----@brief Interactive review panel over the scanned issues (lib.nvim.ui.kit).
+---@brief Interactive review panel over the scanned issues (ui.kit).
 ---@description
 --- Lists every issue in the scope as a navigable chooser; picking an item opens
 --- its action menu. After any mutating action the panel re-scans and re-opens,
 --- so the user can work through the list top-to-bottom. Diagnostics are
 --- published alongside so the errors are also visible inline in the source.
 
-local kit = require("lib.nvim.ui.kit")
+local kit = require("ui.kit")
 local map = require("lib.nvim.bindings.keymap")
 local notify = require("lib.nvim.notify").create("[language.spell]")
 local collect = require("language.spell.core.collect")

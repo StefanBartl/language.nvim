@@ -131,7 +131,7 @@ function M.pick(on_choose)
   for i, e in ipairs(r) do
     items[i] = M.label(e)
   end
-  require("lib.nvim.ui.kit").select({
+  require("ui.kit").select({
     items = items,
     title = "Translation history",
     on_select = function(_, idx)

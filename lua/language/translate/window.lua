@@ -150,7 +150,7 @@ end
 ---Open a picker to change the target language.
 ---@return nil
 local function pick_retarget()
-  require("lib.nvim.ui.kit").select({
+  require("ui.kit").select({
     items = cfg().default_langs or { "EN", "DE" },
     title = "Translate to…",
     on_select = function(item)
@@ -294,7 +294,7 @@ function M.open(opts)
     launch(target, opts.source_lines)
     return
   end
-  require("lib.nvim.ui.kit").select({
+  require("ui.kit").select({
     items = cfg().default_langs or { "EN", "DE" },
     title = "Translate to…",
     on_select = function(item)
