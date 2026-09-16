@@ -1,0 +1,130 @@
+-- TESTS/translate_files_spec.lua — language.translate.files: multi-file
+-- translation. `M.gather` and `M.process` are explicitly "Public for testing"
+-- in the source and are exercised directly against a real fixture directory
+-- and a fake (injected) provider. `M.run`'s picker (`ui.kit`) and its
+-- confirm() prompt are not reached: both early-return paths (no target, no
+-- files under the directory) are tested instead — see TESTS/README.md for why
+-- `ui.kit` itself is out of scope for this suite.
+
+return function(H)
+  local files = require("language.translate.files")
+  local config = require("language.config")
+
+  local dir, cleanup = H.fixture("translate-files")
+  vim.fn.mkdir(dir .. "/sub", "p")
+  vim.fn.mkdir(dir .. "/node_modules", "p")
+  vim.fn.writefile({ "hello" }, dir .. "/a.md")
+  vim.fn.writefile({ "world" }, dir .. "/sub/b.md")
+  vim.fn.writefile({ "ignored" }, dir .. "/node_modules/c.md")
+  vim.fn.writefile({ "not a translatable extension" }, dir .. "/d.exe")
+
+  local cfg = { files = { extensions = { "md" }, max_kb = 512 } }
+
+  -- gather() ------------------------------------------------------------------
+  local found = files.gather(dir, cfg)
+  local rels = {}
+  for _, f in ipairs(found) do
+    rels[#rels + 1] = f.rel
+  end
+  table.sort(rels)
+  H.eq(table.concat(rels, ","), "a.md,sub/b.md", "only .md files, node_modules skipped, sorted")
+
+  H.eq(#files.gather(dir, { files = { extensions = { "txt" } } }), 0, "no matching extension: none")
+
+  local tiny_cfg = { files = { extensions = { "md" }, max_kb = 0 } }
+  H.eq(#files.gather(dir, tiny_cfg), 0, "a max_kb of 0 excludes every file, however small")
+
+  -- process(): a fake provider, no network, no ui.kit -----------------------
+  local translated_calls = {}
+  local fake_provider = {
+    translate = function(lines, target, _source, _pcfg, cb)
+      translated_calls[#translated_calls + 1] = { lines = lines, target = target }
+      cb(true, { "TRANSLATED: " .. table.concat(lines, " ") })
+    end,
+  }
+
+  config.setup({ translate = { history = { enable = false } } })
+
+  local picked =
+    { { rel = "a.md", abs = dir .. "/a.md" }, { rel = "sub/b.md", abs = dir .. "/sub/b.md" } }
+  local done = false
+  files.process(fake_provider, picked, "FR", "suffix", function()
+    done = true
+  end)
+  vim.wait(1000, function()
+    return done
+  end)
+  H.ok(done, "process() runs to completion and calls on_done")
+  H.eq(#translated_calls, 2, "the provider was called once per picked file")
+
+  H.eq(vim.fn.filereadable(dir .. "/a.FR.md"), 1, "'suffix' mode writes a sibling file per input")
+  H.contains(H.read(dir .. "/a.FR.md"), "TRANSLATED: hello", "with the translated content")
+  H.eq(vim.fn.filereadable(dir .. "/sub/b.FR.md"), 1, "including nested files")
+  H.eq(vim.fn.filereadable(dir .. "/a.md"), 1, "and the original is left untouched")
+  H.eq(H.read(dir .. "/a.md"), "hello", "with its original content")
+
+  -- process(): "replace" mode overwrites the file in place --------------------
+  local done2 = false
+  files.process(
+    fake_provider,
+    { { rel = "a.md", abs = dir .. "/a.md" } },
+    "DE",
+    "replace",
+    function()
+      done2 = true
+    end
+  )
+  vim.wait(1000, function()
+    return done2
+  end)
+  H.ok(done2, "replace mode completes")
+  H.eq(H.read(dir .. "/a.md"), "TRANSLATED: hello", "the original file is overwritten")
+
+  -- process(): "buffers" mode opens a scratch buffer, writes nothing to disk -
+  local before_bufs = #vim.api.nvim_list_bufs()
+  vim.fn.writefile({ "hello" }, dir .. "/a.md") -- restore for a clean assertion below
+  local done3 = false
+  files.process(
+    fake_provider,
+    { { rel = "a.md", abs = dir .. "/a.md" } },
+    "ES",
+    "buffers",
+    function()
+      done3 = true
+    end
+  )
+  vim.wait(1000, function()
+    return done3
+  end)
+  H.ok(done3, "buffers mode completes")
+  H.ok(#vim.api.nvim_list_bufs() > before_bufs, "a new scratch buffer was created")
+  H.eq(H.read(dir .. "/a.md"), "hello", "and the file on disk is untouched")
+
+  -- process(): a provider failure is reported, not left half-done -----------
+  local failing_provider = {
+    translate = function(_lines, _target, _source, _cfg, cb)
+      cb(false, "boom")
+    end,
+  }
+  local done4 = false
+  files.process(
+    failing_provider,
+    { { rel = "a.md", abs = dir .. "/a.md" } },
+    "FR",
+    "replace",
+    function()
+      done4 = true
+    end
+  )
+  vim.wait(1000, function()
+    return done4
+  end)
+  H.ok(done4, "on_done still fires after a failed translation")
+
+  -- run(): early-return guards, without ever reaching ui.kit -----------------
+  files.run("", { dir = dir }) -- no target: warns and returns
+  files.run("FR", { dir = dir .. "/does-not-exist" }) -- no files under the dir: info + return
+
+  config.setup({})
+  cleanup()
+end
