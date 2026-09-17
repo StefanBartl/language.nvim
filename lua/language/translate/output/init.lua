@@ -111,7 +111,15 @@ function M.apply(mode, lines, ctx)
     out_new_buffer(lines, mode, ctx.bufnr)
   elseif mode == "clipboard" then
     local text = table.concat(lines, "\n")
-    pcall(vim.fn.setreg, "+", text)
+    -- `vim.fn.setreg("+", text)` does not raise when there is no clipboard
+    -- provider -- it silently does nothing -- so a bare pcall around it was
+    -- never proof the system clipboard actually received anything. This
+    -- goes through lib.nvim's verified writer instead, which confirms the
+    -- register round-trip before reporting success and falls back to an
+    -- external tool (xclip/wl-copy/pbcopy/clip.exe) when there is none.
+    require("lib.nvim.cross.copy_to_clipboard")(text)
+    -- The unnamed register is ordinary Vim state, not tied to any clipboard
+    -- provider, so a plain setreg is fine here.
     pcall(vim.fn.setreg, '"', text)
   elseif mode == "notify" then
     require("lib.nvim.notify").create("[language.translate]").info(table.concat(lines, "\n"))

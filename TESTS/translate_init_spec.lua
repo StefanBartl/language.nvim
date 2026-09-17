@@ -121,11 +121,23 @@ return function(H)
 
   -- run_region(): non-replace output goes through language.translate.output,
   -- not a direct buffer edit.
+  --
+  -- Whether the "+" register actually receives it depends on the machine
+  -- (see TESTS/translate_output_spec.lua's clipboard block for why), so
+  -- it's probed here too rather than assumed.
+  vim.fn.setreg("+", "")
+  local clipboard_works = require("lib.nvim.cross.copy_to_clipboard")("init_spec_probe")
+  vim.fn.setreg("+", "")
+
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "hello world" })
   stub_provider(true, { "clip text" })
   translate = reload_translate()
   translate.run_region("FR", { bufnr = buf, sr = 0, sc = 0, er = 0, ec = 5, output = "clipboard" })
-  H.eq(vim.fn.getreg("+"), "clip text", "'clipboard' output really goes through output.apply")
+  if clipboard_works then
+    H.eq(vim.fn.getreg("+"), "clip text", "'clipboard' output really goes through output.apply")
+  else
+    H.eq(vim.fn.getreg("+"), "", "no clipboard provider means the register stays untouched")
+  end
   H.eq(
     vim.api.nvim_buf_get_lines(buf, 0, -1, false)[1],
     "hello world",
