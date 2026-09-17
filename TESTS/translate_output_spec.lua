@@ -54,10 +54,27 @@ return function(H)
   H.eq(vim.fn.tabpagenr("$"), before_tabs + 1, "'tab' opens exactly one new tab")
   vim.cmd("tabclose")
 
-  -- clipboard ---------------------------------------------------------------
+  -- clipboard -----------------------------------------------------------------
+  -- Whether the "+" register actually receives anything depends on the
+  -- machine: lib.nvim.cross.copy_to_clipboard needs a real clipboard
+  -- provider or an external tool (xclip/wl-copy/pbcopy/clip.exe) on PATH,
+  -- neither of which a bare CI runner has. Probed with its own marker so
+  -- the real assertion below knows which outcome to expect.
+  vim.fn.setreg("+", "")
+  local clipboard_works = require("lib.nvim.cross.copy_to_clipboard")("output_spec_probe")
+  vim.fn.setreg("+", "")
+
   output.apply("clipboard", { "clip one", "clip two" }, { bufnr = buf, s = 1, e = 1 })
-  H.eq(vim.fn.getreg("+"), "clip one\nclip two", 'the "+" register receives the joined lines')
-  H.eq(vim.fn.getreg('"'), "clip one\nclip two", "the unnamed register too")
+  if clipboard_works then
+    H.eq(vim.fn.getreg("+"), "clip one\nclip two", 'the "+" register receives the joined lines')
+  else
+    H.eq(vim.fn.getreg("+"), "", 'no clipboard provider means the "+" register stays untouched')
+  end
+  H.eq(
+    vim.fn.getreg('"'),
+    "clip one\nclip two",
+    "the unnamed register always does, provider or not"
+  )
 
   -- notify --------------------------------------------------------------------
   -- No direct return value to assert on; this only has to not error.
