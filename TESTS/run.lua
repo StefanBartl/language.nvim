@@ -54,6 +54,7 @@ local specs = {
   "wordlists_spec.lua",
   "job_spec.lua",
   "spell_providers_cli_spec.lua",
+  "spell_providers_cspell_server_spec.lua",
   "translate_filter_indent_spec.lua",
   "translate_output_spec.lua",
   "translate_history_spec.lua",
@@ -68,6 +69,7 @@ local specs = {
   "spell_init_spec.lua",
   "config_spec.lua",
   "hover_spec.lua",
+  "health_spec.lua",
 }
 
 local failed = 0
