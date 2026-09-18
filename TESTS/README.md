@@ -40,6 +40,7 @@ misleading failures.
 | `wordlists_spec.lua` | the built-in programming dictionary and extra-wordlist merging |
 | `job_spec.lua` | `util/job`: argv/opts plumbing, `on_done`, and that `cancel()` before completion suppresses it |
 | `spell_providers_cli_spec.lua` | the CLI/LSP spell providers (`codespell`, `cspell`, `custom`, `lsp`, `typos`) and their shared `util.lua`, all with the underlying process/LSP client stubbed |
+| `spell_providers_cspell_server_spec.lua` | the persistent Node/cspell-lib sidecar (`cspell_server.lua`): `available()`, `resolve()`'s nested/hoisted candidate paths and its failure case, `ensure_started()`'s reentrancy and `jobstart` failure, `on_stdout`'s line buffering (including a line split across two chunks), the ready/error/id-reply dispatch, request/reply round-tripping with issue tagging, `cancel()`, `on_exit()` dropping pending requests, and the `VimLeavePre` kill handler — with `language.util.job` and `vim.fn.jobstart`/`chansend`/`jobstop` stubbed, never a real node or cspell-lib |
 | `translate_filter_indent_spec.lua` | the line filter that skips fenced code/front-matter, and re-indenting translated output to match the source |
 | `translate_output_spec.lua` | applying translated output back to a buffer, register, or via notify |
 | `translate_history_spec.lua` | recording/labelling/picking/clearing translation history, including label clipping for long input |
@@ -54,6 +55,7 @@ misleading failures.
 | `spell_init_spec.lua` | the top-level `language.spell` facade — starting/closing a session, `:Spellcheck`'s scope dispatch, panel stubbed (see "Deliberately left untested") |
 | `config_spec.lua` | the merge, and that `DEFAULTS` survives it unmutated |
 | `hover_spec.lua` | the word under the cursor as a hover.nvim float — the word finder, the target language, decline-vs-fail, the rate-limit failure path, and `on_request` registration (translate provider and hover.nvim both stubbed) |
+| `health_spec.lua` | `:checkhealth language` (`M.check()`) branch by branch: version/native-provider detection, every optional-tool present/absent pair (including the cspell-without-node middle case), the attached-grammar-client list, deepl-key resolution, the effective-config echo, and `check_hover()`'s four states — with every collaborator (tools, LSP clients, hover.nvim, which-key, `lib.nvim.deps.health`) stubbed or monkeypatched; also pins a real crash (see "Known bugs" below) |
 
 Adding one: write `TESTS/<name>_spec.lua` returning `function(H) ... end`, then
 list it in `run.lua`. `H` is the harness — `eq`, `ok`, `falsy`, `contains`,
@@ -63,15 +65,40 @@ list it in `run.lua`. `H` is the harness — `eq`, `ok`, `falsy`, `contains`,
 
 Every `lua/language/**/*.lua` file with real logic or branching that can be
 required without `ui.kit` now has a dedicated real-assertion spec: both spell
-cores (split/scope/regions/collect/cache/ignore/actions), the native and
-CLI/LSP spell providers, live scanning, the wordlists, `util/job`, every
-translate provider plus the registry's fallback chain, translate's
-filter/indent/output/history/files/motion pieces, the thesaurus, all three
-bindings modules, and `language/init.lua`'s `setup()` (which also exercises
-`health.lua`'s lazy facade). `ignore.add_persistent`, previously excluded for
-writing into the developer's real `stdpath("state")` ignore file, is now
-covered too — redirected to a fixture path via the existing
-`spell.dictionary.ignore_file` config option, which needed no source change.
+cores (split/scope/regions/collect/cache/ignore/actions), the native,
+CLI/LSP, and persistent-sidecar spell providers, live scanning, the
+wordlists, `util/job`, every translate provider plus the registry's fallback
+chain, translate's filter/indent/output/history/files/motion pieces, the
+thesaurus, all three bindings modules, `language/init.lua`'s `setup()`, and
+`health.lua`'s `M.check()` branch by branch (not just the lazy facade that
+resolves it). `ignore.add_persistent`, previously excluded for writing into
+the developer's real `stdpath("state")` ignore file, is covered too —
+redirected to a fixture path via the existing `spell.dictionary.ignore_file`
+config option, which needed no source change. `cspell_server.lua`, previously
+excluded outright as needing a real Node/cspell install, is covered the same
+way the other CLI providers are: every real external call it makes goes
+through `language.util.job` or a plain `vim.fn.*` global, both stubbable, so
+its own logic (candidate resolution, line buffering, request/reply matching)
+is exercised without ever spawning node or cspell-lib for real.
+
+### Known bugs pinned by these specs (not fixed here)
+
+Some specs assert the *current*, buggy behavior on purpose rather than
+silently patching it — grep any spec file for `BUG:` for the full reasoning
+inline. As of this audit:
+
+- **`job_spec.lua`** — a nonexistent executable makes `vim.system` raise
+  synchronously instead of reaching `on_done(false, ...)`.
+- **`spell_init_spec.lua`** — `spell.clear()` does not actually restore a
+  buffer's previous `'spelllang'` when the quickfix view (not the panel) is
+  in use; it restores the wrong window's option.
+- **`health_spec.lua`** — `check_lib()` correctly detects and warns about a
+  `lib.nvim` checkout missing `bindings.usercmd.composer`, but `M.check()`'s
+  own tail calls straight into that same module a few lines later with no
+  guard at all — so instead of degrading past the warning already given, an
+  old `lib.nvim` crashes `:checkhealth language` outright, and everything
+  after the "lib.nvim (required dependency)" section (translate/config/
+  which-key/hover/deps) never renders.
 
 ### Deliberately left untested
 
@@ -88,24 +115,13 @@ covered too — redirected to a fixture path via the existing
   needs `ui.kit` regardless. `bindings_usrcmds_spec.lua` only stubs it as a
   collaborator to assert that the bang form reaches it instead of
   `translate.run`.
-- **`spell/providers/cspell_server.lua`** — spawns and talks
-  newline-delimited JSON to a persistent Node process running `cspell-lib`
-  (`node/cspell_server.js`), resolved via `npm root -g`. Like the other CLI
-  spell providers (`codespell.lua`, `cspell.lua`, `custom.lua`, `lsp.lua`,
-  `typos.lua`, all covered in `spell_providers_cli_spec.lua` with the
-  underlying process/LSP client stubbed) this shells out, but unlike them it
-  also needs a real Node install and a global `cspell` package present —
-  state a push-triggered suite must not depend on.
 - **`config/DEFAULTS.lua`** — a plain data table (`return { ... }`); its merge
   behavior is what `config_spec.lua` actually tests.
-- **`health.lua`** — exercised indirectly through `language.setup()`'s lazy
-  `M.health` facade in `language_init_spec.lua`; not tested branch-by-branch,
-  since each branch is a declarative `vim.health.*` call with no computed
-  value to assert on.
 - **`@types` modules** (`language/@types`, `config/@types`,
   `spell/@types`, `translate/@types`) — `---@meta`-style annotation files, no
   runtime behavior.
 
-Translation itself (`curl`/network) and the shell-based spell providers stay
-stubbed at the `util/job` boundary throughout — none of this suite spawns a
-real process or touches the network.
+Translation itself (`curl`/network), the shell-based spell providers, and the
+persistent cspell sidecar's actual process stay stubbed at the `util/job` /
+`vim.fn.*` boundary throughout — none of this suite spawns a real process,
+a real Node runtime, or touches the network.
