@@ -128,6 +128,18 @@ return function(H)
     "forced to replace mode there as well"
   )
 
+  -- A typo'd scope word (ERR-10) must not silently fall through to the
+  -- default whole-buffer scope: it is neither the language nor a
+  -- recognized scope word, so it is a leftover 2nd token and is rejected.
+  -- `vim.cmd(string)` runs through `nvim_exec2`, which re-raises a
+  -- notify.error() issued inside the handler as a Lua error here (an
+  -- interactive `:TranslateReplace ...` would not do this -- there is no
+  -- Lua caller for it to unwind into) -- pcall so the assertion below still
+  -- runs.
+  local before_typo = #translate_calls
+  pcall(vim.cmd, "TranslateReplace DE selction")
+  H.eq(#translate_calls, before_typo, "an unrecognized 2nd token aborts before run/run_files")
+
   package.loaded["language.spell"] = nil
   package.loaded["language.translate"] = nil
   package.loaded["language.translate.window"] = nil
