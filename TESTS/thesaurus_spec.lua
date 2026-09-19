@@ -12,8 +12,13 @@ return function(H)
   local syns = thesaurus.parse_datamuse('[{"word":"quick"},{"word":"fast"},{"word":"rapid"}]', 20)
   H.eq(table.concat(syns, ","), "quick,fast,rapid", "words extracted in order")
 
-  H.eq(#thesaurus.parse_datamuse("not json", 20), 0, "malformed JSON: empty, not an error")
-  H.eq(#thesaurus.parse_datamuse("[]", 20), 0, "an empty array: empty")
+  local bad_syns, bad_err = thesaurus.parse_datamuse("not json", 20)
+  H.eq(#bad_syns, 0, "malformed JSON: empty list, not a crash")
+  H.ok(bad_err ~= nil, "but a non-nil err distinguishes it from a genuinely empty result (ERR-11)")
+
+  local empty_syns, empty_err = thesaurus.parse_datamuse("[]", 20)
+  H.eq(#empty_syns, 0, "an empty array: empty")
+  H.eq(empty_err, nil, "and no err -- this is a genuinely empty, successfully-decoded result")
   H.eq(
     #thesaurus.parse_datamuse('[{"word":"a"},{"word":"b"},{"word":"c"}]', 2),
     2,
@@ -67,6 +72,39 @@ return function(H)
   H.ok(done, "synonyms() resolves via the stubbed job")
   H.eq(table.concat(result, ","), "speedy,fast", "with the parsed Datamuse response")
   H.contains(table.concat(calls[1], " "), "rel_syn=quick", "the word is sent as the rel_syn param")
+
+  -- synonyms(): a job failure (network down, curl not found at runtime, a
+  -- timeout, …) must not read as "no synonyms for this word" -- that is the
+  -- one outcome indistinguishable from a genuinely empty Datamuse result
+  -- (ERR-11). A warning is raised on this path but not asserted here (this
+  -- suite has no notify stub, same note native_spec.lua gives for its own
+  -- sibling case); what's verified is that the callback still resolves,
+  -- with an empty list, not a crash.
+  package.loaded["language.util.job"] = {
+    run = function(_argv, opts)
+      opts.on_done(false, "", "timeout")
+      return { cancel = function() end }
+    end,
+  }
+  package.loaded["language.thesaurus"] = nil
+  thesaurus = require("language.thesaurus")
+  config.setup({ thesaurus = { enable = true, source = "datamuse", max = 20 } })
+  local jobfail_done, jobfail_result = false, nil
+  thesaurus.synonyms("quick", function(res)
+    jobfail_done, jobfail_result = true, res
+  end)
+  H.ok(jobfail_done, "a failed lookup still resolves")
+  H.eq(#jobfail_result, 0, "with an empty list, not a crash")
+
+  package.loaded["language.util.job"] = {
+    run = function(argv, opts)
+      calls[#calls + 1] = argv
+      opts.on_done(true, '[{"word":"speedy"},{"word":"fast"}]', "")
+      return { cancel = function() end }
+    end,
+  }
+  package.loaded["language.thesaurus"] = nil
+  thesaurus = require("language.thesaurus")
 
   calls = {}
   local empty_done, empty_result = false, nil

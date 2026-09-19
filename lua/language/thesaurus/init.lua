@@ -19,11 +19,12 @@ end
 ---Parse Datamuse JSON (`[{"word":...}, ...]`) into a synonym list.
 ---@param body string
 ---@param max integer
----@return string[]
+---@return string[] synonyms
+---@return string|nil err  reason the list is empty, when the body did not decode
 function M.parse_datamuse(body, max)
   local ok, decoded = pcall(vim.json.decode, body)
   if not ok or type(decoded) ~= "table" then
-    return {}
+    return {}, "invalid response from Datamuse"
   end
   local out = {}
   for i = 1, #decoded do
@@ -35,7 +36,7 @@ function M.parse_datamuse(body, max)
       end
     end
   end
-  return out
+  return out, nil
 end
 
 ---Fetch synonyms for `word`, delivering them via `cb`.
@@ -50,10 +51,17 @@ function M.synonyms(word, cb)
   end
 
   if c.source == "custom" and type(c.custom) == "function" then
-    local ok = pcall(c.custom, word, function(syns)
+    local ok, err = pcall(c.custom, word, function(syns)
       cb(type(syns) == "table" and syns or {})
     end)
     if not ok then
+      -- A broken custom source must not read as "no synonyms for this word"
+      -- -- that is the one outcome indistinguishable from a genuinely empty
+      -- result (ERR-11). Mirrors the same fix already applied to
+      -- spell/providers/custom.lua's cmd()/parse().
+      require("lib.nvim.notify")
+        .create("[language.thesaurus]")
+        .error(("thesaurus.custom failed: %s"):format(tostring(err)))
       cb({})
     end
     return
@@ -82,12 +90,21 @@ function M.synonyms(word, cb)
   local argv = { "curl", "-s", "-G", "--data-urlencode", "rel_syn=" .. word, url }
   require("language.util.job").run(argv, {
     timeout_ms = c.timeout_ms or 6000,
-    on_done = function(ok, out, _err)
+    on_done = function(ok, out, err)
+      local tnotify = require("lib.nvim.notify").create("[language.thesaurus]")
       if not ok then
+        -- A curl failure (network down, DNS, timeout, …) must not read as
+        -- "no synonyms for this word" -- that is the one outcome
+        -- indistinguishable from a genuinely empty Datamuse result (ERR-11).
+        tnotify.warn(("thesaurus lookup failed: %s"):format(err ~= "" and err or "request failed"))
         cb({})
         return
       end
-      cb(M.parse_datamuse(out or "", c.max or 20))
+      local syns, perr = M.parse_datamuse(out or "", c.max or 20)
+      if perr then
+        tnotify.warn(("thesaurus lookup: %s"):format(perr))
+      end
+      cb(syns)
     end,
   })
 end
