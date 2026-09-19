@@ -34,6 +34,25 @@ return function(H)
   local tiny_cfg = { files = { extensions = { "md" }, max_kb = 0 } }
   H.eq(#files.gather(dir, tiny_cfg), 0, "a max_kb of 0 excludes every file, however small")
 
+  -- gather(): a walk that fails partway (permissions, a vanishing entry, …)
+  -- must not crash and must not silently look like "this directory has no
+  -- matching files" with no trace (ERR-11) -- same failure already fixed in
+  -- spell/providers/native.lua's gather_tree_files, same fix here. A
+  -- warning is raised on the failure path but not asserted here (this suite
+  -- has no notify stub, same note native_spec.lua gives for its own
+  -- sibling case); what's verified is that a walk error degrades gracefully
+  -- rather than propagating out of gather().
+  local orig_fs_dir = vim.fs.dir
+  vim.fs.dir = function()
+    return function()
+      error("simulated walk failure")
+    end
+  end
+  local ok_call, partial = pcall(files.gather, dir, cfg)
+  vim.fs.dir = orig_fs_dir
+  H.ok(ok_call, "a walk that fails partway does not raise out of gather()")
+  H.eq(#partial, 0, "and yields whatever was gathered before the failure (here: nothing)")
+
   -- process(): a fake provider, no network, no ui.kit -----------------------
   local translated_calls = {}
   local fake_provider = {
