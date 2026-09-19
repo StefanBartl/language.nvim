@@ -42,7 +42,10 @@ end
 
 ---Run `argv` and deliver the captured result to `on_done` exactly once.
 ---@param argv string[]                              command + arguments
----@param opts { timeout_ms?: integer, cwd?: string, on_done: fun(ok: boolean, out: string, err: string) }
+---@param opts { timeout_ms?: integer, cwd?: string, stdin?: string, on_done: fun(ok: boolean, out: string, err: string) }
+---`stdin`, when given, is written to the process and the pipe is then closed
+---(SEC-10: a secret the target CLI accepts on stdin never has to be an argv
+---element, which is visible via the process list to any co-resident process).
 ---@return Language.Job
 function M.run(argv, opts)
   opts = opts or {}
@@ -72,7 +75,7 @@ function M.run(argv, opts)
   end
 
   if vim.system then
-    local proc = vim.system(argv, { text = true, cwd = opts.cwd }, function(o)
+    local proc = vim.system(argv, { text = true, cwd = opts.cwd, stdin = opts.stdin }, function(o)
       finish(o.code == 0, o.stdout, o.stderr)
     end)
     job.cancel = function()
@@ -107,6 +110,7 @@ function M.run(argv, opts)
   local stdout, stderr = {}, {}
   local jid = vim.fn.jobstart(argv, {
     cwd = opts.cwd,
+    stdin = opts.stdin and "pipe" or nil,
     stdout_buffered = true,
     stderr_buffered = true,
     on_stdout = function(_, data)
@@ -126,6 +130,10 @@ function M.run(argv, opts)
   if jid <= 0 then
     finish(false, "", "jobstart failed")
     return job
+  end
+  if opts.stdin then
+    vim.fn.chansend(jid, opts.stdin)
+    vim.fn.chanclose(jid, "stdin")
   end
   job.cancel = function()
     if not finished then

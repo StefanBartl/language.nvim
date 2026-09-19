@@ -47,6 +47,19 @@ local function host(key)
     or "https://api.deepl.com/v2/translate"
 end
 
+---@internal
+---Build a curl `-K -` config (read from stdin) carrying the Authorization
+---header. SEC-10: the auth key must never be an argv element -- the process
+---list (`ps auxww`, `/proc/<pid>/cmdline`, `Get-CimInstance Win32_Process`)
+---is readable by any co-resident process, stdin is not. Within a double-quoted
+---config value, curl only requires `\` and `"` to be backslash-escaped.
+---@param key string
+---@return string
+local function auth_config(key)
+  local escaped = key:gsub("\\", "\\\\"):gsub('"', '\\"')
+  return ('header = "Authorization: DeepL-Auth-Key %s"\n'):format(escaped)
+end
+
 ---Translate lines. DeepL returns one translation per input element, so the
 ---result stays aligned with the input lines.
 ---@param lines string[]
@@ -75,15 +88,16 @@ function M.translate(lines, target, source, cfg, cb)
     "POST",
     host(key),
     "-H",
-    "Authorization: DeepL-Auth-Key " .. key,
-    "-H",
     "Content-Type: application/json",
+    "-K",
+    "-",
     "-d",
     body,
   }
 
   return job.run(argv, {
     timeout_ms = cfg.timeout_ms or 8000,
+    stdin = auth_config(key),
     on_done = function(ok, out, err)
       if not ok then
         cb(false, err ~= "" and err or "DeepL request failed")
