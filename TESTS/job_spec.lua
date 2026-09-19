@@ -91,4 +91,47 @@ return function(H)
   H.ok(timeout_done, "a slow process is eventually reported")
   H.falsy(timeout_ok, "as a failure")
   H.eq(timeout_err, "timeout", "labelled as a timeout specifically")
+
+  -- `opts.stdin` (SEC-10: lets a caller hand a secret to a subprocess without
+  -- it ever being an argv element) really reaches the process, on both the
+  -- `vim.system` path and the legacy `jobstart` fallback. `nvim -` reads its
+  -- first buffer from stdin; writing it back out proves the bytes arrived.
+  local dir, cleanup = H.fixture("job-stdin")
+  local function read_stdin_via(runner)
+    local out_file = dir .. "/out.txt"
+    vim.fn.delete(out_file)
+    local stdin_done, stdin_ok = false, nil
+    runner({
+      vim.v.progpath,
+      "--headless",
+      "-u",
+      "NONE",
+      "-",
+      "-c",
+      "silent write " .. out_file,
+      "-c",
+      "qa!",
+    }, {
+      stdin = "stdin-marker-xyz\n",
+      timeout_ms = 5000,
+      on_done = function(ok)
+        stdin_done, stdin_ok = true, ok
+      end,
+    })
+    vim.wait(5000, function()
+      return stdin_done
+    end)
+    H.ok(stdin_done, "the process completes")
+    H.ok(stdin_ok, "and exits successfully")
+    H.contains(H.read(out_file), "stdin-marker-xyz", "the piped stdin content reached the process")
+  end
+
+  read_stdin_via(job.run)
+
+  local orig_vim_system = vim.system
+  vim.system = nil -- force the legacy jobstart fallback for this one call
+  read_stdin_via(job.run)
+  vim.system = orig_vim_system
+
+  cleanup()
 end

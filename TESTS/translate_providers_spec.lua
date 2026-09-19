@@ -119,6 +119,16 @@ return function(H)
     "a ':fx' key hits the free host"
   )
 
+  -- SEC-10: the auth key must never be an argv element (visible via the
+  -- process list); it travels as a curl `-K -` config read from stdin.
+  H.excludes(table.concat(calls[1].argv, " "), "abc123:fx", "the key is not in argv at all")
+  H.contains(table.concat(calls[1].argv, " "), "-K -", "curl is told to read a config from stdin")
+  H.contains(
+    calls[1].opts.stdin,
+    "Authorization: DeepL-Auth-Key abc123:fx",
+    "the key travels as the stdin-piped curl config instead"
+  )
+
   stub_job(true, [[{"translations":[{"text":"x"}]}]])
   deepl = reload("language.translate.providers.deepl")
   deepl.translate({ "hi" }, "FR", nil, { deepl = { api_key = "abc123" } }, function() end)
