@@ -80,7 +80,30 @@ function M.run_region(target, opts)
     end
     ---@cast result string[]
     if mode == "replace" then
-      pcall(api.nvim_buf_set_text, bufnr, opts.sr, opts.sc, opts.er, opts.ec, result)
+      -- The span was captured before the request; the request is a network
+      -- round trip, so re-verify it still holds the translated text right
+      -- before writing -- same reasoning as spell/core/actions.lua's
+      -- `replace_at`, applied here to the translate domain.
+      if not api.nvim_buf_is_valid(bufnr) then
+        notify.warn("Translation discarded: the buffer no longer exists")
+        return
+      end
+      local ok_reget, current =
+        pcall(api.nvim_buf_get_text, bufnr, opts.sr, opts.sc, opts.er, opts.ec, {})
+      if not ok_reget then
+        notify.warn("Translation discarded: the target position is no longer valid")
+        return
+      end
+      if table.concat(current, "\n") ~= table.concat(lines, "\n") then
+        notify.warn("Translation discarded: the text changed while translating")
+        return
+      end
+      local ok_set, set_err =
+        pcall(api.nvim_buf_set_text, bufnr, opts.sr, opts.sc, opts.er, opts.ec, result)
+      if not ok_set then
+        notify.error("Could not write translation: " .. tostring(set_err))
+        return
+      end
     else
       output.apply(
         mode,

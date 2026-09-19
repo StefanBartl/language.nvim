@@ -157,6 +157,27 @@ return function(H)
     "a failed translation leaves the buffer untouched"
   )
 
+  -- run_region(): ERR-30 -- a concurrent edit to the exact span, landing
+  -- while the request was "in flight", is not blindly overwritten.
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "hello world" })
+  package.loaded["language.translate.providers.registry"] = {
+    resolve = function()
+      return {
+        translate = function(_lines, _target, _source, _pcfg, cb)
+          vim.api.nvim_buf_set_text(buf, 0, 0, 0, 5, { "edited" })
+          cb(true, { "HELLO" })
+        end,
+      }
+    end,
+  }
+  translate = reload_translate()
+  translate.run_region("FR", { bufnr = buf, sr = 0, sc = 0, er = 0, ec = 5, output = "replace" })
+  H.eq(
+    vim.api.nvim_buf_get_lines(buf, 0, -1, false)[1],
+    "edited world",
+    "the concurrent edit survives -- the stale translation was discarded, not written over it"
+  )
+
   vim.api.nvim_buf_delete(buf, { force = true })
   package.loaded["language.translate.providers.registry"] = nil
   package.loaded["language.translate"] = nil
