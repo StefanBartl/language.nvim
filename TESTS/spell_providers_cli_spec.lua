@@ -83,6 +83,74 @@ return function(H)
     H.eq(#delivered, 0, "with an empty result, not an error")
   end
 
+  -- typos/cspell/codespell scan_async(): a real failure (timeout, the
+  -- process never starting) with empty stdout must not read as a clean scan
+  -- (ERR-11). Exit code alone can't tell that apart from "found nothing" --
+  -- all three tools exit non-zero on a normal "found something" run (see
+  -- each file's own header) -- so the fix keys off "no output at all",
+  -- which a genuine finding never produces. `language.util.job` and
+  -- `vim.fn.executable` are stubbed so this never spawns a real process --
+  -- same techniques already used above and in
+  -- spell_providers_cspell_server_spec.lua. A warning is raised on the
+  -- failure path but not asserted here, same note native_spec.lua's own
+  -- missing-path case gives: this suite has no notify stub.
+  do
+    local orig_executable = vim.fn.executable
+    vim.fn.executable = function(bin)
+      if bin == "typos" or bin == "cspell" or bin == "codespell" then
+        return 1
+      end
+      return orig_executable(bin)
+    end
+
+    local function reload(name)
+      package.loaded[name] = nil
+      return require(name)
+    end
+
+    package.loaded["language.util.job"] = {
+      run = function(_, opts)
+        opts.on_done(false, "", "timeout")
+        return nil
+      end,
+    }
+    local providers = {
+      reload("language.spell.providers.typos"),
+      reload("language.spell.providers.cspell"),
+      reload("language.spell.providers.codespell"),
+    }
+    for _, p in ipairs(providers) do
+      local done, delivered = false, nil
+      p.scan_async({ kind = "cwd" }, {}, function(res)
+        done, delivered = true, res
+      end)
+      H.ok(done, p.name .. ": still calls back after a real failure")
+      H.eq(#delivered, 0, p.name .. ": with an empty result, not a crash")
+    end
+
+    -- A normal non-zero exit *with* output ("found something") is still
+    -- parsed as findings, not mistaken for a failure.
+    package.loaded["language.util.job"] = {
+      run = function(_, opts)
+        opts.on_done(false, "src/a.md:3:5 - Unknown word (recieve)", "")
+        return nil
+      end,
+    }
+    local cspell_found = reload("language.spell.providers.cspell")
+    local done_found, delivered_found = false, nil
+    cspell_found.scan_async({ kind = "cwd" }, {}, function(res)
+      done_found, delivered_found = true, res
+    end)
+    H.ok(done_found, "a non-zero exit with output still calls back")
+    H.eq(#delivered_found, 1, "and is parsed as a finding, not treated as a failure")
+
+    package.loaded["language.util.job"] = nil
+    vim.fn.executable = orig_executable
+    reload("language.spell.providers.typos")
+    reload("language.spell.providers.cspell")
+    reload("language.spell.providers.codespell")
+  end
+
   -- spell providers/custom.lua: the escape-hatch CLI contract ---------------
   local custom = require("language.spell.providers.custom")
   H.falsy(custom.available({}), "no providers.custom configured: unavailable")

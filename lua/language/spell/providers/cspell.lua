@@ -14,6 +14,7 @@ require("language.spell.@types")
 local fn = vim.fn
 local job = require("language.util.job")
 local putil = require("language.spell.providers.util")
+local notify = require("lib.nvim.notify").create("[language.spell]")
 
 local M = {}
 
@@ -83,7 +84,20 @@ function M.scan_async(scope, _cfg, cb)
   return job.run(argv, {
     cwd = base,
     timeout_ms = 30000,
-    on_done = function(_ok, out, _err)
+    on_done = function(ok, out, err)
+      -- cspell exits non-zero when it finds issues (see header), so exit
+      -- code alone can't tell a real failure apart from a normal "found
+      -- something" run. But a real failure (timeout, the process never
+      -- starting, a crash) also leaves stdout empty -- and an empty result
+      -- from *that* is indistinguishable from a genuinely clean tree
+      -- (ERR-11) unless it's reported here.
+      if not ok and out == "" then
+        notify.warn(
+          ("cspell: scan produced no output (%s); results may be incomplete"):format(
+            err ~= "" and err or "unknown failure"
+          )
+        )
+      end
       cb(M.parse(out or "", base))
     end,
   })
