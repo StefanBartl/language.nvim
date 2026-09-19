@@ -121,9 +121,12 @@ return function(H)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { BAD })
   spell.run(nil, { kind = "buffer", bufnr = buf })
   local cache = require("language.spell.core.cache")
-  H.ok(cache.get(buf) ~= nil, "the native cache is populated for the open session")
+  -- cache.get() needs the same cfg used at scan time (PERF-46: the config
+  -- knobs that affect the scan are part of the cache key).
+  local spell_cfg = require("language.config").get().spell
+  H.ok(cache.get(buf, spell_cfg) ~= nil, "the native cache is populated for the open session")
   spell.on_buf_delete(buf)
-  H.eq(cache.get(buf), nil, "on_buf_delete() invalidates the cache")
+  H.eq(cache.get(buf, spell_cfg), nil, "on_buf_delete() invalidates the cache")
   local ok_clear = pcall(spell.clear)
   H.ok(ok_clear, "clear() after on_buf_delete() does not error")
 

@@ -122,12 +122,12 @@ end
 ---@return LanguageSpellIssue[]
 local function native_cached(scope, cfg)
   if scope.kind == "buffer" and scope.bufnr then
-    local hit = cache.get(scope.bufnr)
+    local hit = cache.get(scope.bufnr, cfg)
     if hit then
       return hit
     end
     local issues = native.scan_scope(scope, cfg)
-    cache.set(scope.bufnr, issues)
+    cache.set(scope.bufnr, issues, cfg)
     return issues
   end
   return native.scan_scope(scope, cfg)
