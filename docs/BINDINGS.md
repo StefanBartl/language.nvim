@@ -94,6 +94,11 @@ string themselves rather than composer's bound positional args, since the
 grammar classifies tokens by shape in any order (scope word, `path=<p>`,
 `--flag[=value]`, or the bare language code), not strict positional slots.
 
+Likewise, a positional token on `:Translate`/`:TranslateReplace` that is
+neither the language nor a recognized scope word — most often a typo such as
+`selction` for `selection` — is now a reported error instead of being
+silently dropped and falling through to the default (whole-buffer) scope.
+
 ## Autocmds
 
 All grouped under the `language_nvim` augroup (`lua/language/bindings/autocmds/init.lua`).
