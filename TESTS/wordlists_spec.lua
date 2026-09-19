@@ -38,6 +38,14 @@ return function(H)
   end)
   H.falsy((vim.spell.check(WORD2)[1] or {})[1] == WORD2, "the second list's word is applied too")
 
+  -- SEC-35: an entry containing `|` must not chain a second Ex command -- it
+  -- is passed as a real API argument (table-form vim.cmd), never spliced
+  -- into a command string.
+  vim.g.sec35_extra_dict_leaked = nil
+  extra.ensure({ injection = { "evil|let g:sec35_extra_dict_leaked=1" } })
+  vim.wait(200)
+  H.falsy(vim.g.sec35_extra_dict_leaked, "the '|' did not chain a second Ex command")
+
   -- programming_dict: loads the bundled wordlist, once ------------------------
   local prog = require("language.spell.programming_dict")
   local words = require("language.spell.data.programming")

@@ -26,8 +26,11 @@ function M.ensure()
 
   vim.schedule(function()
     for _, w in ipairs(words) do
+      -- Table form passes `w` as a real argv element, not a string spliced
+      -- into a command line -- see spell/extra_dict.lua / spell/core/
+      -- actions.lua's `add_to_dict` for the same fix and its rationale.
       pcall(function()
-        vim.cmd("silent spellgood! " .. w)
+        vim.cmd({ cmd = "spellgood", bang = true, args = { w }, mods = { silent = true } })
       end)
     end
   end)
