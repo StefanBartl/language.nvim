@@ -139,6 +139,21 @@ return function(H)
   end
   H.ok(vim.tbl_contains(words, BAD), "the flagged word from note.md is in the tree-wide result")
 
+  -- scan_tree: a single-file path that does not exist (ERR-11) -- still
+  -- delivers an empty result rather than erroring, but that emptiness is
+  -- no longer indistinguishable from a clean scan (a warning is raised,
+  -- not asserted here since this suite has no notify stub).
+  local missing_done, missing_issues = false, nil
+  native.scan_tree(
+    { kind = "path", path = unloaded_dir .. "/does-not-exist.md" },
+    base_cfg(),
+    function(res)
+      missing_done, missing_issues = true, res
+    end
+  )
+  H.ok(missing_done, "a missing path still calls back synchronously")
+  H.eq(#missing_issues, 0, "with an empty (not crashing) result")
+
   cleanup()
 
   -- suggest() ----------------------------------------------------------------
