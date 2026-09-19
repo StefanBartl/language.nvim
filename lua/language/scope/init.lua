@@ -10,6 +10,7 @@
 require("language.@types")
 
 local api = vim.api
+local expand_path = require("lib.nvim.cross.fs.expand_path")
 
 local M = {}
 
@@ -137,7 +138,11 @@ function M.parse(tokens, ctx)
   for _, tok in ipairs(tokens or {}) do
     local path = tok:match("^path=(.+)$")
     if path then
-      scope = { kind = "path", path = vim.fn.expand(path) }
+      -- `vim.fn.expand()` is Vim filename expansion: a backtick span runs as
+      -- a shell command substitution, and `%`/`#`/`<cfile>`/`<cword>` are
+      -- specials -- none of that is wanted on a `path=` token typed on a
+      -- command line. Only `~` and env vars are; `expand_path` does just that.
+      scope = { kind = "path", path = expand_path(path) }
     elseif SCOPE_WORDS[tok] then
       if tok == "visible" then
         local s, e = visible_range()
