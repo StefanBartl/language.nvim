@@ -98,10 +98,12 @@ end
 ---Deliver one file's translation according to `mode`.
 ---@param mode string
 ---@param abs string
+---@param original string[]  content read before the request was sent; used to
+---                           detect a concurrent edit in `replace` mode
 ---@param result string[]
 ---@param target string
----@return string|nil written_path, integer|nil bufnr
-local function deliver(mode, abs, result, target)
+---@return string|nil written_path, integer|nil bufnr, string|nil err
+local function deliver(mode, abs, original, result, target)
   if mode == "buffers" then
     local buf = api.nvim_create_buf(true, false)
     api.nvim_buf_set_lines(buf, 0, -1, false, result)
@@ -110,14 +112,30 @@ local function deliver(mode, abs, result, target)
     if ft then
       vim.bo[buf].filetype = ft
     end
-    return nil, buf
+    return nil, buf, nil
   elseif mode == "replace" then
-    pcall(fn.writefile, result, abs)
-    return abs, nil
+    -- Re-verify against the current on-disk content immediately before
+    -- overwriting: the request was a network round trip, so the file may
+    -- have changed on disk since `original` was read for it.
+    local ok_read, current = pcall(fn.readfile, abs)
+    if not ok_read or type(current) ~= "table" then
+      return nil, nil, "cannot re-read before write: " .. abs
+    end
+    if #current ~= #original or table.concat(current, "\n") ~= table.concat(original, "\n") then
+      return nil, nil, "skipped, file changed on disk during translation: " .. abs
+    end
+    local ok_write, code = pcall(fn.writefile, result, abs)
+    if not ok_write or code == -1 then
+      return nil, nil, "failed to write " .. abs
+    end
+    return abs, nil, nil
   else -- suffix
     local dst = suffix_path(abs, target)
-    pcall(fn.writefile, result, dst)
-    return dst, nil
+    local ok_write, code = pcall(fn.writefile, result, dst)
+    if not ok_write or code == -1 then
+      return nil, nil, "failed to write " .. dst
+    end
+    return dst, nil, nil
   end
 end
 
@@ -132,12 +150,13 @@ function M.process(provider, picked, target, mode, on_done)
   local prog = require("lib.nvim.progress").create({ title = "[language]" })
   local c = cfg()
   local i = 0
+  local done_count = 0
   local first_buf_shown = false
 
   local function step()
     i = i + 1
     if i > #picked then
-      prog:finish(("translated %d file(s) → %s"):format(#picked, target))
+      prog:finish(("translated %d/%d file(s) → %s"):format(done_count, #picked, target))
       if on_done then
         on_done()
       end
@@ -147,23 +166,29 @@ function M.process(provider, picked, target, mode, on_done)
 
     local ok, lines = pcall(fn.readfile, picked[i].abs)
     if not ok or type(lines) ~= "table" then
+      notify.error(("cannot read %s, skipped"):format(picked[i].rel))
       vim.schedule(step)
       return
     end
 
     provider.translate(lines, target, nil, c, function(ok2, result)
       if ok2 and type(result) == "table" then
-        local written, buf = deliver(mode, picked[i].abs, result, target)
-        if mode == "buffers" and buf and not first_buf_shown then
-          -- Show the first translated buffer; the rest stay listed.
-          pcall(api.nvim_set_current_buf, buf)
-          first_buf_shown = true
+        local written, buf, derr = deliver(mode, picked[i].abs, lines, result, target)
+        if derr then
+          notify.error(("translate write failed: %s (%s)"):format(picked[i].rel, derr))
+        else
+          done_count = done_count + 1
+          if mode == "buffers" and buf and not first_buf_shown then
+            -- Show the first translated buffer; the rest stay listed.
+            pcall(api.nvim_set_current_buf, buf)
+            first_buf_shown = true
+          end
+          require("language.translate.history").record({
+            input = { picked[i].rel },
+            output = written and { written } or result,
+            target = target,
+          })
         end
-        require("language.translate.history").record({
-          input = { picked[i].rel },
-          output = written and { written } or result,
-          target = target,
-        })
       else
         notify.error(("translate failed: %s (%s)"):format(picked[i].rel, tostring(result)))
       end

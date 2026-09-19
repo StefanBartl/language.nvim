@@ -80,6 +80,36 @@ return function(H)
   H.ok(done2, "replace mode completes")
   H.eq(H.read(dir .. "/a.md"), "TRANSLATED: hello", "the original file is overwritten")
 
+  -- process(): ERR-30 -- a file that changed on disk while its translation
+  -- was "in flight" is not blindly overwritten in replace mode.
+  vim.fn.writefile({ "hello" }, dir .. "/a.md")
+  local racing_provider = {
+    translate = function(lines, _target, _source, _pcfg, cb)
+      -- Simulate a concurrent edit landing during the (here: instant) request.
+      vim.fn.writefile({ "edited concurrently" }, dir .. "/a.md")
+      cb(true, { "TRANSLATED: " .. table.concat(lines, " ") })
+    end,
+  }
+  local done_race = false
+  files.process(
+    racing_provider,
+    { { rel = "a.md", abs = dir .. "/a.md" } },
+    "DE",
+    "replace",
+    function()
+      done_race = true
+    end
+  )
+  vim.wait(1000, function()
+    return done_race
+  end)
+  H.ok(done_race, "process() still completes after a stale write is skipped")
+  H.eq(
+    H.read(dir .. "/a.md"),
+    "edited concurrently",
+    "the concurrent edit survives -- the stale translation was not written over it"
+  )
+
   -- process(): "buffers" mode opens a scratch buffer, writes nothing to disk -
   local before_bufs = #vim.api.nvim_list_bufs()
   vim.fn.writefile({ "hello" }, dir .. "/a.md") -- restore for a clean assertion below
