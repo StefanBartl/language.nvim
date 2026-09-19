@@ -30,6 +30,7 @@ local state = {
   starting = false,
   resolving = false,
   resolved = false,
+  warned = false,
   entry = nil, ---@type string|nil   cspell-lib dist/index.js
   cwd = nil, ---@type string|nil     node_modules dir containing cspell-lib
   next_id = 0,
@@ -44,6 +45,20 @@ local state = {
 ---@return boolean
 function M.available()
   return fn.executable("node") == 1 and fn.executable("cspell") == 1 and not state.failed
+end
+
+---@internal
+---Warn once per session that the sidecar is not contributing issues, so a
+---dead/struggling sidecar does not spam a notification on every debounced
+---re-scan while the user still learns their configured checker isn't running.
+---@param msg string
+---@return nil
+local function warn_once(msg)
+  if state.warned then
+    return
+  end
+  state.warned = true
+  require("lib.nvim.notify").create("[language.spell]").warn(msg)
 end
 
 -- ── Resolution: find cspell-lib's entry + a cwd where its dicts resolve ──────
@@ -212,9 +227,14 @@ local function ensure_started(cfg, cb)
         state.ready = false
         state.jid = nil
         -- Drop any waiting requests.
+        local dropped_any = false
         for id, pcb in pairs(state.pending) do
           state.pending[id] = nil
+          dropped_any = true
           pcb({})
+        end
+        if dropped_any then
+          warn_once("cspell server: process exited -- showing results from other providers only")
         end
       end,
     })
@@ -254,6 +274,7 @@ function M.check(scope, cfg, cb)
     end
     local bufnr = scope.bufnr or api.nvim_get_current_buf()
     if not ok or not (state.jid and api.nvim_buf_is_valid(bufnr)) then
+      warn_once("cspell server: not running -- showing results from other providers only")
       cb({})
       return
     end
@@ -268,13 +289,19 @@ function M.check(scope, cfg, cb)
     end
 
     local timer = vim.uv.new_timer()
-    state.pending[id] = function(raw_issues)
+
+    ---@internal
+    local function close_timer()
       if timer then
+        timer:stop()
         pcall(function()
-          timer:stop()
           timer:close()
         end)
       end
+    end
+
+    state.pending[id] = function(raw_issues)
+      close_timer()
       ---@type LanguageSpellIssue[]
       local out = {}
       for _, is in ipairs(raw_issues) do
@@ -296,6 +323,8 @@ function M.check(scope, cfg, cb)
         vim.schedule(function()
           if state.pending[id] then
             state.pending[id] = nil
+            close_timer()
+            warn_once("cspell server: check timed out -- showing results from other providers only")
             cb({})
           end
         end)
