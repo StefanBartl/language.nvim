@@ -19,6 +19,7 @@ local api = vim.api
 local fn = vim.fn
 
 local split = require("language.spell.core.split")
+local notify = require("lib.nvim.notify").create("[language.spell]")
 
 local M = {}
 
@@ -305,17 +306,19 @@ end
 ---@param path string
 ---@param out LanguageSpellIssue[]
 ---@param cfg LanguageSpellCfg
----@return nil
+---@return boolean ok
+---@return string|nil err  reason nothing was collected, when `ok` is false
 local function collect_file(path, out, cfg)
   if fn.filereadable(path) ~= 1 then
-    return
+    return false, "not readable: " .. path
   end
   local ok, lines = pcall(fn.readfile, path)
   if not ok or type(lines) ~= "table" then
-    return
+    return false, "failed to read " .. path .. ": " .. tostring(lines)
   end
   -- Unloaded files have no attached parser; scan all text (no region predicate).
   scan_lines(lines, 1, nil, path, out, cfg, nil)
+  return true, nil
 end
 
 ---@internal
@@ -376,7 +379,7 @@ local TREE_MAX_BYTES = 5 * 1024 * 1024
 local function gather_tree_files(dir)
   ---@type string[]
   local out = {}
-  pcall(function()
+  local ok, err = pcall(function()
     for name, typ in vim.fs.dir(dir, { depth = 24 }) do
       if typ == "file" then
         local skip = false
@@ -393,6 +396,17 @@ local function gather_tree_files(dir)
       end
     end
   end)
+  if not ok then
+    -- A failure mid-walk (permissions, a vanishing entry, …) would otherwise
+    -- yield a silently truncated file list indistinguishable from "this is
+    -- the whole tree".
+    notify.warn(
+      ("directory walk under %s stopped early (%s); results may be incomplete"):format(
+        dir,
+        tostring(err)
+      )
+    )
+  end
   return out
 end
 
@@ -467,7 +481,12 @@ function M.scan_tree(scope, cfg, cb)
   if scope.kind == "path" and scope.path and fn.isdirectory(scope.path) == 0 then
     ---@type LanguageSpellIssue[]
     local out = {}
-    collect_file(scope.path, out, cfg)
+    local ok, err = collect_file(scope.path, out, cfg)
+    if not ok then
+      -- Otherwise indistinguishable from "this path is clean": the scope
+      -- was never actually opened.
+      notify.warn(err)
+    end
     cb(out)
     return nil
   end
