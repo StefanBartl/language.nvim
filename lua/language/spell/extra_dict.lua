@@ -44,8 +44,13 @@ function M.ensure(wordlists)
   vim.schedule(function()
     for _, w in ipairs(pending) do
       if type(w) == "string" and w ~= "" then
+        -- Table form passes `w` as a real argv element, not a string spliced
+        -- into a command line -- a caller-supplied wordlist entry containing
+        -- e.g. `|` must not be able to chain a second Ex command the way
+        -- `"...spellgood! " .. w` would have allowed. Same fix already
+        -- applied in spell/core/actions.lua's `add_to_dict`.
         pcall(function()
-          vim.cmd("silent spellgood! " .. w)
+          vim.cmd({ cmd = "spellgood", bang = true, args = { w }, mods = { silent = true } })
         end)
       end
     end
