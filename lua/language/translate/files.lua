@@ -42,7 +42,13 @@ local function cfg()
   return require("language.config").get().translate
 end
 
----Gather translatable files (by extension + size) under `dir`.
+---Gather translatable files (by extension + size) under `dir`. Public for
+---testing.
+---
+---A walk that fails partway (permissions, a vanishing entry, …) would
+---otherwise yield a silently truncated file list indistinguishable from
+---"this is every matching file" (ERR-11) -- same failure already fixed in
+---spell/providers/native.lua's `gather_tree_files`, same fix here.
 ---@param dir string
 ---@param c LanguageTranslateCfg
 ---@return { rel: string, abs: string }[]
@@ -55,7 +61,7 @@ function M.gather(dir, c)
 
   ---@type { rel: string, abs: string }[]
   local out = {}
-  pcall(function()
+  local ok, err = pcall(function()
     for name, typ in vim.fs.dir(dir, { depth = 24 }) do
       if typ == "file" then
         local skip = false
@@ -76,6 +82,14 @@ function M.gather(dir, c)
       end
     end
   end)
+  if not ok then
+    notify.warn(
+      ("directory walk under %s stopped early (%s); the file list may be incomplete"):format(
+        dir,
+        tostring(err)
+      )
+    )
+  end
   table.sort(out, function(a, b)
     return a.rel < b.rel
   end)
