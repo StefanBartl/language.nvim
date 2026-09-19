@@ -161,7 +161,11 @@ holds).
     re-verified against its on-disk content immediately before it is
     overwritten; a file that changed during its (sequential, one-at-a-time)
     translation is skipped rather than overwritten, and the final summary
-    counts files actually written, not files picked.
+    counts files actually written, not files picked. If the directory walk
+    that gathers translatable files fails partway (permissions, a vanishing
+    entry, …), the file list may be incomplete rather than "this directory
+    has nothing to translate" going unremarked; a notify warning names the
+    directory and the reason.
 
 ==============================================================================
 5. SCOPING                                                   *language-scoping*
@@ -202,6 +206,11 @@ or `spell.max_file_lines`.
                 cwd/path scopes when available.
     cspell,     external CLIs (opt-in) for cwd/path scopes.
     codespell
+    All three exit non-zero on a normal "found something" run, so a
+    genuine failure (the process times out, never starts, or crashes) is
+    told apart by producing no output at all rather than by its exit code;
+    that case is reported via notify instead of showing as a clean 0-issue
+    scan.
     cspell_server  a persistent Node sidecar that keeps cspell-lib loaded, for
                 fast, code-aware, live buffer checks (needs node + cspell). Opt
                 in by adding "cspell_server" to `spell.providers.buffer`. If it
@@ -313,7 +322,10 @@ source or language. >lua
 The word's span is re-verified right before the replacement is written; if
 the text under it changed while the lookup/menu was open (an edit elsewhere,
 another window), the replacement is discarded and reported instead of being
-written over unrelated text.
+written over unrelated text. A lookup failure (the request fails, or
+`thesaurus.custom` throws) is reported via notify rather than read as "no
+synonyms for this word" -- the same distinction the CLI spell providers make
+between a genuinely clean result and a broken one.
 Live scanning~
 Set `spell.live = true` for always-on inline diagnostics that update as you
 edit (debounced by `scan_debounce_ms`). It is decoupled from the panel and runs
