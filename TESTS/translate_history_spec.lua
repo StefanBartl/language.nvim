@@ -63,6 +63,20 @@ return function(H)
   H.eq(#history.entries(), 0, "clear() empties the ring")
   H.eq(H.read(hist_file), "[]", "and persists the empty ring to disk")
 
+  -- Corrupt persisted file (ERR-11): a decode failure must not look like a
+  -- missing file -- the ring loads empty rather than erroring, but the raw
+  -- bytes are backed up so the next record()'s whole-file rewrite does not
+  -- silently discard them.
+  local corrupt_file = dir .. "/corrupt_history.json"
+  vim.fn.writefile({ "{not valid json" }, corrupt_file)
+  config.setup({
+    translate = { history = { enable = true, max = 3, persist = true, file = corrupt_file } },
+  })
+  package.loaded["language.translate.history"] = nil
+  local corrupt_history = require("language.translate.history")
+  H.eq(#corrupt_history.entries(), 0, "a corrupt file loads as an empty ring, not an error")
+  H.ok(vim.fn.filereadable(corrupt_file .. ".corrupt") == 1, "the corrupt bytes are backed up")
+
   -- disabled: record() is a no-op ---------------------------------------------
   config.setup({ translate = { history = { enable = false, max = 3, persist = false, file = "" } } })
   package.loaded["language.translate.history"] = nil
