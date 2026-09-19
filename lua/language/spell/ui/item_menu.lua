@@ -131,11 +131,8 @@ function M._items(issue, on_done)
       id = "ignore_persistent",
       label = "Ignore (persistent)",
       action = function()
-        done_msg(
-          ignore.add_persistent(issue.word),
-          nil,
-          ("Ignoring '%s' permanently"):format(issue.word)
-        )
+        local ok, err = ignore.add_persistent(issue.word)
+        done_msg(ok, err, ("Ignoring '%s' permanently"):format(issue.word))
       end,
     },
     {
@@ -210,11 +207,8 @@ function M._items(issue, on_done)
         id = "add_dict",
         label = "Add to dictionary",
         action = function()
-          done_msg(
-            actions.add_to_dict(issue.word),
-            nil,
-            ("Added '%s' to dictionary"):format(issue.word)
-          )
+          local ok, err = actions.add_to_dict(issue.word)
+          done_msg(ok, err, ("Added '%s' to dictionary"):format(issue.word))
         end,
       },
     }
