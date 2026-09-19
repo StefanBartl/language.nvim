@@ -142,8 +142,28 @@ function M.replace_under_cursor(nth)
 
   ---@param item string
   local function apply(item)
-    if type(item) == "string" and item ~= "" and api.nvim_buf_is_valid(bufnr) then
-      pcall(api.nvim_buf_set_text, bufnr, sr, sc, er, ec, { item })
+    if type(item) ~= "string" or item == "" then
+      return
+    end
+    if not api.nvim_buf_is_valid(bufnr) then
+      notify.warn("Replacement discarded: the buffer no longer exists")
+      return
+    end
+    -- The span was captured before the lookup + menu wait, both unbounded by
+    -- anything but the user; re-verify it still holds `word` right before
+    -- writing -- same reasoning as spell/core/actions.lua's `replace_at`.
+    local ok_get, current = pcall(api.nvim_buf_get_text, bufnr, sr, sc, er, ec, {})
+    if not ok_get then
+      notify.warn("Replacement discarded: the position is no longer valid")
+      return
+    end
+    if table.concat(current, "\n") ~= word then
+      notify.warn(("Replacement discarded: '%s' is no longer there"):format(word))
+      return
+    end
+    local ok_set, err = pcall(api.nvim_buf_set_text, bufnr, sr, sc, er, ec, { item })
+    if not ok_set then
+      notify.error("Could not apply replacement: " .. tostring(err))
     end
   end
 
