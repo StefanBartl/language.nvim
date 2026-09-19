@@ -68,7 +68,10 @@ Each command is its own lib.nvim.bindings.usercmd.composer verb (a flat root rou
 no subcommand tree). An unrecognized `--flag` on :Translate/:TranslateReplace
 now reports a clear error instead of being silently ignored, as it was
 before this command layer was rebuilt on the composer; dispatch for valid
-input is otherwise unchanged.
+input is otherwise unchanged. Likewise, a positional token that is neither
+the language nor a recognized scope word (typically a typo, e.g. `selction`
+for `selection`) is reported as an error rather than silently dropped and
+defaulting to the whole-buffer scope.
 
                                                                    *:Spellcheck*
 :Spellcheck [lang] [scope|verb]
@@ -121,6 +124,10 @@ input is otherwise unchanged.
         :TranslateReplace EN --nocode
         :TranslateReplace DE cwd       " pick files, overwrite in place
 <
+    The target span/file is re-verified against its current content
+    immediately before writing; if it changed while the translation was in
+    flight (an edit elsewhere, another process touching the file), the write
+    is skipped and reported rather than blindly overwriting newer content.
 Both :Translate and :TranslateReplace preserve each line's leading indentation
 across the round trip: providers (notably Google's `gtx` endpoint) normalize
 away leading whitespace, so a translated list item like `    - foo` would
@@ -150,7 +157,11 @@ holds).
     `:Translate … --files=<mode>` overrides `translate.files.output` for one
     call; `:TranslateReplace … cwd|path=<dir>` always forces `replace`.
     Note: `--nocode` code-skipping applies to buffer/selection translation,
-    not to whole-file translation.
+    not to whole-file translation. In `replace` mode, each file is
+    re-verified against its on-disk content immediately before it is
+    overwritten; a file that changed during its (sequential, one-at-a-time)
+    translation is skipped rather than overwritten, and the final summary
+    counts files actually written, not files picked.
 
 ==============================================================================
 5. SCOPING                                                   *language-scoping*
@@ -163,6 +174,10 @@ arguments:
     cwd         recursively across the working directory (always async)
     path=<p>    a file OR a directory (recursive)
     selection   a visual/line range (mainly for :Translate)
+
+`path=<p>` expands `~` and environment variables only (not Vim's `%`/`#`/
+`<cfile>`/`<cword>` specials, and no shell/backtick command substitution) —
+exactly what a path typed on a command line needs, nothing more.
 
 For cwd/path scopes with many files, an external CLI spell provider is
 preferred (one process over the tree, fastest); otherwise the native scanner
@@ -189,7 +204,11 @@ or `spell.max_file_lines`.
     codespell
     cspell_server  a persistent Node sidecar that keeps cspell-lib loaded, for
                 fast, code-aware, live buffer checks (needs node + cspell). Opt
-                in by adding "cspell_server" to `spell.providers.buffer`.
+                in by adding "cspell_server" to `spell.providers.buffer`. If it
+                never starts, dies, or a check exceeds its ~6s guard, the
+                other configured providers' results are still shown; a
+                one-time-per-session notify warns that cspell's own
+                contribution is missing, rather than that being silent.
     harper/ltex grammar diagnostics from a running language server are
                 harvested and shown alongside spelling issues (kind = grammar).
     custom      escape hatch for a checker without a bundled adapter (cwd/path
@@ -198,7 +217,10 @@ or `spell.max_file_lines`.
                 add "custom" to `spell.providers.cwd`. `parse` returns a list of
                 `{ path, lnum, col, end_col?, word, kind?, message?,
                 suggestions? }`; `bufnr`/`source` are filled in automatically.
-                Mirrors `translate.custom`.
+                Mirrors `translate.custom`. A `cmd`/`parse` that throws,
+                returns the wrong shape, or whose entries are missing
+                `word`/`path` is reported via notify rather than read as a
+                clean (issue-free) scan.
 
 Which providers run per scope is controlled by `spell.providers` (see
 |language-config|).
@@ -288,6 +310,10 @@ source or language. >lua
       thesaurus = { keymap = "<leader>sy" },  -- opt-in
     })
 <
+The word's span is re-verified right before the replacement is written; if
+the text under it changed while the lookup/menu was open (an edit elsewhere,
+another window), the replacement is discarded and reported instead of being
+written over unrelated text.
 Live scanning~
 Set `spell.live = true` for always-on inline diagnostics that update as you
 edit (debounced by `scan_debounce_ms`). It is decoupled from the panel and runs
