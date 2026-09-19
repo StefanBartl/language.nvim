@@ -33,6 +33,12 @@ return function(H)
   H.eq(p.kind, "path", "path= is its own scope kind")
   H.excludes(p.path, "~", "and the path is expanded, not passed through")
 
+  -- SEC-34: a backtick span in the path must never run as a shell command
+  -- substitution -- vim.fn.expand() would do exactly that; expand_path()
+  -- only expands `~` and env vars, leaving everything else literal.
+  local injected = scope.parse({ "path=`echo pwned`/x.md" }, { bufnr = buf })
+  H.contains(injected.path, "`echo pwned`", "a backtick span is left literal, not shelled out")
+
   -- Leftover tokens ------------------------------------------------------------
   -- The caller's own arguments have to survive: `:Spellcheck de buffer` is a
   -- language *and* a scope, and the language must come back untouched.
