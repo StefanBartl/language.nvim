@@ -165,6 +165,29 @@ return function(H)
     "nth out of range: reported, not clamped to the nearest valid index"
   )
 
+  -- replace_under_cursor(): ERR-30 -- a concurrent edit to the exact span,
+  -- landing while the lookup was "in flight", is not blindly overwritten.
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "quick fox" })
+  config.setup({
+    thesaurus = {
+      enable = true,
+      source = "custom",
+      custom = function(_w, cb)
+        -- Simulate a concurrent edit to the exact word span before the
+        -- lookup resolves.
+        vim.api.nvim_buf_set_text(buf, 0, 0, 0, 5, { "other" })
+        cb({ "speedy" })
+      end,
+    },
+  })
+  vim.api.nvim_win_set_cursor(0, { 1, 0 }) -- inside "quick"
+  thesaurus.replace_under_cursor(1)
+  H.eq(
+    vim.api.nvim_buf_get_lines(buf, 0, -1, false)[1],
+    "other fox",
+    "the concurrent edit survives -- the stale synonym was discarded, not written over it"
+  )
+
   vim.api.nvim_buf_delete(buf, { force = true })
   package.loaded["language.util.job"] = nil
   package.loaded["language.thesaurus"] = nil
