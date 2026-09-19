@@ -7,6 +7,7 @@
 --- record. Idea from vim-translator's query history.
 
 local json = require("lib.nvim.fs.json")
+local notify = require("lib.nvim.notify").create("[language.translate]")
 
 local M = {}
 
@@ -33,6 +34,13 @@ end
 
 ---@internal
 ---Load persisted history into the ring (once).
+---
+---A decode failure on an existing file is not the same situation as no
+---file at all: `record()` always rewrites the WHOLE file via `save`, so
+---falling straight through to an empty ring here would let the very next
+---`record()` silently replace a corrupt-but-recoverable file with a fresh
+---one-entry history. The raw bytes are backed up once so that never loses
+---the prior content without a trace.
 ---@return Language.TranslateHistoryEntry[]
 local function ensure_loaded()
   if ring then
@@ -41,9 +49,15 @@ local function ensure_loaded()
   ring = {}
   local h = hcfg()
   if h.persist and h.file and vim.fn.filereadable(h.file) == 1 then
-    local decoded = json.read(h.file)
+    local decoded, err = json.read(h.file)
     if type(decoded) == "table" then
       ring = decoded
+    elseif err then
+      local ok_backup, raw = pcall(vim.fn.readfile, h.file)
+      if ok_backup and type(raw) == "table" then
+        pcall(vim.fn.writefile, raw, h.file .. ".corrupt")
+      end
+      notify.warn(("translation history is corrupt, backed up to %s.corrupt"):format(h.file))
     end
   end
   return ring
