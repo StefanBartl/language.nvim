@@ -15,6 +15,7 @@ require("language.spell.@types")
 
 local job = require("language.util.job")
 local putil = require("language.spell.providers.util")
+local notify = require("lib.nvim.notify").create("[language.spell]")
 
 local M = {}
 
@@ -50,6 +51,12 @@ function M.scan_async(scope, cfg, cb)
 
   local ok_cmd, argv = pcall(custom.cmd, scope, cfg)
   if not ok_cmd or type(argv) ~= "table" or #argv == 0 then
+    -- A broken adapter must not read as "no spelling issues" -- that is the
+    -- one outcome indistinguishable from a genuinely clean scan.
+    notify.error(
+      ok_cmd and "spell.providers.custom.cmd did not return an argv list"
+        or ("spell.providers.custom.cmd failed: %s"):format(tostring(argv))
+    )
     cb({})
     return nil
   end
@@ -64,12 +71,17 @@ function M.scan_async(scope, cfg, cb)
     on_done = function(_ok, out, _err)
       local ok_parse, parsed = pcall(custom.parse, out or "", base)
       if not ok_parse or type(parsed) ~= "table" then
+        notify.error(
+          ok_parse and "spell.providers.custom.parse did not return a list"
+            or ("spell.providers.custom.parse failed: %s"):format(tostring(parsed))
+        )
         cb({})
         return
       end
 
       ---@type LanguageSpellIssue[]
       local issues = {}
+      local dropped = 0
       for _, item in ipairs(parsed) do
         if
           type(item) == "table"
@@ -90,7 +102,20 @@ function M.scan_async(scope, cfg, cb)
             message = item.message,
             suggestions = item.suggestions,
           }
+        else
+          dropped = dropped + 1
         end
+      end
+      -- Entries with the wrong shape (e.g. missing word/path) were silently
+      -- dropped before; a count at least tells the user their `parse` is
+      -- producing something, just not the right shape.
+      if dropped > 0 then
+        notify.warn(
+          ("spell.providers.custom.parse: dropped %d malformed entr%s (need word + path)"):format(
+            dropped,
+            dropped == 1 and "y" or "ies"
+          )
+        )
       end
       cb(issues)
     end,

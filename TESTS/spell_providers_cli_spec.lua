@@ -122,6 +122,65 @@ return function(H)
   H.ok(done_bad, "a cmd() that errors still calls back")
   H.eq(#delivered_bad, 0, "with an empty result")
 
+  -- A parse() that raises, or returns the wrong shape, also degrades to an
+  -- empty result rather than propagating the error (ERR-11: notified, not
+  -- silently indistinguishable from "clean"). `language.util.job` is stubbed
+  -- so this never spawns a real process -- same reasoning the file header
+  -- gives for not depending on external tools being installed.
+  package.loaded["language.util.job"] = {
+    run = function(_, opts)
+      opts.on_done(true, "", "")
+      return nil
+    end,
+  }
+  package.loaded["language.spell.providers.custom"] = nil
+  local custom_stubbed = require("language.spell.providers.custom")
+
+  local done_parse_bad, delivered_parse_bad = false, nil
+  custom_stubbed.scan_async({ kind = "cwd" }, {
+    providers = {
+      custom = {
+        cmd = function()
+          return { "whatever" }
+        end,
+        parse = function()
+          error("parse boom")
+        end,
+      },
+    },
+  }, function(res)
+    done_parse_bad, delivered_parse_bad = true, res
+  end)
+  H.ok(done_parse_bad, "a parse() that errors still calls back")
+  H.eq(#delivered_parse_bad, 0, "with an empty result")
+
+  -- Entries missing word/path are dropped, but well-formed ones alongside
+  -- them still come through.
+  local done_partial, delivered_partial = false, nil
+  custom_stubbed.scan_async({ kind = "cwd" }, {
+    providers = {
+      custom = {
+        cmd = function()
+          return { "whatever" }
+        end,
+        parse = function()
+          return {
+            { word = "teh", path = "/f.txt", lnum = 1 },
+            { word = "no path here" },
+          }
+        end,
+      },
+    },
+  }, function(res)
+    done_partial, delivered_partial = true, res
+  end)
+  H.ok(done_partial, "a partially-malformed parse() result still calls back")
+  H.eq(#delivered_partial, 1, "the malformed entry is dropped, the well-formed one kept")
+  H.eq(delivered_partial[1].word, "teh", "the surviving entry")
+
+  package.loaded["language.util.job"] = nil
+  package.loaded["language.spell.providers.custom"] = nil
+
   -- LSP grammar harvester ------------------------------------------------------
   local lsp = require("language.spell.providers.lsp")
   H.eq(lsp.supports.grammar, true, "declares grammar support")
