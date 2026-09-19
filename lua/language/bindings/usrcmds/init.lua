@@ -22,6 +22,8 @@ local composer = require("lib.nvim.bindings.usercmd.composer")
 
 require("language.config.@types")
 
+local notify = require("lib.nvim.notify").create("[language.translate]")
+
 local M = {}
 
 local SPELL_LANGS = { "en", "de", "fr", "es", "it", "pt", "nl", "en,de" }
@@ -169,6 +171,15 @@ local function dispatch_translate(o, force_output, force_files_mode)
     line2 = o.line2,
     has_range = o.range and o.range > 0,
   })
+
+  -- `rest[1]` is the target language; anything past it is neither a
+  -- recognized scope word nor the language, most likely a typo (e.g.
+  -- "selction" for "selection") -- surfacing it as an error keeps a typo
+  -- from silently falling through to the default (whole-buffer) scope.
+  if rest[2] then
+    notify.error(("unrecognized argument: %s"):format(rest[2]))
+    return
+  end
 
   -- cwd, or path=<directory> → multi-file translation (pick files, then
   -- write per translate.files.output / --files=<mode> / forced mode).
