@@ -44,10 +44,13 @@ return function(H)
   H.eq(#collect.scan({ kind = "buffer", bufnr = buf }, cfg()), 0, "an ignored word is filtered out")
 
   -- scan() caches whole-buffer native results (kind == "buffer" only) -------
+  -- cache.get() needs the same cfg used at scan time (PERF-46: the config
+  -- knobs that affect the scan are part of the cache key).
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "clean text" })
   cache.invalidate(buf)
-  collect.scan({ kind = "buffer", bufnr = buf }, cfg())
-  H.ok(cache.get(buf) ~= nil, "a whole-buffer scan populates the native cache")
+  local scan_cfg = cfg()
+  collect.scan({ kind = "buffer", bufnr = buf }, scan_cfg)
+  H.ok(cache.get(buf, scan_cfg) ~= nil, "a whole-buffer scan populates the native cache")
 
   vim.api.nvim_buf_delete(buf, { force = true })
 
