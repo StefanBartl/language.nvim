@@ -128,6 +128,13 @@ local function on_change()
   if not state.timer then
     state.timer = vim.uv.new_timer()
   end
+  -- `new_timer()` can return nil under libuv handle exhaustion; every other
+  -- timer site in this plugin guards it (spell/live.lua, util/job/init.lua,
+  -- spell/providers/cspell_server.lua) and this one should not be the
+  -- exception that lets a live-translate window go silently unrefreshed.
+  if not state.timer then
+    return
+  end
   state.timer:stop()
   state.timer:start(delay, 0, vim.schedule_wrap(M.refresh))
 end
