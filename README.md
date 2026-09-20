@@ -54,20 +54,20 @@ endpoint work with zero configuration.
 Start at [docs/README.md](docs/README.md), which says what is where and which
 question each page answers.
 
-**The Basics**
+### The Basics
 
 - [Requirements](docs/requirements.md) — Neovim version, required plugins and CLI tools.
 - [Installation](docs/installation.md) — every plugin manager, and how to check that it took.
 - [Quickstart](docs/quickstart.md) — the first thing to run after installing.
 
-**Configuration**
+### Configuration
 
 - [What you get with the defaults](docs/what-you-get.md) — the full command/key surface at a glance.
 - [All options](docs/configuration.md) — every `setup()` option over the defaults in `lua/language/config/DEFAULTS.lua`.
 - [Usage](docs/usage.md) — the command reference: scopes, flags, and how to end each thing again.
 - [Bindings](docs/BINDINGS.md) — every keymap, user command and autocmd, all of them opt-in and carrying a `desc`.
 
-**The Rest**
+### The Rest
 
 - [Features](docs/FEATURES/README.md) — one page per theme: spell, translate, thesaurus, the shared core, and the hover contribution.
 - [Workflow](docs/WORKFLOW.md) — how the pieces combine into a habit, and the two traps: `:Translate` against `:TranslateReplace`, and reading the confirmation before `--files=replace`.
