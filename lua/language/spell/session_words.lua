@@ -64,15 +64,22 @@ local function is_utf8(s)
   return true
 end
 
----The same test `:spellgood` applies (`valid_spell_word()`), because words
----written to the list file directly do not pass through it.
+---The test `:spellgood` applies (`valid_spell_word()`), because words written
+---to the list file directly do not pass through it, plus two entries the
+---handshake in `add_now` cannot take as its first or last word: one that is
+---only blanks (the Ex argument parser refuses it) and one with U+FEFF
+---(`readfile()` strips it, so the line read back never equals the word). Either
+---one there sends the whole batch down the slow path, and as the last word it
+---also re-adds every word before it. Neither is lost: a U+FEFF word is added
+---with the mark, so the plain spelling stays flagged anyway.
 ---@param word any
 ---@return boolean
 local function valid(word)
   return type(word) == "string"
-    and word ~= ""
+    and word:find("%S") ~= nil
     and #word <= MAX_WORD_BYTES
     and not word:find("%c")
+    and not word:find("\239\187\191", 1, true)
     and word:sub(-1) ~= "/"
     and is_utf8(word)
 end
@@ -99,7 +106,13 @@ end
 ---@param last_word string
 ---@return string|nil path
 function M._find_list(last_word)
-  local dir = vim.fn.fnamemodify(vim.fn.tempname(), ":h")
+  local tmp = vim.fn.tempname()
+  if tmp == "" then
+    -- No temp dir: `:spellgood!` made no list file, and `:h` of "" is "." --
+    -- never scan (and append to a file in) the working directory instead.
+    return nil
+  end
+  local dir = vim.fn.fnamemodify(tmp, ":h")
   local suffix = "." .. vim.o.encoding .. ".spl"
   for name, kind in vim.fs.dir(dir) do
     local path = dir .. "/" .. name

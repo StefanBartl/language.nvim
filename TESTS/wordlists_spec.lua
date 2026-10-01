@@ -32,6 +32,17 @@ local function count_spellgood(fn, done)
   })
   local ok, err = pcall(function()
     fn()
+    -- vim.wait tests its condition BEFORE it runs any event: with a `done` that is
+    -- true at once it would return before the flush `fn` scheduled has run, and
+    -- the count would be read too early. The queue is FIFO, so a sentinel
+    -- scheduled now runs after everything `fn` scheduled.
+    local drained = false
+    vim.schedule(function()
+      drained = true
+    end)
+    vim.wait(2000, function()
+      return drained
+    end, 5)
     vim.wait(2000, done, 5)
   end)
   vim.cmd = orig
@@ -93,14 +104,50 @@ return function(H)
   vim.list_extend(batch, mixed, 2)
   local umlaut = "zzqqxxmixedüäö"
   table.insert(batch, #batch, umlaut)
-  session.add(batch)
-  vim.wait(2000, function()
+  -- Counted: a control character that slipped through the filter would be
+  -- written as two lines, the line count check after the last command would
+  -- fail, and the batch would fall back to one command per word.
+  local mixed_calls = count_spellgood(function()
+    session.add(batch)
+  end, function()
     return not flagged(mixed[5])
-  end, 5)
+  end)
+  H.ok(mixed_calls <= 2, ("a batch with invalid entries costs %d commands"):format(mixed_calls))
   for i = 1, 5 do
     H.falsy(flagged(mixed[i]), ("valid word %d next to invalid entries is known"):format(i))
   end
   H.falsy(flagged(umlaut), "a word with multi-byte characters passes the UTF-8 check")
+
+  -- A blank-only entry (the Ex parser refuses it) and one with U+FEFF
+  -- (readfile() strips it) cannot be the first or last word of the batch: the
+  -- handshake would fail, and the whole batch would be added word by word --
+  -- at the last position even twice. They are dropped before the batch is built.
+  for _, edge in ipairs({ "first", "last" }) do
+    for _, trap in ipairs({ "   ", "zzqqxxbom" .. edge .. "\239\187\191" }) do
+      local good = made_up_words("zzqqxxedge" .. edge .. (trap:find("%S") and "bom" or "ws"), 6)
+      local edge_words = vim.deepcopy(good)
+      if edge == "first" then
+        table.insert(edge_words, 1, trap)
+      else
+        edge_words[#edge_words + 1] = trap
+      end
+      local edge_calls = count_spellgood(function()
+        session.add(edge_words)
+      end, function()
+        return not flagged(good[#good])
+      end)
+      H.ok(
+        edge_calls <= 2,
+        ("%q at the %s end of a batch costs %d commands"):format(trap, edge, edge_calls)
+      )
+      for i = 1, #good do
+        H.falsy(
+          flagged(good[i]),
+          ("word %d next to %q at the %s end is known"):format(i, trap, edge)
+        )
+      end
+    end
+  end
 
   -- The list file cannot be found: one command per word, all of them still land.
   local slow = made_up_words("zzqqxxslow", 40)
@@ -143,6 +190,26 @@ return function(H)
     H.falsy(flagged(decoy_words[i]), ("word %d is known despite the wrong list file"):format(i))
   end
 
+  -- No temp dir (tempname() is ""): the lookup must not fall back to the cwd,
+  -- where a file that merely looks like the list would be appended to.
+  local nodir = vim.fn.tempname()
+  vim.fn.mkdir(nodir, "p")
+  local bait = nodir .. "/bait"
+  vim.fn.writefile({ "zzqqxxnotmp" }, bait)
+  vim.fn.writefile({}, bait .. "." .. vim.o.encoding .. ".spl")
+  local old_cwd = vim.fn.getcwd()
+  local real_tempname = vim.fn.tempname
+  vim.cmd.cd(vim.fn.fnameescape(nodir))
+  vim.fn.tempname = function()
+    return ""
+  end
+  local ok_nt, found = pcall(session._find_list, "zzqqxxnotmp")
+  vim.fn.tempname = real_tempname
+  vim.cmd.cd(vim.fn.fnameescape(old_cwd))
+  vim.fn.delete(nodir, "rf")
+  H.ok(ok_nt, "lookup without a temp dir does not error")
+  H.eq(found, nil, "lookup without a temp dir does not scan the cwd")
+
   -- extra_dict: applies once per list name, guards against non-table input --
   local extra = require("language.spell.extra_dict")
 
@@ -161,12 +228,14 @@ return function(H)
   )
 
   -- Idempotent per list name: a second call with the same name is a no-op.
+  -- A DIFFERENT word under the same name: with the same word, the dedup in
+  -- session_words would hide a missing "applied" guard here.
   local again = count_spellgood(function()
-    extra.ensure({ mylist = { WORD } })
+    extra.ensure({ mylist = { "zzqqxxextradictother" } })
   end, function()
     return true
   end)
-  H.eq(again, 0, "an applied list name is not applied again")
+  H.eq(again, 0, "an applied list name is not applied again, whatever its words")
 
   -- A second, distinct list name is applied independently.
   local WORD2 = "zzqqxxextradicttesttwo"
