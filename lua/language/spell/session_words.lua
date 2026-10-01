@@ -36,6 +36,34 @@ local seen = {}
 ---@type boolean
 local scheduled = false
 
+---Well-formed UTF-8: every lead byte followed by the continuation bytes it
+---announces. One malformed line makes the compile of the whole list file give
+---up without a message and without a `.spl` -- and since the line stays in the
+---file, every later `zG` of the session is lost with it.
+---@param s string
+---@return boolean
+local function is_utf8(s)
+  local i, n = 1, #s
+  while i <= n do
+    local lead = s:byte(i)
+    local len = lead < 0x80 and 1
+      or (lead >= 0xC2 and lead <= 0xDF) and 2
+      or (lead >= 0xE0 and lead <= 0xEF) and 3
+      or (lead >= 0xF0 and lead <= 0xF4) and 4
+    if not len or i + len - 1 > n then
+      return false
+    end
+    for j = i + 1, i + len - 1 do
+      local byte = s:byte(j)
+      if byte < 0x80 or byte > 0xBF then
+        return false
+      end
+    end
+    i = i + len
+  end
+  return true
+end
+
 ---The same test `:spellgood` applies (`valid_spell_word()`), because words
 ---written to the list file directly do not pass through it.
 ---@param word any
@@ -46,6 +74,7 @@ local function valid(word)
     and #word <= MAX_WORD_BYTES
     and not word:find("%c")
     and word:sub(-1) ~= "/"
+    and is_utf8(word)
 end
 
 ---@param word string
