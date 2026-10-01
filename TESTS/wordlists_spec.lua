@@ -85,8 +85,14 @@ return function(H)
 
   -- Entries Neovim would refuse are dropped, the rest of the batch still lands.
   local mixed = made_up_words("zzqqxxmixed", 5)
-  local batch = { mixed[1], "", 42, "ctrl\ncharacter", "trailing/" }
+  -- The malformed UTF-8 entry sits in the MIDDLE on purpose: that is the part
+  -- written to the list file without passing `:spellgood`'s own check, and one
+  -- such line makes the compile of the whole file give up silently -- these
+  -- words and every later one of the session would stay unknown.
+  local batch = { mixed[1], "", 42, "ctrl\ncharacter", "trailing/", "zzqqxxbad\255\254utf" }
   vim.list_extend(batch, mixed, 2)
+  local umlaut = "zzqqxxmixedüäö"
+  table.insert(batch, #batch, umlaut)
   session.add(batch)
   vim.wait(2000, function()
     return not flagged(mixed[5])
@@ -94,6 +100,7 @@ return function(H)
   for i = 1, 5 do
     H.falsy(flagged(mixed[i]), ("valid word %d next to invalid entries is known"):format(i))
   end
+  H.falsy(flagged(umlaut), "a word with multi-byte characters passes the UTF-8 check")
 
   -- The list file cannot be found: one command per word, all of them still land.
   local slow = made_up_words("zzqqxxslow", 40)
