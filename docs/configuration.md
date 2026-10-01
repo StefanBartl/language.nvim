@@ -28,6 +28,10 @@ require("language").setup({
     word_split = { enable = true, min_length = 4 }, -- split CamelCase/snake_case into sub-words
     regions = { treesitter_spell = true, skip_urls = true, skip_emails = true },
     programming_dict = false, -- opt-in: technical word list (git, kubernetes, treesitter, …)
+    -- Your own session word lists, e.g. domain or product vocabulary:
+    -- { ["my-list"] = { "word1", "word2" } }. Like `zG`: every 'spelllang',
+    -- gone on exit, your 'spellfile' untouched.
+    extra_wordlists = {},
 
     -- Performance/safety caps
     max_highlights = 100,   -- max inline diagnostics per buffer (panel still shows all of them)

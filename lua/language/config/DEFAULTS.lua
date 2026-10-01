@@ -34,10 +34,10 @@ local defaults = {
     skip_readonly = true, -- do not scan readonly buffers
     -- Only check spellable regions (Treesitter @spell / predicate):
     regions = { treesitter_spell = true, skip_urls = true, skip_emails = true },
-    programming_dict = false, -- opt-in: extra technical wordlist appended to spelllang
+    programming_dict = false, -- opt-in: technical wordlist, added to the session word list
     -- User-supplied session wordlists, applied the same way as
-    -- programming_dict (`:spellgood!`) but independent of it and of
-    -- `spelllang` — e.g. domain vocabulary that keeps getting flagged when
+    -- programming_dict (session word list, like `zG`) but independent of it and
+    -- of `spelllang` — e.g. domain vocabulary that keeps getting flagged when
     -- writing non-English technical prose. { ["my-list"] = { "word1", ... } }
     extra_wordlists = {},
     ui = {
