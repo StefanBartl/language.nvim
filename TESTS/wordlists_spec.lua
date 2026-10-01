@@ -118,18 +118,27 @@ return function(H)
   end
   H.falsy(flagged(umlaut), "a word with multi-byte characters passes the UTF-8 check")
 
-  -- A blank-only entry (the Ex parser refuses it) and one with U+FEFF
-  -- (readfile() strips it) cannot be the first or last word of the batch: the
-  -- handshake would fail, and the whole batch would be added word by word --
-  -- at the last position even twice. They are dropped before the batch is built.
+  -- A blank-only entry (the Ex parser refuses it), one with U+FEFF
+  -- (readfile() strips it) and one with a trailing slash (`:spellgood!` raises
+  -- E1280) cannot be the first or last word of the batch: the handshake would
+  -- fail, and the whole batch would be added word by word -- at the last
+  -- position even twice. They are dropped before the batch is built.
+  -- Every trap is a different string per kind and per end, and has good words of
+  -- its own: session_words dedups over the whole session, so a reused trap would
+  -- be dropped as "seen" the second time and the check would test nothing.
   for _, edge in ipairs({ "first", "last" }) do
-    for _, trap in ipairs({ "   ", "zzqqxxbom" .. edge .. "\239\187\191" }) do
-      local good = made_up_words("zzqqxxedge" .. edge .. (trap:find("%S") and "bom" or "ws"), 6)
+    local traps = {
+      { tag = "ws", word = edge == "first" and "   " or "    " },
+      { tag = "bom", word = "zzqqxxbom" .. edge .. "\239\187\191" },
+      { tag = "slash", word = "zzqqxxslash" .. edge .. "/" },
+    }
+    for _, trap in ipairs(traps) do
+      local good = made_up_words("zzqqxxedge" .. edge .. trap.tag, 6)
       local edge_words = vim.deepcopy(good)
       if edge == "first" then
-        table.insert(edge_words, 1, trap)
+        table.insert(edge_words, 1, trap.word)
       else
-        edge_words[#edge_words + 1] = trap
+        edge_words[#edge_words + 1] = trap.word
       end
       local edge_calls = count_spellgood(function()
         session.add(edge_words)
@@ -138,12 +147,12 @@ return function(H)
       end)
       H.ok(
         edge_calls <= 2,
-        ("%q at the %s end of a batch costs %d commands"):format(trap, edge, edge_calls)
+        ("%q at the %s end of a batch costs %d commands"):format(trap.word, edge, edge_calls)
       )
       for i = 1, #good do
         H.falsy(
           flagged(good[i]),
-          ("word %d next to %q at the %s end is known"):format(i, trap, edge)
+          ("word %d next to %q at the %s end is known"):format(i, trap.word, edge)
         )
       end
     end
