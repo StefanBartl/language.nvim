@@ -393,6 +393,7 @@ Defaults (abridged; see lua/language/config/DEFAULTS.lua): >lua
         word_split = { enable = true, min_length = 4 },
         regions = { treesitter_spell = true, skip_urls = true, skip_emails = true },
         programming_dict = false,
+        extra_wordlists = {},  -- { ["my-list"] = { "word1", ... } }, session-only
         max_highlights = 100, max_file_lines = 20000, skip_readonly = true,
         ui = { view = "picker", preview = true, group_by = "file", dedupe = true },
         dictionary = {

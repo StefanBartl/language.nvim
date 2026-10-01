@@ -1,9 +1,9 @@
 ---@module 'language.spell.extra_dict'
 ---@brief Loads user-supplied session wordlists (`spell.extra_wordlists`).
 ---@description
---- Same mechanism as `programming_dict` (`:spellgood!`, session-only, applied
---- once per list name), but for arbitrary caller-supplied vocabulary instead
---- of the bundled technical list — e.g. domain jargon that keeps getting
+--- Same mechanism as `programming_dict` (the session word list, like `zG`;
+--- applied once per list name), but for arbitrary caller-supplied vocabulary
+--- instead of the bundled technical list — e.g. domain jargon that keeps getting
 --- flagged when writing non-English technical prose (`:Spellcheck de` full of
 --- nvim/Lua identifiers, or a company's product/support terminology). Each
 --- list is independent and named only for idempotency bookkeeping; nothing
@@ -20,8 +20,7 @@ local applied = {}
 
 ---Add every list in `wordlists` to the session dictionary. Idempotent per
 ---list name — calling again with the same names is a no-op for those,
----so callers can call this on every `setup()` without worrying about
----duplicate `:spellgood!` calls.
+---so callers can call this on every `setup()` without adding a word twice.
 ---@param wordlists table<string, string[]>|nil
 ---@return nil
 function M.ensure(wordlists)
@@ -41,20 +40,10 @@ function M.ensure(wordlists)
     return
   end
 
-  vim.schedule(function()
-    for _, w in ipairs(pending) do
-      if type(w) == "string" and w ~= "" then
-        -- Table form passes `w` as a real argv element, not a string spliced
-        -- into a command line -- a caller-supplied wordlist entry containing
-        -- e.g. `|` must not be able to chain a second Ex command the way
-        -- `"...spellgood! " .. w` would have allowed. Same fix already
-        -- applied in spell/core/actions.lua's `add_to_dict`.
-        pcall(function()
-          vim.cmd({ cmd = "spellgood", bang = true, args = { w }, mods = { silent = true } })
-        end)
-      end
-    end
-  end)
+  -- Entries are caller-supplied: session_words drops what is not a usable
+  -- word and never splices one into a command line (an entry containing `|`
+  -- cannot chain a second Ex command).
+  require("language.spell.session_words").add(pending)
 end
 
 return M

@@ -88,10 +88,16 @@ sub-words before checking each one, and restricts checking to
 Treesitter `@spell` regions (comments, strings, prose) so identifiers
 outside those regions never produce false positives. URLs and email
 addresses are skipped. An opt-in programming dictionary
-(git/kubernetes/treesitter/etc. terms) reduces further noise.
+(git/kubernetes/treesitter/etc. terms) reduces further noise, and
+`extra_wordlists` does the same for your own vocabulary.
 
-- **Module:** `spell/core/split.lua`, `spell/core/regions.lua`
-- **Config:** `opts.spell.word_split.enable` (default `true`), `opts.spell.regions.treesitter_spell` (default `true`), `opts.spell.programming_dict` (default `false`)
+Both go into Neovim's session word list, like `zG`: they count for every
+`'spelllang'`, are gone when Neovim exits and never touch your `'spellfile'`.
+The lists are compiled once rather than word by word, so a few hundred words
+cost a few milliseconds at startup.
+
+- **Module:** `spell/core/split.lua`, `spell/core/regions.lua`, `spell/programming_dict.lua`, `spell/extra_dict.lua`, `spell/session_words.lua`
+- **Config:** `opts.spell.word_split.enable` (default `true`), `opts.spell.regions.treesitter_spell` (default `true`), `opts.spell.programming_dict` (default `false`), `opts.spell.extra_wordlists` (default `{}`)
 
 ## Live scan
 
