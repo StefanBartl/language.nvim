@@ -87,12 +87,14 @@ a file plus a registration rather than a change to the call sites.
 picker, no window, no external CLI, no network.
 
 ```
-nvim --headless -u NONE -c "set rtp+=." -l TESTS/run.lua
+bash scripts/test.sh
 ```
 
-Exit 0 is a pass. `run.lua` resolves lib.nvim from `$LIB_NVIM_PATH`, then a
-sibling `../lib.nvim` checkout, then the lazy.nvim-managed copy — the sibling
-wins on purpose, because testing against a stale lib.nvim gives misleading
+The specs run on [testing.nvim](https://github.com/StefanBartl/testing.nvim)
+(`.testing.lua`). Exit 0 is a pass. `scripts/test.sh` resolves testing.nvim
+and lib.nvim from `$TESTING_NVIM_DIR` / `$LIB_NVIM_DIR`, then `.deps/<name>`,
+then a sibling `../<name>` checkout, then the lazy.nvim-managed copy — the
+sibling wins on purpose, because testing against a stale lib.nvim gives misleading
 failures. See [`../TESTS/README.md`](../TESTS/README.md).
 
 [GitHub Actions](../.github/workflows/ci.yml) runs stylua, luacheck and this

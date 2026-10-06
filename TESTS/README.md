@@ -4,20 +4,28 @@ Headless spec suite. Every spec drives a module directly — no picker, no
 window, no external spell CLI, no network.
 
 ```
-nvim --headless -u NONE -c "set rtp+=." -l TESTS/run.lua
+bash scripts/test.sh                  # every spec
+bash scripts/test.sh --file config    # only spec files whose name contains "config"
+bash scripts/test.sh --json ir.json   # also write the machine-readable result
 ```
 
-Exit 0 is a pass; the runner prints one line per spec and exits non-zero on the
-first failure. CI runs exactly this command.
+The specs are run by [testing.nvim](https://github.com/StefanBartl/testing.nvim)
+(configured in `.testing.lua`; dialect `h`, i.e. on this directory's own
+`harness.lua`). Every `*_spec.lua` under `TESTS/` is discovered — there is no
+list to maintain. Exit 0 is a pass; a failed spec, or a missing testing.nvim /
+lib.nvim, exits 1 (and the script prints `LANGUAGE_TESTS_OK` on a green run).
+CI runs exactly this command.
 
-## lib.nvim
+## testing.nvim and lib.nvim
 
 Several modules require lib.nvim at module load, so the suite cannot run
-without it. `run.lua` resolves it in this order:
+without it. `scripts/test.sh` resolves testing.nvim and lib.nvim, each in
+this order (a missing one is a loud error naming all four places):
 
-1. `$LIB_NVIM_PATH`
-2. a sibling checkout, `../lib.nvim`
-3. the lazy.nvim-managed copy under `stdpath("data")/lazy/lib.nvim`
+1. `$TESTING_NVIM_DIR` / `$LIB_NVIM_DIR`
+2. `.deps/<name>`
+3. a sibling checkout, `../<name>`
+4. the lazy.nvim-managed copy under `stdpath("data")/lazy/<name>`
 
 A sibling wins over the plugin-manager copy on purpose: that one is often older
 than the working checkout, and testing against a stale lib.nvim gives
@@ -58,7 +66,7 @@ misleading failures.
 | `health_spec.lua` | `:checkhealth language` (`M.check()`) branch by branch: version/native-provider detection, every optional-tool present/absent pair (including the cspell-without-node middle case), the attached-grammar-client list, deepl-key resolution, the effective-config echo, and `check_hover()`'s four states — with every collaborator (tools, LSP clients, hover.nvim, which-key, `lib.nvim.deps.health`) stubbed or monkeypatched; also pins a real crash (see "Known bugs" below) |
 
 Adding one: write `TESTS/<name>_spec.lua` returning `function(H) ... end`, then
-list it in `run.lua`. `H` is the harness — `eq`, `ok`, `falsy`, `contains`,
+run `scripts/test.sh` (it is discovered by its `_spec.lua` suffix). `H` is the harness — `eq`, `ok`, `falsy`, `contains`,
 `excludes`, `read` and `fixture`.
 
 ## Coverage
