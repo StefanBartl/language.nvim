@@ -5,7 +5,8 @@
 --- api_key` or the `DEEPL_API_KEY` environment variable (never a global). Free
 --- keys (suffix ":fx") hit api-free.deepl.com, paid keys hit api.deepl.com.
 --- The request is an argv curl call (no shell interpolation); the JSON body is
---- built with vim.json and sent as a single `-d` argument.
+--- built with vim.json and, like the auth header, handed to curl on stdin (a
+--- `-K -` config), so neither the key nor the text is ever an argv element.
 
 require("language.translate.@types")
 
@@ -14,6 +15,18 @@ local job = require("language.util.job")
 local M = {}
 
 M.name = "deepl"
+
+---@internal
+---DeepL accepts at most 50 texts per request and a request body of 128 KiB;
+---the cost leaves room for the JSON quoting/escaping of each text.
+---@type LanguageTranslateLimits
+M.limits = {
+  max_bytes = 60000,
+  max_lines = 50,
+  cost = function(line)
+    return #line + 8
+  end,
+}
 
 ---@internal
 ---Resolve the API key from config or environment.
@@ -48,16 +61,39 @@ local function host(key)
 end
 
 ---@internal
----Build a curl `-K -` config (read from stdin) carrying the Authorization
----header. SEC-10: the auth key must never be an argv element -- the process
----list (`ps auxww`, `/proc/<pid>/cmdline`, `Get-CimInstance Win32_Process`)
----is readable by any co-resident process, stdin is not. Within a double-quoted
----config value, curl only requires `\` and `"` to be backslash-escaped.
----@param key string
+---Quote `value` as a double-quoted curl config string: backslash and double
+---quote are backslash-escaped, and the control characters curl's config parser
+---decodes (tab, newline, CR, VT) are written as escapes so the value stays on
+---one line.
+---@param value string
 ---@return string
-local function auth_config(key)
-  local escaped = key:gsub("\\", "\\\\"):gsub('"', '\\"')
-  return ('header = "Authorization: DeepL-Auth-Key %s"\n'):format(escaped)
+local function quote(value)
+  local escaped = value
+    :gsub("\\", "\\\\")
+    :gsub('"', '\\"')
+    :gsub("\t", "\\t")
+    :gsub("\n", "\\n")
+    :gsub("\r", "\\r")
+    :gsub("\v", "\\v")
+  return '"' .. escaped .. '"'
+end
+
+---@internal
+---Build a curl `-K -` config (read from stdin) carrying the Authorization
+---header and the JSON request body. SEC-10: the auth key must never be an argv
+---element -- the process list (`ps auxww`, `/proc/<pid>/cmdline`,
+---`Get-CimInstance Win32_Process`) is readable by any co-resident process,
+---stdin is not. The body goes the same way: a large body as one argv element
+---would exceed the Windows command-line limit (ENAMETOOLONG) and expose the
+---translated text in the process list.
+---@param key string
+---@param body string
+---@return string
+local function request_config(key, body)
+  return ("header = %s\ndata = %s\n"):format(
+    quote("Authorization: DeepL-Auth-Key " .. key),
+    quote(body)
+  )
 end
 
 ---Translate lines. DeepL returns one translation per input element, so the
@@ -91,13 +127,11 @@ function M.translate(lines, target, source, cfg, cb)
     "Content-Type: application/json",
     "-K",
     "-",
-    "-d",
-    body,
   }
 
   return job.run(argv, {
     timeout_ms = cfg.timeout_ms or 8000,
-    stdin = auth_config(key),
+    stdin = request_config(key, body),
     on_done = function(ok, out, err)
       if not ok then
         cb(false, err ~= "" and err or "DeepL request failed")

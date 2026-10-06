@@ -248,6 +248,16 @@ Which providers run per scope is controlled by `spell.providers` (see
 `translate.engine` selects the engine; `translate.fallback` is a chain tried
 when the chosen engine is unavailable (e.g. deepl without a key -> google).
 
+Large inputs are split on line boundaries (blank lines preferred) into blocks
+that fit the engine, translated one after the other and joined again with the
+line count unchanged, so a whole README no longer overruns the Windows
+command-line limit (~32 700 characters). Budget per block: google 5000
+(percent-encoded, it travels in the URL), shell and custom 6000 bytes, deepl
+50 lines / ~60 000 bytes. DeepL sends key and body on stdin (never argv).
+`translate.max_chars` (bytes, default 0 = engine default) can only lower the
+budget. A single line over the budget cannot be split and fails the call with
+a message naming the line; a failing block fails the whole call.
+
                                                         *language-translate-maps*
 Motion / visual mappings (opt-in via `translate.keymaps`):
     operator   `<lhs>{motion}` translates the moved-over text object, e.g.

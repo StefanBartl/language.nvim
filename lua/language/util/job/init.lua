@@ -75,9 +75,22 @@ function M.run(argv, opts)
   end
 
   if vim.system then
-    local proc = vim.system(argv, { text = true, cwd = opts.cwd, stdin = opts.stdin }, function(o)
-      finish(o.code == 0, o.stdout, o.stderr)
-    end)
+    -- A spawn failure (ENOENT, ENAMETOOLONG on an oversized command line, ...)
+    -- makes `vim.system` throw; report it through `on_done` like every other
+    -- failure so a caller's progress display can never be left hanging.
+    local spawned, proc = pcall(
+      vim.system,
+      argv,
+      { text = true, cwd = opts.cwd, stdin = opts.stdin },
+      function(o)
+        finish(o.code == 0, o.stdout, o.stderr)
+      end
+    )
+    if not spawned then
+      local msg = tostring(proc):gsub("^.-:%d+:%s*", "")
+      finish(false, "", "spawn failed: " .. msg)
+      return job
+    end
     job.cancel = function()
       if not finished then
         finished = true
@@ -108,7 +121,7 @@ function M.run(argv, opts)
 
   -- Legacy fallback: jobstart with a list command (no shell).
   local stdout, stderr = {}, {}
-  local jid = vim.fn.jobstart(argv, {
+  local started, jid = pcall(vim.fn.jobstart, argv, {
     cwd = opts.cwd,
     stdin = opts.stdin and "pipe" or nil,
     stdout_buffered = true,
@@ -127,7 +140,7 @@ function M.run(argv, opts)
       finish(code == 0, table.concat(stdout, "\n"), table.concat(stderr, "\n"))
     end,
   })
-  if jid <= 0 then
+  if not started or type(jid) ~= "number" or jid <= 0 then
     finish(false, "", "jobstart failed")
     return job
   end

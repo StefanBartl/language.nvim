@@ -39,26 +39,52 @@ return function(H)
   end)
   H.eq(calls, 1, "on_done fires exactly once")
 
-  -- BUG: a missing executable does not report back through on_done at all --
-  -- it raises synchronously instead. `M.run` calls `vim.system(argv, ...)`
-  -- unguarded; on this build, spawning a nonexistent binary makes `vim.system`
-  -- itself throw ENOENT before it ever returns, so the error propagates to
-  -- whatever called `job.run` rather than reaching `on_done(false, ...)` the
-  -- way every other failure in this module does (the legacy `jobstart`
-  -- fallback below it, by contrast, already guards this exact case: `if jid
-  -- <= 0 then finish(false, "", "jobstart failed") end`). Any caller of
-  -- `job.run` that does not itself pcall the call — collect.lua, every spell/
-  -- translate CLI provider — can be crashed by a typo'd or uninstalled binary
-  -- name instead of getting the graceful `ok=false` failure they coded for.
-  -- Pinned here rather than fixed: the fix (wrap the `vim.system(...)` call in
-  -- the same `pcall` pattern already used for `proc:kill`/`timer:stop` a few
-  -- lines below it) is a real source change, not a test one.
+  -- A missing executable (or any other spawn failure) makes `vim.system`
+  -- throw; `job.run` catches it and reports it through `on_done(false, ...)`,
+  -- like every other failure, so no caller can be crashed -- or a progress
+  -- display left hanging -- by a typo'd binary name or an oversized argv.
+  local missing_done, missing_calls, missing_ok, missing_err = false, 0, nil, nil
   local raised = not pcall(function()
     job.run({ "zzqqxx-nonexistent-executable-language-nvim" }, {
-      on_done = function() end,
+      on_done = function(ok, _out, err)
+        missing_done, missing_ok, missing_err = true, ok, err
+        missing_calls = missing_calls + 1
+      end,
     })
   end)
-  H.ok(raised, "a nonexistent executable raises instead of failing through on_done")
+  vim.wait(2000, function()
+    return missing_done
+  end)
+  H.falsy(raised, "a nonexistent executable no longer raises out of job.run")
+  H.ok(missing_done, "it is reported through on_done instead")
+  H.falsy(missing_ok, "as a failure")
+  H.contains(missing_err, "spawn failed", "with a spawn-failure message")
+  vim.wait(100)
+  H.eq(missing_calls, 1, "exactly once")
+
+  -- Any spawn error (ENAMETOOLONG on an oversized command line, ...) takes the
+  -- same path, simulated so it also runs on platforms where the OS accepts it.
+  local real_system = vim.system
+  vim.system = function()
+    error("vim/_core/system.lua:326: ENAMETOOLONG")
+  end
+  local long_done, long_ok, long_err, long_calls = false, nil, nil, 0
+  local long_raised = not pcall(function()
+    job.run({ "curl", string.rep("a", 40000) }, {
+      on_done = function(ok, _out, err)
+        long_done, long_ok, long_err, long_calls = true, ok, err, long_calls + 1
+      end,
+    })
+  end)
+  vim.system = real_system
+  vim.wait(2000, function()
+    return long_done
+  end)
+  H.falsy(long_raised, "a throwing vim.system does not escape job.run")
+  H.falsy(long_ok, "it is a failure")
+  H.contains(long_err, "ENAMETOOLONG", "carrying the underlying error")
+  vim.wait(100)
+  H.eq(long_calls, 1, "reported exactly once")
 
   -- cancel() before completion prevents on_done from ever firing later on a
   -- process that would otherwise still be running.

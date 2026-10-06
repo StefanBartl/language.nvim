@@ -170,6 +170,36 @@ return function(H)
   end)
   H.ok(done4, "on_done still fires after a failed translation")
 
+  -- A provider that throws (e.g. a spawn error that escaped) fails that one
+  -- file only: the remaining files are still translated and on_done fires.
+  local seen = {}
+  local throwing_provider = {
+    translate = function(lines, _target, _source, _pcfg, cb)
+      seen[#seen + 1] = lines[1]
+      if lines[1] == "hello" then
+        error("ENAMETOOLONG")
+      end
+      cb(true, { "OK: " .. lines[1] })
+    end,
+  }
+  local done5 = false
+  files.process(
+    throwing_provider,
+    { { rel = "a.md", abs = dir .. "/a.md" }, { rel = "sub/b.md", abs = dir .. "/sub/b.md" } },
+    "IT",
+    "suffix",
+    function()
+      done5 = true
+    end
+  )
+  vim.wait(1000, function()
+    return done5
+  end)
+  H.ok(done5, "a throwing provider does not hang the run")
+  H.eq(#seen, 2, "the next file is still attempted")
+  H.eq(vim.fn.filereadable(dir .. "/a.IT.md"), 0, "the failed file writes nothing")
+  H.eq(vim.fn.filereadable(dir .. "/sub/b.IT.md"), 1, "the other file is translated")
+
   -- run(): early-return guards, without ever reaching ui.kit -----------------
   files.run("", { dir = dir }) -- no target: warns and returns
   files.run("FR", { dir = dir .. "/does-not-exist" }) -- no files under the dir: info + return

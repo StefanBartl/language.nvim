@@ -14,6 +14,12 @@ local M = {}
 
 M.name = "custom"
 
+---@internal
+---The user's argv builder usually puts the block into argv; stay below the
+---Windows command-line limit. `translate.max_chars` lowers this further.
+---@type LanguageTranslateLimits
+M.limits = { max_bytes = 6000 }
+
 ---@see LanguageTranslateProvider
 ---@param cfg LanguageTranslateCfg
 ---@return boolean
