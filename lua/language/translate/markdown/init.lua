@@ -78,6 +78,7 @@ local function settings(tr, opts)
     max_units = int(opts.max_units, DEFAULT_MAX_UNITS, 1, 50),
     disk = m.disk_cache ~= false,
     cache_max_kb = int(m.cache_max_kb, 2048, 16, 102400),
+    cache_dir = type(m.cache_dir) == "string" and m.cache_dir or nil,
     keep = keep,
   }
 end
@@ -194,7 +195,7 @@ function M.translate_markdown(lines, opts, cb)
 
     local use_cache = opts.cache ~= false
     if use_cache then
-      cache.configure({ disk = st.disk, max_kb = st.cache_max_kb })
+      cache.configure({ disk = st.disk, max_kb = st.cache_max_kb, dir = st.cache_dir })
     end
 
     local seg = segment.segment(lines)

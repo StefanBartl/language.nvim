@@ -623,6 +623,30 @@ return function(H)
     cache._reset()
   end
 
+  -- the disk cache across "sessions" ------------------------------------------------------------------------------
+  do
+    local dir, cleanup = H.fixture("md-api-cache")
+    cache._reset()
+    local lines = { "# Einleitung", "", "Erster Absatz mit `code`.", "", "Zweiter Absatz." }
+    local cfg = { markdown = { disk_cache = true, cache_dir = dir } }
+    local p = fake(scramble)
+    local r = run(lines, { provider = p, cache = true, cfg = cfg })
+    H.eq(r.info.translated, 3)
+    cache.flush()
+    H.eq(vim.fn.filereadable(dir .. "/translate_markdown.json"), 1, "the cache file is written")
+
+    cache._reset() -- a new Neovim
+    local q = fake(function()
+      error("must not be asked")
+    end)
+    r = run(lines, { provider = q, cache = true, cfg = cfg })
+    H.eq(#q.calls, 0, "nothing is sent: everything comes from the file")
+    H.eq(r.info.cached, 3)
+    H.eq(r.res[3], "retsrE ztasbA mit `code`.", "and is restored with the real inline code")
+    cache._reset()
+    cleanup()
+  end
+
   -- cancellation, stale tokens, cb exactly once ------------------------------------------------------------------------------------------------------------------------------
   do
     local lines = { "Erster Absatz.", "", "Zweiter Absatz." }

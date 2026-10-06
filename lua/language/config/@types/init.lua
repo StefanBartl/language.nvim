@@ -193,6 +193,7 @@
 ---@field max_chars    integer    -- masked bytes per request
 ---@field disk_cache   boolean    -- persist the unit cache in stdpath("cache")/language.nvim
 ---@field cache_max_kb integer    -- size cap of the cache file
+---@field cache_dir?   string     -- directory of the cache file instead of stdpath("cache")/language.nvim
 ---@field keep         string[]   -- words that are never translated
 
 ---@class LanguageTranslateMarkdownOpts
@@ -200,6 +201,7 @@
 ---@field max_chars?    integer
 ---@field disk_cache?   boolean
 ---@field cache_max_kb? integer
+---@field cache_dir?     string
 ---@field keep?         string[]
 
 ---@class LanguageTranslateOpts

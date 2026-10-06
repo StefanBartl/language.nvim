@@ -246,6 +246,7 @@ translate = {
     max_chars = 3000,    -- masked bytes per request
     disk_cache = true,   -- persist the unit cache in stdpath("cache")
     cache_max_kb = 2048, -- size cap of that file
+    cache_dir = nil,     -- directory of that file instead of stdpath("cache")/language.nvim
     keep = {},           -- words that are never translated, e.g. { "Neovim" }
   },
 }
