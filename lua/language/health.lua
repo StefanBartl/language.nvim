@@ -134,6 +134,33 @@ local function check_translate()
     info_s("trans not found (optional shell engine)")
   end
 
+  -- engine "ai": ai.nvim is a soft companion; its policy decides what may leave.
+  local aip = require("language.translate.providers.ai")
+  local tcfg = ok and cfg_mod.get().translate or {}
+  local why = aip.blocked(tcfg)
+  local ai_on = tcfg.engine == "ai" or vim.tbl_contains(tcfg.fallback or {}, "ai")
+  if why == nil then
+    local pol = require("ai").policy()
+    local a = tcfg.ai or {}
+    ok_s(
+      ("ai engine ready (ai.nvim; provider %s, model %s; policy: %s)"):format(
+        a.provider or "from ai.nvim",
+        a.model or "from ai.nvim",
+        pol.allowed and ("allow-list " .. table.concat(pol.allowed, ", ")) or "no restriction"
+      )
+    )
+    if pol.bulk_granted and #pol.bulk_granted > 0 then
+      warn_s("document text may go to: " .. table.concat(pol.bulk_granted, ", ") .. " (bulk grant)")
+    end
+  elseif ai_on then
+    err_s(
+      "ai engine unusable: " .. why,
+      { "Install/configure ai.nvim, or pick another translate.engine" }
+    )
+  else
+    info_s("ai engine disabled: " .. why)
+  end
+
   -- translate_markdown(): where its unit cache lives and how big it is.
   local md = {}
   if ok then

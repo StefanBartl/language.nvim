@@ -32,7 +32,7 @@ Google (keyless `gtx` endpoint, default, zero configuration), DeepL
 `opts.translate.fallback` is an ordered list tried if the selected engine
 is unavailable.
 
-- **Module:** `translate/providers/{google,deepl,shell,custom,registry}.lua`
+- **Module:** `translate/providers/{google,deepl,shell,ai,custom,registry}.lua`
 - **Config:** `opts.translate.engine`, `opts.translate.fallback` (default `{"google"}`), `opts.translate.deepl.api_key`
 
 ### Large inputs: chunking
@@ -119,7 +119,7 @@ Not a command: there is no `:Translate` flag for it. It is for Lua callers
 | `target` | **Required.** Target language, e.g. `"EN"`. |
 | `source` | Source language; `nil` lets the engine detect it. |
 | `engine` | Overrides `translate.engine` for this call (no fallback chain). |
-| `model` | Part of the cache key, for engines where a model matters (the AI engine to come). |
+| `model` | Part of the cache key. The `ai` engine adds its own identity (provider, model, prompt version, glossary/style) on top, so a model switch needs nothing here. |
 | `token` | `{ generation, current = fn }` (or `{ cancelled = true }`): the run is abandoned, `cb(false, "stale")`, once `current() ~= generation`. |
 | `max_chars` | Bytes of masked text per request (default `translate.markdown.max_chars`, 3000). |
 | `max_units` | Units per request (default 40; DeepL accepts 50 texts). |
@@ -289,6 +289,69 @@ of skipping (code mistaken for prose is caught by the placeholder and length
 checks; prose mistaken for code stays German); there is no inline parse for
 emphasis, so `*`/`_` stay in the text for the engine to keep; math in single
 `$...$` is not recognised.
+
+## AI engine (`ai`, through ai.nvim)
+
+`translate.engine = "ai"` translates through ai.nvim (Claude, Ollama, OpenAI,
+Gemini ...). Terminology and tone hold over the whole document, and a local
+model (Ollama) keeps the text on the machine. It costs latency and money and is
+not deterministic, so the engine distrusts every answer.
+
+- **Soft dependency.** ai.nvim is only `require`d when a request is made. The
+  engine is available when ai.nvim loads and its policy admits the provider.
+- **Request.** A system prompt (target, optional source, glossary, style;
+  "code, identifiers, URLs, `{n}` placeholders and Markdown syntax unchanged,
+  exactly the same number of elements") and the lines as a **JSON array**; the
+  answer is a JSON array. It goes out through ai.nvim's bulk profile
+  (`ai.ask({ bulk = ... })`, see ai.nvim's `docs/bulk.md`): request cap,
+  concurrency, cumulative budget, temperature 0 where the provider has one.
+- **Strict parse.** Valid JSON (one Markdown fence around the array is
+  tolerated, any other text is not), an array, exactly as many elements as sent,
+  all strings, and every `{n}` placeholder of an element present exactly as often
+  as in the input. A deviation is asked once more, with the reason in the
+  system prompt; a second deviation is an error to the caller. `translate_markdown`
+  then keeps the original unit (and never caches it).
+- **Policy.** Document text is stricter than a chat selection: a provider
+  outside ai.nvim's allow-list is refused unless it was confirmed for bulk use
+  (`require("ai.policy").grant_bulk("<id>")`); `allow_unlisted` and a
+  `:Ai provider` confirmation do not count. Refusals and `bulk_limit` errors are
+  shown with ai.nvim's message, are never retried and never routed to another
+  engine. A configured `ai` engine that is unusable (ai.nvim missing, provider
+  not allowed) is reported by the registry as an error and does **not** fall back
+  to `google`: the text would otherwise reach a third party you did not choose.
+  (`ai` further down the `fallback` list is simply skipped when unusable.)
+- **Chunking.** The engine declares `limits` for the chunk wrapper: at most 60
+  lines per request and `max_chars` minus the system prompt, counted as JSON.
+  `translate.max_blocks` applies as for every engine.
+- **Run label and budget.** Calls within 5 s of each other share one bulk label
+  (one document is many calls), so `concurrency` and `max_total_chars` hold per
+  run; a later run starts a fresh label and resets the old one.
+- **Cancel.** `cancel()` kills the ai.nvim request and drops the callback. An
+  already sent request cannot be aborted (ai.nvim): its answer is discarded.
+- **Cache.** `cache_id` joins provider, model, prompt version and a hash of
+  glossary and style into the `translate_markdown` cache key. The model is the
+  configured one (`translate.ai.model`, else ai.nvim's `model[provider]`); where
+  nothing names it, the `res.bulk.model` of the last answer is used. A model
+  switch therefore never serves old translations.
+
+```lua
+translate = {
+  engine = "ai",
+  ai = {
+    provider = nil,          -- ai.nvim provider id; nil = ai.nvim's own choice
+    model = nil,             -- nil = ai.nvim's configured model
+    glossary = nil,          -- { Term = "Begriff" }, or { "Neovim" } (kept as is)
+    style = nil,             -- tone, e.g. "formal, second person"
+    max_chars = 6000,        -- largest request (prompt + system), characters
+    concurrency = 2,         -- requests in flight per run
+    max_total_chars = 500000,-- characters per run; false = no cap
+  },
+}
+```
+
+- **Module:** `translate/providers/ai.lua`
+- **Spec:** `TESTS/translate_ai_provider_spec.lua` (fake `ai` module)
+- **Health:** `:checkhealth language` shows the engine, provider/model and the policy.
 
 ## Custom translate provider
 

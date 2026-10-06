@@ -48,7 +48,7 @@ for anything to translate.
 | Path | Contains |
 | --- | --- |
 | `lua/language/spell/` | The review session: `core/` (collect, split, regions, ignore, cache, actions), `providers/` (native, cspell, cspell_server, codespell, typos, lsp, custom), `ui/` (panel, list, item menu, highlights), `live.lua` |
-| `lua/language/translate/` | `providers/` (google, deepl, shell, custom, registry), `output/`, the interactive `window.lua`, file mode, indent round trip, history |
+| `lua/language/translate/` | `providers/` (google, deepl, shell, ai, custom, registry), `output/`, the interactive `window.lua`, file mode, indent round trip, history |
 | `lua/language/thesaurus/` | The synonym lookup and the cursor-word swap |
 | `lua/language/scope/` | The one scope parser every command shares |
 | `lua/language/bindings/` | `usrcmds/`, `keymaps/`, `autocmds/` |
