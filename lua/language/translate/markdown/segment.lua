@@ -72,8 +72,17 @@ local RAW_TAGS = { pre = true, script = true, style = true, textarea = true }
 ---@param s string
 ---@return string content, string suffix
 local function trim_right(s)
-  local content = s:match("^(.-)[ \t\r\f\v]*$")
-  return content, s:sub(#content + 1)
+  -- A byte loop: `^(.-)[ \t]*$` retries the white space run from every byte inside it,
+  -- quadratic on a long run.
+  local e = #s
+  while e > 0 do
+    local b = s:byte(e)
+    if b ~= 32 and b ~= 9 and b ~= 13 and b ~= 12 and b ~= 11 then
+      break
+    end
+    e = e - 1
+  end
+  return s:sub(1, e), s:sub(e + 1)
 end
 
 ---@internal
@@ -84,12 +93,13 @@ local function is_blank(line)
 end
 
 ---@internal
----Strip leading block-quote markers.
+---Strip leading block-quote markers (at most `max` of them, when given).
 ---@param line string
+---@param max? integer
 ---@return string prefix, integer depth, string rest
-local function strip_quotes(line)
+local function strip_quotes(line, max)
   local pfx, depth, rest = "", 0, line
-  while true do
+  while not max or depth < max do
     local a, b, tail = rest:match("^( ? ? ?>)( ?)(.*)$")
     if not a then
       break
@@ -117,11 +127,11 @@ end
 ---@param rest string
 ---@return string|nil ch, integer|nil len
 local function fence_open(rest)
-  local f = rest:match("^ *(```+)([^`]*)$")
+  local f = rest:match("^[ \t]*(```+)([^`]*)$")
   if f then
     return "`", #f
   end
-  local t = rest:match("^ *(~~~+)")
+  local t = rest:match("^[ \t]*(~~~+)")
   if t then
     return "~", #t
   end
@@ -132,15 +142,17 @@ end
 ---@param rest string
 ---@param ch string
 ---@param len integer
+---@param cindent? integer  -- content indent of the container the fence sits in
 ---@return boolean
-local function fence_close(rest, ch, len)
+local function fence_close(rest, ch, len, cindent)
   local f
   if ch == "`" then
-    f = rest:match("^ *(```+)[ \t\r]*$")
+    f = rest:match("^[ \t]*(```+)[ \t\r]*$")
   else
-    f = rest:match("^ *(~~~+)[ \t\r]*$")
+    f = rest:match("^[ \t]*(~~~+)[ \t\r]*$")
   end
-  return f ~= nil and #f >= len
+  -- A closing fence is indented at most three columns beyond its container.
+  return f ~= nil and #f >= len and indent_width(rest) - (cindent or 0) <= 3
 end
 
 ---@internal
@@ -237,7 +249,13 @@ local function is_delimiter(line)
   if not line:find("|", 1, true) or not line:find("-", 1, true) then
     return false
   end
-  local s = line:gsub("^ ? ? ?>? ?", ""):gsub("^%s+", ""):gsub("%s+$", "")
+  local s = line:gsub("^ ? ? ?>? ?", ""):gsub("^%s+", "")
+  -- Trailing white space by hand: `%s+$` is quadratic on a long run.
+  local e = #s
+  while e > 0 and s:find("^%s", e) do
+    e = e - 1
+  end
+  s = s:sub(1, e)
   s = s:gsub("^|", ""):gsub("|$", "")
   if s == "" then
     return false
@@ -269,7 +287,11 @@ local function code_span_ends(plines)
         if not a then
           break
         end
-        local escaped = #ln.content:sub(1, a - 1):match("\\*$") % 2 == 1
+        local k = 0 -- backslashes right before the run, counted backwards: linear
+        while a - 1 - k >= 1 and ln.content:byte(a - 1 - k) == 92 do
+          k = k + 1
+        end
+        local escaped = k % 2 == 1
         runs[#runs + 1] = { line = i, len = b - a + 1, open_len = b - a + 1 - (escaped and 1 or 0) }
         at = b + 1
       end
@@ -362,6 +384,29 @@ function M.segment(lines)
   local list_q = 0 -- quote depth of the list that `in_list` stands for
   local no_close_after ---@type integer|nil -- no `$$` below this line: a `$$` opens no block
 
+  ---Content indent of the innermost open list item that a line indented `iw` columns (at
+  ---quote depth `qd`) is inside of, or 0 at the top level. The indent of a block is
+  ---counted from there: four columns beyond it make indented code, not a fence or a table.
+  ---@param iw integer
+  ---@param qd integer
+  ---@return integer
+  local function container_indent(iw, qd)
+    if not in_list or list_q ~= qd then
+      return 0
+    end
+    local c = 0
+    for _, v in ipairs(items) do
+      if v <= iw and v > c then
+        c = v
+      end
+    end
+    local top = math.max(item_cind, 2)
+    if top <= iw and top > c then
+      c = top
+    end
+    return c
+  end
+
   ---@param u table
   ---@return LanguageMdUnit
   local function add_unit(u)
@@ -435,7 +480,10 @@ function M.segment(lines)
   local function make_line(L, prefix, body)
     local content, suffix = trim_right(body)
     local hard = false
-    local bs = #content:match("\\*$")
+    local bs = 0 -- trailing backslashes
+    while bs < #content and content:byte(#content - bs) == 92 do
+      bs = bs + 1
+    end
     if bs % 2 == 1 and #content > 1 then
       hard = true
       content = content:sub(1, -2)
@@ -560,7 +608,10 @@ function M.segment(lines)
     local line = lines[L]
     repeat
       if fence then
-        local _, qd, frest = strip_quotes(line)
+        local _, qd = strip_quotes(line)
+        -- Inside the fence only its own quote markers are syntax: a `>` more is text
+        -- (a conflict marker, a prompt), whatever follows it.
+        local _, _, frest = strip_quotes(line, fence.qdepth)
         -- A fence lives inside its container: a line outside of it (fewer `>`, or
         -- less indented than the list item's content) ends the fence, as it ends
         -- the container, and is read as a line of its own.
@@ -571,8 +622,7 @@ function M.segment(lines)
           fence = nil
         else
           tpl[L] = line
-          -- Only a closing line of the fence's own quote depth closes it.
-          if qd == fence.qdepth and fence_close(frest, fence.ch, fence.len) then
+          if fence_close(frest, fence.ch, fence.len, fence.cindent) then
             fence = nil
           end
           break
@@ -608,8 +658,15 @@ function M.segment(lines)
       -- A block that starts in the first columns ends a list: what follows (an
       -- indented code block, say) is no longer a continuation of an item.
       local function leave_list()
-        if qdepth ~= list_q or indent_width(rest) < math.max(item_cind, 2) then
+        local c = container_indent(indent_width(rest), qdepth)
+        if c < 2 then
           in_list = false
+        elseif c < item_cind then
+          -- Back at the level of an outer item: the inner ones end.
+          item_cind = c
+          while #items > 0 and items[#items] > c do
+            items[#items] = nil
+          end
         end
       end
 
@@ -620,6 +677,12 @@ function M.segment(lines)
 
       -- Fenced code.
       local fch, flen = fence_open(rest)
+      -- Four columns beyond its container make it indented code: no fence opens there.
+      local rest_iw = indent_width(rest)
+      local box = container_indent(rest_iw, qdepth)
+      if fch and rest_iw - box > 3 then
+        fch = nil
+      end
       if fch then
         literal(L)
         leave_list()
@@ -628,15 +691,13 @@ function M.segment(lines)
           len = flen,
           qdepth = qdepth,
           -- Inside a list item (indented to its content) the fence ends with the item.
-          cindent = (in_list and list_q == qdepth and indent_width(rest) >= item_cind)
-              and item_cind
-            or 0,
+          cindent = box,
         }
         break
       end
 
       -- Math block.
-      if rest:match("^ *%$%$") then
+      if rest:match("^ *%$%$") and rest_iw - box <= 3 then
         local first = rest:find("$$", 1, true)
         local closed = rest:find("$$", first + 2, true) ~= nil
         local later = false
@@ -697,7 +758,24 @@ function M.segment(lines)
         close_para()
         in_table = nil
         in_list = false
-        local body = htext:match("^(.-)[ \t]+#+[ \t\r]*$")
+        -- A closing sequence (`## Title ##`): hashes behind white space at the end.
+        local body
+        do
+          local e = #htext
+          while e > 0 and (htext:byte(e) == 32 or htext:byte(e) == 9 or htext:byte(e) == 13) do
+            e = e - 1
+          end
+          local cut = e
+          while cut > 0 and htext:byte(cut) == 35 do
+            cut = cut - 1
+          end
+          if cut < e and cut > 0 and (htext:byte(cut) == 32 or htext:byte(cut) == 9) then
+            while cut > 0 and (htext:byte(cut) == 32 or htext:byte(cut) == 9) do
+              cut = cut - 1
+            end
+            body = htext:sub(1, cut)
+          end
+        end
         local content, suffix
         if body then
           content, suffix = trim_right(body)
@@ -732,6 +810,10 @@ function M.segment(lines)
       then
         in_table = nil
       end
+      -- An indented line (four columns beyond its container) is code, no row.
+      if in_table and rest_iw - box > 3 then
+        in_table = nil
+      end
       if in_table then
         if is_delimiter(line) and not in_table.seen_delim then
           in_table.seen_delim = true
@@ -741,7 +823,12 @@ function M.segment(lines)
         table_row(L, qpfx, rest)
         break
       end
-      if rest:find("|", 1, true) and lines[L + 1] and is_delimiter(lines[L + 1]) then
+      if
+        rest_iw - box <= 3
+        and rest:find("|", 1, true)
+        and lines[L + 1]
+        and is_delimiter(lines[L + 1])
+      then
         close_para()
         leave_list()
         in_table = { seen_delim = false, qdepth = qdepth }
@@ -759,6 +846,7 @@ function M.segment(lines)
             in_list = true
             list_q = qdepth
             item_cind = 4 -- a footnote continues with four spaces
+            items = {}
             open_para(L, "footnote", qpfx .. rindent .. "[^" .. label .. "]:" .. sp, body, qdepth)
             break
           end
@@ -876,7 +964,16 @@ function M.segment(lines)
       local lw = indent_width(lead)
       -- Text that is not indented to the item's content starts a paragraph of its own.
       if in_list and lw < math.max(item_cind, 2) then
-        in_list = false
+        -- ... unless it is indented to the content of an item that holds the one above.
+        local c = container_indent(lw, qdepth)
+        if c >= 2 then
+          item_cind = c
+          while #items > 0 and items[#items] > c do
+            items[#items] = nil
+          end
+        else
+          in_list = false
+        end
       end
       if not in_list and lw >= 4 then
         literal(L)

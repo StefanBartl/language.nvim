@@ -21,7 +21,10 @@ local unicode = require("language.translate.markdown.unicode")
 
 ---@internal
 ---Lower case like `String.prototype.toLowerCase`: `vim.fn.tolower` agrees with it
----for every code point but a capital sigma at the end of a word, which is `ς`.
+---for every code point but a capital sigma that ends a word (a cased letter before it,
+---none behind it, marks and apostrophes skipped), which is `ς`: the `Cased` and
+---`Case_Ignorable` classes of `unicode.lua` decide that (checked against the JS function
+---over ~800 000 strings).
 ---@param s string
 ---@return string
 local function lower(s)
@@ -33,12 +36,20 @@ local function lower(s)
     for ch, cp in unicode.chars(s) do
       chars[#chars + 1] = { ch, cp }
     end
-    local function letter(c)
-      return c ~= nil
-        and (c[2] < 128 and c[1]:match("%a") ~= nil or c[2] >= 128 and unicode.is_alnum(c[2]))
+    -- Final_Sigma (Unicode SpecialCasing, what `toLowerCase` applies): a cased letter
+    -- before (case-ignorable marks, apostrophes ... skipped) and none behind.
+    ---@param from integer
+    ---@param step integer
+    ---@return boolean
+    local function cased_beyond(from, step)
+      local j = from
+      while chars[j] and unicode.is_case_ignorable(chars[j][2]) do
+        j = j + step
+      end
+      return chars[j] ~= nil and unicode.is_cased(chars[j][2])
     end
     for i, c in ipairs(chars) do
-      if c[2] == 0x3A3 and letter(chars[i - 1]) and not letter(chars[i + 1]) then
+      if c[2] == 0x3A3 and cased_beyond(i - 1, -1) and not cased_beyond(i + 1, 1) then
         c[1] = "\207\130"
       end
     end
@@ -55,6 +66,9 @@ end
 ---@param text string
 ---@return string
 function M.slug(text)
+  -- `vim.fn.tolower` turns a string with a NUL into a Blob; the byte is dropped below
+  -- anyway, as any control character is, so another one stands in for it.
+  text = (text:gsub("%z", "\1"))
   if text:find("[\128-\255]") then
     -- Bytes that are no UTF-8 would be read as Latin-1 by `tolower`; a decoder drops them.
     local valid = {}
@@ -66,24 +80,36 @@ function M.slug(text)
     text = table.concat(valid)
   end
   text = lower(text)
+  -- White space becomes one hyphen between two kept characters (none at the edges),
+  -- decided on the way: trimming a long run afterwards with `" +$"` is quadratic.
   local parts, n = {}, 0
+  local gap = false
   for ch, cp in unicode.chars(text) do
-    local keep
+    local keep, space = nil, false
     if cp < 128 then
-      keep = ch:match("[%w-]") and ch or (ch:match("%s") and " " or nil)
+      if ch:match("[%w-]") then
+        keep = ch
+      elseif ch:match("%s") then
+        space = true
+      end
     elseif unicode.is_space(cp) then
-      keep = " "
+      space = true
     elseif unicode.is_alnum(cp) then
       keep = ch
     end
-    if keep then
+    if space then
+      gap = n > 0
+    elseif keep then
+      if gap then
+        n = n + 1
+        parts[n] = "-"
+        gap = false
+      end
       n = n + 1
       parts[n] = keep
     end
   end
-  local keep = table.concat(parts)
-  keep = keep:gsub("^ +", ""):gsub(" +$", ""):gsub(" +", "-"):gsub("%-+", "-")
-  return keep
+  return (table.concat(parts):gsub("%-+", "-"))
 end
 
 ---@internal
@@ -138,10 +164,15 @@ end
 ---@return string
 function M.plain(md)
   local s = md
-  s = s:gsub("!%[[^%]]*%]%b()", "")
-  s = s:gsub("!%[[^%]]*%]%[[^%]]*%]", "")
-  s = s:gsub("%[([^%]]*)%]%b()", "%1")
-  s = s:gsub("%[([^%]]*)%]%[[^%]]*%]", "%1")
+  -- The link patterns retry from every `[`, to the end of the text when no `]` follows:
+  -- a long heading with many brackets is left alone (its anchor stays as it is).
+  local _, brackets = s:gsub("%[", "")
+  if #s * brackets <= 4000000 then
+    s = s:gsub("!%[[^%]]*%]%b()", "")
+    s = s:gsub("!%[[^%]]*%]%[[^%]]*%]", "")
+    s = s:gsub("%[([^%]]*)%]%b()", "%1")
+    s = s:gsub("%[([^%]]*)%]%[[^%]]*%]", "%1")
+  end
   s = s:gsub("<(%a[%w+.-]*:[^%s<>]*)>", "%1")
   s = s:gsub("<[^<>]*>", "")
   s = s:gsub("`", "")

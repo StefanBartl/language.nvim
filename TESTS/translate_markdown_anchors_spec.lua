@@ -170,4 +170,32 @@ return function(H)
     )
     H.eq((anchors.rewrite_refdef("kein Def", map)), "kein Def")
   end
+  -- slug and plain stay linear, and the slug itself is unchanged by that ----------------------
+  do
+    H.eq(anchors.slug("  Ein   Titel -  mit   Lücken  "), "ein-titel-mit-lücken")
+    H.eq(anchors.slug("a" .. string.rep(" ", 50000) .. "b"), "a-b")
+    local t0 = vim.uv.hrtime()
+    anchors.plain(string.rep("[", 50000))
+    anchors.plain(string.rep("![", 25000))
+    H.ok((vim.uv.hrtime() - t0) / 1e9 < 2, "a heading of unclosed brackets is not quadratic")
+    H.eq(anchors.plain("Siehe [Link](x.md) und `code`"), "Siehe Link und code")
+  end
+  -- Final sigma is decided by cased letters and case-ignorable characters, as in JS ---------
+  do
+    local cases = {
+      { "⁹Σ", "⁹σ" }, -- a digit is no cased letter
+      { "ũ½Σ", "ũ½σ" },
+      { "ΟΔΟΣ", "οδος" },
+      { "ΟΔΟΣ'", "οδος" }, -- an apostrophe is skipped
+      { "ΣΊΣΥΦΟΣ'Α", "σίσυφοσα" }, -- ... and a cased letter behind it makes the sigma medial
+      { "ΑΣ.Β", "ασβ" },
+      { "ΑΣ1", "ας1" },
+      { "1Σ", "1σ" },
+      { "Σ", "σ" },
+      { "a\0Σ", "aσ" }, -- a NUL byte is dropped like any control character
+    }
+    for _, c in ipairs(cases) do
+      H.eq(anchors.slug(c[1]), c[2], "slug of " .. vim.inspect(c[1]))
+    end
+  end
 end

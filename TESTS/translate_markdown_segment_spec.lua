@@ -354,4 +354,95 @@ return function(H)
       end
     end
   end
+  -- Container rules, found against the previewer's renderer (independent review) ----
+  do
+    local function units_of(lines)
+      return texts(seg_of(lines))
+    end
+
+    -- A closing fence indented four columns is text of the code block, not its end.
+    local s = seg_of({ "- item", "", "    ```", "    code", "    ```", "", "Absatz" })
+    H.ok(literal(s, 4), "a fence in an item: its code stays literal")
+    H.eq(#s.units, 2, "...and only the item and the paragraph are units")
+    s = seg_of({ "```text", "code", "    ```", "noch Code", "```", "", "Absatz" })
+    H.ok(literal(s, 4), "an over-indented closing fence does not close")
+    H.ok(literal(s, 3), "...so the lines behind it are still code")
+    H.eq(units_of({ "```text", "code", "    ```", "noch Code", "```", "", "Absatz" })[1], "Absatz")
+
+    -- A fence indented four columns is indented code: no fence opens, nothing is hidden.
+    s = seg_of({ "    ```lua", "    x", "    ```", "", "Absatz eins", "", "Absatz zwei" })
+    H.eq(
+      table.concat(units_of({ "    ```lua", "    x", "    ```", "", "Absatz eins" }), "|"),
+      "Absatz eins",
+      "an indented fence line opens no fence (the text behind it is still text)"
+    )
+    H.eq(#s.units, 2)
+    s = seg_of({ "    ```lua", "Text danach", "", "Mehr" })
+    H.eq(#s.units, 2, "...also when no blank line follows")
+
+    -- A tab-indented fence inside a list item is a fence of that item.
+    s = seg_of({ "+ Ubuntu:", "\t```bash", "\tsudo apt install x", "\t```", "Danach" })
+    H.ok(
+      literal(s, 2) and literal(s, 3) and literal(s, 4),
+      "a tab-indented fence in an item is code"
+    )
+    H.eq(
+      units_of({ "+ Ubuntu:", "\t```bash", "\tsudo apt install x", "\t```", "Danach" })[2],
+      "Danach"
+    )
+
+    -- `>` inside a fence is text, wherever it stands (conflict markers, prompts).
+    s = seg_of({
+      "* Beispiel:",
+      "",
+      "  ```diff",
+      "  <<<<<<< HEAD",
+      "  >>>>>>> feature",
+      "  ```",
+      "",
+      "Danach",
+    })
+    H.ok(literal(s, 5), "a `>` line inside a fence of an item stays code")
+    H.eq(units_of({ "* Beispiel:", "", "  ```diff", "  >>>>>>> feature", "  ```" })[2], nil)
+
+    -- A table does not start at, and ends before, an indented line.
+    s = seg_of({ "    | a | b |", "    |---|---|", "    | c | d |", "", "Text" })
+    H.eq(#s.units, 1, "an indented table is code, not a table")
+    s = seg_of({ "| a | b |", "|---|---|", "| c | d |", "    code Zeile", "", "Text" })
+    H.ok(literal(s, 4), "an indented line after table rows is code, no row")
+
+    -- Text indented to an outer item belongs to that item: the next marker is an item.
+    s = seg_of({
+      "2. Zwei",
+      "   - innen",
+      "",
+      "   Weiter im Absatz",
+      "3. Drei",
+      "4. Vier",
+    })
+    local t = texts(s)
+    H.eq(t[#t - 1], "Drei", "a list item after text of an outer item is an item of its own")
+    H.eq(t[#t], "Vier")
+  end
+
+  -- Linear time on one long line ---------------------------------------------------------
+  do
+    local function seconds(lines)
+      local t0 = vim.uv.hrtime()
+      local s = seg_of(lines)
+      H.eq(#segment.render(s, {}), #lines)
+      return (vim.uv.hrtime() - t0) / 1e9
+    end
+    local n = 60000
+    local t = seconds({ "a" .. string.rep(" ", n) .. "b" })
+    H.ok(t < 2, ("a run of spaces inside a line (%.2f s)"):format(t))
+    t = seconds({ string.rep("\\", n) .. "x" })
+    H.ok(t < 2, ("a run of backslashes (%.2f s)"):format(t))
+    t = seconds({ string.rep("`a ", n / 3) })
+    H.ok(t < 2, ("many backtick runs (%.2f s)"):format(t))
+    t = seconds({ "# " .. string.rep(" ", n) .. "x" .. string.rep(" ", n) })
+    H.ok(t < 2, ("a heading with long runs of spaces (%.2f s)"):format(t))
+    t = seconds({ "| a | b |", "|---|---|", "| " .. string.rep(" ", n) .. " | x |" })
+    H.ok(t < 2, ("a table cell with a long run of spaces (%.2f s)"):format(t))
+  end
 end
