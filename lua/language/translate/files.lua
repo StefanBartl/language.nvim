@@ -185,7 +185,14 @@ function M.process(provider, picked, target, mode, on_done)
       return
     end
 
-    provider.translate(lines, target, nil, c, function(ok2, result)
+    -- One file's failure -- including a provider that throws -- fails that file
+    -- only: the progress display still advances and the rest keep running.
+    local settled = false
+    local function on_result(ok2, result)
+      if settled then
+        return
+      end
+      settled = true
       if ok2 and type(result) == "table" then
         local written, buf, derr = deliver(mode, picked[i].abs, lines, result, target)
         if derr then
@@ -207,7 +214,12 @@ function M.process(provider, picked, target, mode, on_done)
         notify.error(("translate failed: %s (%s)"):format(picked[i].rel, tostring(result)))
       end
       vim.schedule(step)
-    end)
+    end
+
+    local started, thrown = pcall(provider.translate, lines, target, nil, c, on_result)
+    if not started then
+      on_result(false, thrown)
+    end
   end
 
   step()

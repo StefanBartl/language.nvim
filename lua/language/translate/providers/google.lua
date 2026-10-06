@@ -19,6 +19,19 @@ local M = {}
 
 M.name = "google"
 
+---@internal
+---The query travels in the URL, so a line costs its percent-encoded length
+---(`%0A` for the separator). The budget stays well below the gtx URL limit
+---and the Windows command-line limit (~32 700 characters).
+---@type LanguageTranslateLimits
+M.limits = {
+  max_bytes = 5000,
+  cost = function(line)
+    local _, escaped = line:gsub("[^%w%-_.~]", "")
+    return #line + 2 * escaped + 3
+  end,
+}
+
 local ENDPOINT = "https://translate.googleapis.com/translate_a/single"
 
 ---curl is the only requirement.

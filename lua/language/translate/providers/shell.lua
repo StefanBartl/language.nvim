@@ -14,6 +14,12 @@ local M = {}
 
 M.name = "shell"
 
+---@internal
+---The block is a single argv element; keep it far below the Windows limit
+---(~32 700) and the 8 191 of a `cmd.exe /c` shim.
+---@type LanguageTranslateLimits
+M.limits = { max_bytes = 6000 }
+
 ---@see LanguageTranslateProvider
 ---@param _cfg LanguageTranslateCfg
 ---@return boolean

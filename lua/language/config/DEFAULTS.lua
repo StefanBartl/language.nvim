@@ -83,6 +83,7 @@ local defaults = {
     default_target = nil, -- fixed target for motion/visual maps; nil = prompt
     nocode_default = false,
     timeout_ms = 8000, -- network timeout per job
+    max_chars = 0, -- lower the per-request block budget in bytes (0 = provider default); larger inputs are split on line boundaries
     deepl = { api_key = nil }, -- or ENV "DEEPL_API_KEY"
     custom = nil, -- { cmd = function(text, target) ... end, parse = function(out) ... end }
     -- Recall previous translations (:Translate history picker / window <C-h>).

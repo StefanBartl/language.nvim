@@ -35,6 +35,34 @@ is unavailable.
 - **Module:** `translate/providers/{google,deepl,shell,custom,registry}.lua`
 - **Config:** `opts.translate.engine`, `opts.translate.fallback` (default `{"google"}`), `opts.translate.deepl.api_key`
 
+### Large inputs: chunking
+
+Windows rejects a command line above roughly 32 700 characters
+(`ENAMETOOLONG`), and the engines have limits of their own, so no provider
+ever receives an arbitrarily large payload. `providers/registry.lua` wraps
+every engine with `translate/chunk.lua`, which cuts the input into blocks on
+line boundaries (preferring blank lines), translates them one after the
+other through the unchanged provider and joins the results; the line count
+is preserved, which the indent restoration relies on. This applies to the
+command, the operators, the window, the hover and multi-file translation.
+
+| Engine | Block budget | Payload |
+| --- | --- | --- |
+| google | 5000 (percent-encoded length, it is part of the URL) | argv (`--data-urlencode`) |
+| shell | 6000 bytes | argv |
+| custom | 6000 bytes | whatever `cmd` builds |
+| deepl | 50 lines, ~60 000 bytes | key **and** JSON body on stdin (`curl -K -`), never argv |
+
+- A single line over the budget cannot be split without breaking the line
+  layout; the call fails with a message naming the line.
+- A failing block fails the whole call (one callback, with the block and
+  line range in the message); `cancel` stops the running block and the rest.
+- `opts.translate.max_chars` (bytes, `0` = engine default) can only lower the
+  budget.
+- `util/job.run` reports a spawn failure through `on_done(false, ...)`
+  instead of throwing, and `translate.files.process` turns a failure into a
+  failed file while the remaining files carry on.
+
 ## Custom translate provider
 
 `translate.custom = { cmd = function(lines, target) return {"trans", "-b", ...} end, parse = function(out) return vim.split(out, "\n") end }` —

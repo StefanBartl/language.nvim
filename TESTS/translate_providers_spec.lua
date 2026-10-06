@@ -129,6 +129,18 @@ return function(H)
     "the key travels as the stdin-piped curl config instead"
   )
 
+  -- The JSON body travels on stdin too (a large body as one argv element hits
+  -- the Windows command-line limit and shows the text in the process list).
+  H.excludes(table.concat(calls[1].argv, " "), "hello", "the text is not in argv either")
+  H.excludes(table.concat(calls[1].argv, " "), "-d", "no -d body argument")
+  H.contains(calls[1].opts.stdin, 'data = "{', "the body is a `data` line of the stdin config")
+  H.contains(calls[1].opts.stdin, [=[\"text\":[\"hello\"]]=], "with the JSON quoted for curl")
+  H.eq(
+    #vim.split(calls[1].opts.stdin, "\n", { plain = true }),
+    3,
+    "two settings, then the final newline"
+  )
+
   stub_job(true, [[{"translations":[{"text":"x"}]}]])
   deepl = reload("language.translate.providers.deepl")
   deepl.translate({ "hi" }, "FR", nil, { deepl = { api_key = "abc123" } }, function() end)

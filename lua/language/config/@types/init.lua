@@ -92,6 +92,7 @@
 ---@field default_target string|nil              -- fixed target for motion/visual maps; nil = prompt. `language.hover` falls back to "EN" instead, because a hover has nowhere to ask from.
 ---@field nocode_default boolean
 ---@field timeout_ms     integer
+---@field max_chars      integer                 -- lowers the per-request block budget (bytes); 0 = provider default
 ---@field deepl          { api_key: string|nil }
 ---@field custom         LanguageTranslateCustomProviderCfg|nil
 ---@field keymaps        LanguageTranslateKeymaps
@@ -194,6 +195,7 @@
 ---@field default_target? string|nil              -- fixed target for motion/visual maps; nil = prompt
 ---@field nocode_default? boolean
 ---@field timeout_ms?     integer
+---@field max_chars?      integer                 -- lowers the per-request block budget (bytes); 0 = provider default
 ---@field deepl?          { api_key: string|nil }
 ---@field custom?         LanguageTranslateCustomProviderCfg|nil
 ---@field keymaps?        LanguageTranslateKeymaps

@@ -51,6 +51,7 @@ require("language").setup({
     default_target = nil,        -- fixed target language for motion/visual maps; nil = selection
                                  -- (the hover falls back to "EN" instead: it has nowhere to ask from)
     timeout_ms = 8000,
+    max_chars = 0,               -- lower the per-request block budget in bytes (0 = provider default)
     deepl = { api_key = nil },   -- or $DEEPL_API_KEY
     -- Opt-in motion/visual keymaps (off by default, to avoid claiming keys):
     --   operator: <lhs>{motion} translates the text object (e.g. gtrip)

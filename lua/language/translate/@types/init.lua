@@ -10,6 +10,7 @@
 ---@field name      string
 ---@field available fun(cfg: LanguageTranslateCfg): boolean
 ---@field translate LanguageTranslateFn
+---@field limits?    LanguageTranslateLimits      -- block budget; the registry splits larger inputs (`language.translate.chunk`)
 
 ---@alias LanguageTranslateResultCb fun(ok: boolean, result: string[]|string)
 
