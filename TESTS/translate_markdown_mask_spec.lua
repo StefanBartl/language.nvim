@@ -145,6 +145,23 @@ return function(H)
     H.eq(mask.unmask("so {1} da", mk), "so `x%1` da", "a % in the protected text is not a pattern")
   end
 
+  -- bare e-mail and www addresses are linked by the previewer: masked whole ------------------
+  do
+    local masked, mk = mask.mask("Mail an john.doe@example.com und www.example.com/a. Ende")
+    H.eq(masked, "Mail an {1} und {2}. Ende")
+    H.eq(mk.toks[1], "john.doe@example.com")
+    H.eq(mk.toks[2], "www.example.com/a")
+    masked, mk = mask.mask("[x@y.de](mailto:x@y.de) und `a@b.cc` und Hallo@Welt")
+    H.eq(
+      masked,
+      "{1}{2}{3} und {4} und Hallo@Welt",
+      "an address in a link text, a span or half an address"
+    )
+    H.eq(mask.unmask(masked, mk), "[x@y.de](mailto:x@y.de) und `a@b.cc` und Hallo@Welt")
+    masked = mask.mask("info@example.com")
+    H.eq(masked, "{1}", "an address alone is a unit with nothing to translate")
+  end
+
   -- look-ahead is bounded: a line of unclosed brackets or parentheses is linear -----
   do
     local function seconds(text)

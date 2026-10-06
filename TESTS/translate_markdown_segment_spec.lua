@@ -300,6 +300,18 @@ return function(H)
     H.ok(literal(seg, 4), "an empty item has no content for an indented line to continue")
   end
 
+  -- a hard break inside a code span is part of the code ------------------------------------------
+  do
+    local seg = seg_of({ "Text `a\\", "b` mehr" })
+    H.eq(#seg.units, 1, "a backslash at the end of a line inside a span is no break")
+    H.eq(seg.units[1].orig[1], "Text `a\\", "and it stays in the content")
+    H.eq(#seg_of({ "Text `a  ", "b` mehr" }).units, 1, "neither are two spaces")
+    H.eq(#seg_of({ "Text a\\", "b mehr" }).units, 2, "outside of a span it still is")
+    H.eq(#seg_of({ "Text `a\\", "b mehr" }).units, 2, "a backtick with no partner is text")
+    H.eq(#seg_of({ "`a` und `b\\", "c`" }).units, 1, "spans are paired from the left")
+    H.eq(#seg_of({ "Text \\`a\\", "b` mehr" }).units, 2, "an escaped backtick opens nothing")
+  end
+
   -- fuzz: any mixture of fragments round-trips and keeps its line count ------------------------
   do
     math.randomseed(20261006)
