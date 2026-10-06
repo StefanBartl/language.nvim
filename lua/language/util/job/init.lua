@@ -13,16 +13,32 @@ local M = {}
 ---@field cancel fun(): nil    -- kill the process and drop the callback
 
 ---@internal
+---Characters that make an argument unsafe to hand to `cmd.exe /c`: libuv
+---escapes an embedded quote as \" which cmd.exe does not understand (the quote
+---state flips and a following `&` runs as a command), `%VAR%` is expanded even
+---inside quotes, and `^ & | < >` or a line break act as cmd.exe syntax in an
+---unquoted argument.
+local CMD_UNSAFE = '["%%^&|<>\r\n]'
+
+---@internal
 ---Windows can't spawn `.cmd`/`.bat` shims (e.g. npm-installed `cspell`) directly
 ---via libuv — they must go through `cmd.exe /c`. Real executables (curl.exe …)
----are spawned unchanged. Returns the argv to actually spawn.
+---are spawned unchanged. Returns the argv to actually spawn, or `nil` and a
+---message when an argument would have to pass through cmd.exe's parser
+---unsafely (a translated line like `x" & calc & "y` must never run as a
+---command): the call is refused instead.
 ---@param argv string[]
----@return string[]
-local function resolve_argv(argv)
-  if vim.fn.has("win32") ~= 1 then
+---@param env? { win32?: boolean, exepath?: fun(name: string): string }  -- test seam; defaults to the real platform
+---@return string[]|nil argv, string|nil err
+local function resolve_argv(argv, env)
+  local win32 = env and env.win32
+  if win32 == nil then
+    win32 = vim.fn.has("win32") == 1
+  end
+  if not win32 then
     return argv
   end
-  local path = vim.fn.exepath(argv[1])
+  local path = (env and env.exepath or vim.fn.exepath)(argv[1])
   if path == "" then
     return argv
   end
@@ -35,10 +51,19 @@ local function resolve_argv(argv)
   end
   local out = { "cmd.exe", "/c", path }
   for i = 2, #argv do
+    if type(argv[i]) == "string" and argv[i]:find(CMD_UNSAFE) then
+      return nil,
+        ('refusing to run %s through cmd.exe /c: argument %d contains a character cmd.exe would interpret (one of " %% ^ & | < > or a line break); use an .exe instead of a .cmd/.bat shim'):format(
+          argv[1],
+          i
+        )
+    end
     out[#out + 1] = argv[i]
   end
   return out
 end
+
+M._resolve_argv = resolve_argv
 
 ---Run `argv` and deliver the captured result to `on_done` exactly once.
 ---@param argv string[]                              command + arguments
@@ -49,7 +74,6 @@ end
 ---@return Language.Job
 function M.run(argv, opts)
   opts = opts or {}
-  argv = resolve_argv(argv)
   local on_done = opts.on_done or function() end
   local finished = false
   local timer
@@ -73,6 +97,13 @@ function M.run(argv, opts)
       on_done(ok, out or "", err or "")
     end)
   end
+
+  local resolved, refused = resolve_argv(argv)
+  if not resolved then
+    finish(false, "", refused or "refused to run the command")
+    return job
+  end
+  argv = resolved
 
   if vim.system then
     -- A spawn failure (ENOENT, ENAMETOOLONG on an oversized command line, ...)

@@ -86,6 +86,96 @@ return function(H)
   vim.wait(100)
   H.eq(long_calls, 1, "reported exactly once")
 
+  -- Windows launchers that are not real executables (.cmd/.bat shims, npm shims,
+  -- extensionless scripts) go through `cmd.exe /c`. libuv escapes an embedded
+  -- quote as \" which cmd.exe does not understand, and `%VAR%` expands even in
+  -- quotes, so text like `x" & calc & "y` would run as a command: such an
+  -- argument is refused instead. (The platform is injected so this runs everywhere.)
+  local win_shim = {
+    win32 = true,
+    exepath = function()
+      return [[C:\tools\trans.cmd]]
+    end,
+  }
+  local win_exe = {
+    win32 = true,
+    exepath = function()
+      return [[C:\tools\trans.exe]]
+    end,
+  }
+  local linux = {
+    win32 = false,
+    exepath = function()
+      return "/usr/bin/trans"
+    end,
+  }
+
+  local safe = job._resolve_argv({ "trans", "-b", ":de", "hello world" }, win_shim)
+  H.eq(
+    table.concat(safe, "|"),
+    [[cmd.exe|/c|C:\tools\trans.cmd|-b|:de|hello world]],
+    "a plain argument goes through the shim as before"
+  )
+  for _, evil in ipairs({
+    'x" & echo pwned>injected.flag & "y',
+    "100%",
+    "user is %USERNAME%",
+    "a & b",
+    "a | b",
+    "a > b",
+    "a < b",
+    "a ^ b",
+    "line one\nline two",
+    "line one\rline two",
+  }) do
+    local out, why = job._resolve_argv({ "trans", "-b", ":de", evil }, win_shim)
+    H.eq(out, nil, ("an argument that cmd.exe would interpret is refused: %q"):format(evil))
+    H.contains(why, "argument 4", "the message names the argument")
+    H.contains(why, "trans", "and the command")
+  end
+  H.ok(
+    job._resolve_argv({ "trans", "-b", ":de", 'x" & y' }, win_exe),
+    "a real .exe is spawned directly: libuv's quoting is enough there"
+  )
+  H.eq(
+    job._resolve_argv({ "trans", 'x" & y' }, linux)[2],
+    'x" & y',
+    "and no other platform goes through cmd.exe at all"
+  )
+
+  -- end to end through job.run: refused through on_done, nothing is spawned
+  local real_has, real_exepath, real_sys = vim.fn.has, vim.fn.exepath, vim.system
+  local spawned = false
+  vim.fn.has = function(what)
+    if what == "win32" then
+      return 1
+    end
+    return real_has(what)
+  end
+  vim.fn.exepath = function()
+    return [[C:\tools\trans.cmd]]
+  end
+  vim.system = function()
+    spawned = true
+    error("must not be spawned")
+  end
+  local refuse_done, refuse_ok, refuse_err, refuse_calls = false, nil, nil, 0
+  job.run({ "trans", "-b", ":de", 'x" & echo pwned>injected.flag & "y' }, {
+    on_done = function(ok, _out, err)
+      refuse_done, refuse_ok, refuse_err, refuse_calls = true, ok, err, refuse_calls + 1
+    end,
+  })
+  vim.fn.has, vim.fn.exepath, vim.system = real_has, real_exepath, real_sys
+  vim.wait(2000, function()
+    return refuse_done
+  end)
+  H.ok(refuse_done, "a refused command is still reported through on_done")
+  H.falsy(refuse_ok, "as a failure")
+  H.contains(refuse_err, "refusing", "saying so")
+  H.falsy(spawned, "without spawning anything")
+  vim.wait(100)
+  H.eq(refuse_calls, 1, "exactly once")
+
   -- cancel() before completion prevents on_done from ever firing later on a
   -- process that would otherwise still be running.
   local cancelled_done = false
