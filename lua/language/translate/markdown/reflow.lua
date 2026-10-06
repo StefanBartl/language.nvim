@@ -44,11 +44,25 @@ function M.starts_block(word)
   if c == ">" or c == "|" or c == "<" then
     return true
   end
+  -- The cell of a table's delimiter row: `:-:`, `--:`.
+  if word:match("^[:%-]+$") then
+    return true
+  end
   if word:match("^```") or word:match("^~~~") or word:match("^%$%$") or word:match("^:::") then
     return true
   end
   -- A reference or footnote definition: `[label]:`.
   return word:match("^%[[^%]]*%]:") ~= nil
+end
+
+---Does `line` look like the delimiter row of a table (`| --- | :-: |`)? A wrap that
+---makes one out of a line of text turns the paragraph above it into a table.
+---@param line string
+---@return boolean
+function M.is_table_rule(line)
+  return line:find("-", 1, true) ~= nil
+    and line:find("|", 1, true) ~= nil
+    and line:match("^[ \t>|:%-]+$") ~= nil
 end
 
 ---Split `text` at white space.
@@ -121,13 +135,32 @@ function M.reflow(text, weights, opts)
       cum = cum + math.max(weights[k], 1)
       local target = acc * cum / sum
       local lo, hi = starts[k] + 1, m - (n - k - 1)
+      -- `prefix` grows with every word, so the distance to `target` is V-shaped:
+      -- the best break is the nearest safe word on either side of the first word
+      -- that reaches it. (A scan over the whole range would make a paragraph of
+      -- n lines and m words cost n * m.)
+      local a, b = lo, hi
+      while a < b do
+        local mid = math.floor((a + b) / 2)
+        if prefix[mid - 1] >= target then
+          b = mid
+        else
+          a = mid + 1
+        end
+      end
       local best, best_d
-      for c = lo, hi do
+      for c = a - 1, lo, -1 do
         if ok_start(c) then
-          local d = math.abs(prefix[c - 1] - target)
-          if not best_d or d < best_d then
-            best, best_d = c, d
+          best, best_d = c, math.abs(prefix[c - 1] - target)
+          break
+        end
+      end
+      for c = a, hi do
+        if ok_start(c) then
+          if not best_d or math.abs(prefix[c - 1] - target) < best_d then
+            best = c
           end
+          break
         end
       end
       if not best then

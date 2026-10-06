@@ -246,4 +246,107 @@ return function(H)
     H.ok(accepted > 1000, "most random inputs wrap (" .. accepted .. " of 3000)")
     H.ok(refused > 0, "and some are refused, never broken")
   end
+
+  -- The cell of a table's delimiter row is no word to start a line with ----------------
+  do
+    H.ok(reflow.starts_block(":-:"))
+    H.ok(reflow.starts_block("--:"))
+    H.ok(reflow.starts_block(":--:"))
+    H.falsy(reflow.starts_block("a-b"))
+    H.ok(reflow.is_table_rule("| --- | :-: |"))
+    H.ok(reflow.is_table_rule(":-: | -"))
+    H.ok(reflow.is_table_rule("> |---|"))
+    H.falsy(reflow.is_table_rule("--- ---"), "no pipe: a rule, not a table")
+    H.falsy(reflow.is_table_rule("a | --- | b"))
+    H.falsy(reflow.is_table_rule("| a | b |"))
+  end
+
+  -- The break search looks at the neighbourhood of the ideal break, not at every word.
+  -- Compared with the plain scan over the whole range it replaces. ---------------------
+  do
+    ---@param text string
+    ---@param weights integer[]
+    ---@param opts table
+    local function reference(text, weights, opts)
+      local unsafe = opts.unsafe or reflow.starts_block
+      local n = #weights
+      local words = reflow.words(text)
+      local m = #words
+      if m == 0 or (opts.guard_first and unsafe(words[1])) then
+        return nil
+      end
+      if n <= 1 then
+        return { table.concat(words, " ") }
+      end
+      local starts = { 1 }
+      if m < n then
+        for k = 2, m do
+          if unsafe(words[k]) then
+            return nil
+          end
+          starts[k] = k
+        end
+      else
+        local prefix, acc = {}, 0
+        for i = 1, m do
+          acc = acc + #words[i] + (i > 1 and 1 or 0)
+          prefix[i] = acc
+        end
+        local sum = 0
+        for k = 1, n do
+          sum = sum + math.max(weights[k], 1)
+        end
+        local cum = 0
+        for k = 1, n - 1 do
+          cum = cum + math.max(weights[k], 1)
+          local target = acc * cum / sum
+          local best, best_d
+          for c = starts[k] + 1, m - (n - k - 1) do
+            if not unsafe(words[c]) then
+              local d = math.abs(prefix[c - 1] - target)
+              if not best_d or d < best_d then
+                best, best_d = c, d
+              end
+            end
+          end
+          if not best then
+            return nil
+          end
+          starts[k + 1] = best
+        end
+      end
+      local out = {}
+      for k = 1, n do
+        out[k] = starts[k] and table.concat(words, " ", starts[k], (starts[k + 1] or (m + 1)) - 1)
+          or ""
+      end
+      return out
+    end
+
+    math.randomseed(77)
+    local pool =
+      { "a", "bb", "ccc", "-", "1.", "dddd", "#", "x", "yy", "zzzzzz", ">", "|", "lorem" }
+    for iter = 1, 3000 do
+      local words = {}
+      for i = 1, math.random(0, 25) do
+        words[i] = pool[math.random(#pool)]
+      end
+      local weights = {}
+      for i = 1, math.random(1, 12) do
+        weights[i] = math.random(0, 40)
+      end
+      local opts = { guard_first = math.random() < 0.5 }
+      local text = table.concat(words, " ")
+      local got = reflow.reflow(text, weights, opts)
+      local want = reference(text, weights, opts)
+      H.eq(got == nil, want == nil, "same refusals: " .. text)
+      if got and want then
+        H.eq(
+          table.concat(got, "\0"),
+          table.concat(want, "\0"),
+          "same breaks " .. iter .. ": " .. text
+        )
+      end
+    end
+  end
 end

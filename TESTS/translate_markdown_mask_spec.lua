@@ -144,4 +144,22 @@ return function(H)
     local _, mk = mask.mask("a `x%1` b")
     H.eq(mask.unmask("so {1} da", mk), "so `x%1` da", "a % in the protected text is not a pattern")
   end
+
+  -- look-ahead is bounded: a line of unclosed brackets or parentheses is linear -----
+  do
+    local function seconds(text)
+      local t0 = vim.uv.hrtime()
+      local masked, mk = mask.mask(text)
+      H.eq(mask.unmask(masked, mk), text, "and the text still comes back whole")
+      return (vim.uv.hrtime() - t0) / 1e9
+    end
+    local t = seconds(string.rep("[a ", 60000))
+    H.ok(t < 2, ("unclosed brackets (%.2f s)"):format(t))
+    t = seconds(string.rep("[a](", 40000))
+    H.ok(t < 2, ("unclosed destinations (%.2f s)"):format(t))
+    t = seconds(string.rep("`` `", 40000))
+    H.ok(t < 2, ("unmatched backtick runs (%.2f s)"):format(t))
+    local masked = mask.mask("[Text](a.md) und [Mehr](b.md)")
+    H.eq(masked, "{1}Text{2} und {3}Mehr{4}", "ordinary links are not affected by the budget")
+  end
 end

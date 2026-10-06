@@ -99,6 +99,34 @@ local function plausible(orig, text)
   return b <= a * 8 + 40
 end
 
+---@internal
+---Number of unescaped pipes in `s`.
+---@param s string
+---@return integer
+local function pipe_count(s)
+  local n, i = 0, 1
+  while i <= #s do
+    local c = s:sub(i, i)
+    if c == "\\" then
+      i = i + 1
+    elseif c == "|" then
+      n = n + 1
+    end
+    i = i + 1
+  end
+  return n
+end
+
+---@internal
+---Would `text` (the translation of the table cell `orig`) change the shape of
+---the row: a pipe of its own, or a backslash that escapes the pipe behind it?
+---@param orig string
+---@param text string
+---@return boolean
+local function cell_breaks(orig, text)
+  return pipe_count(text) ~= pipe_count(orig) or #text:match("\\*$") % 2 == 1
+end
+
 ---Translate a Markdown document.
 ---@param lines string[]
 ---@param opts LanguageMdTranslateOpts
@@ -207,7 +235,9 @@ function M.translate_markdown(lines, opts, cb)
     ---@field anchor boolean
     ---@field tr string|nil
     ---@field status string|nil
-    ---@field reflow_failed boolean|nil
+    ---@field reflow_failed boolean|string|nil
+    ---@field counted boolean|nil
+    ---@field entry table|nil
     ---@type LanguageMdUnitState[]
     local ust = {}
     local info = {
@@ -264,6 +294,7 @@ function M.translate_markdown(lines, opts, cb)
         end
         e.units[#e.units + 1] = id
         e.heading = e.heading or is_heading[id] == true
+        e.cell = e.cell or u.block == "cell"
         s.entry = e
         local bs = bstate[unit_block[id]]
         bs.pending = bs.pending + 1
@@ -302,29 +333,41 @@ function M.translate_markdown(lines, opts, cb)
     ---@return string[]|nil
     local function unit_content(id)
       local s = ust[id]
-      if not s.tr then
-        return nil
-      end
-      local mk = s.mk
+      local text, mk = s.tr, s.mk
       if map and s.anchor then
-        local toks = {}
+        local toks, changed = {}, false
         for i, t in ipairs(mk.toks) do
-          toks[i] = anchors.rewrite_dest(t, map)
+          local new, c = anchors.rewrite_dest(t, map)
+          toks[i], changed = new, changed or c
         end
-        mk = { toks = toks, pair = mk.pair }
+        if changed then
+          mk = { toks = toks, pair = mk.pair }
+          -- A unit that stays as it is (nothing to translate, or its translation
+          -- failed) still points at a heading whose slug changed: put it together
+          -- again from its masked text, with the new targets.
+          text = text or s.masked
+        end
+      end
+      if not text then
+        return nil
       end
       local u = units[id]
       local function unsafe(word)
         return reflow.starts_block(mask.unmask(word, mk))
       end
       local out, err =
-        reflow.reflow(s.tr, u.weights, { guard_first = u.guard_first, unsafe = unsafe })
+        reflow.reflow(text, u.weights, { guard_first = u.guard_first, unsafe = unsafe })
       if not out then
-        s.reflow_failed = err or true
+        s.reflow_failed = s.tr and (err or true) or nil
         return nil
       end
       for k = 1, #out do
         out[k] = mask.unmask(out[k], mk)
+        if reflow.is_table_rule(out[k]) and not reflow.is_table_rule(u.orig[k]) then
+          -- This wrap would make a delimiter row of a line of text.
+          s.reflow_failed = s.tr and "the wrap would form a table" or nil
+          return nil
+        end
       end
       return out
     end
@@ -345,7 +388,8 @@ function M.translate_markdown(lines, opts, cb)
 
     local function emit(bi)
       local bs = bstate[bi]
-      if not bs.changed or not opts.on_unit then
+      -- Nothing after `cb`: a cancel from inside an earlier `on_unit` ends the stream.
+      if finished or not bs.changed or not opts.on_unit then
         return
       end
       done_blocks = done_blocks + 1
@@ -467,6 +511,9 @@ function M.translate_markdown(lines, opts, cb)
       if not plausible(entry.masked, text) then
         return nil, "implausible length of the translation"
       end
+      if entry.cell and cell_breaks(entry.masked, text) then
+        return nil, "the translation would split or merge table cells"
+      end
       return text
     end
 
@@ -523,17 +570,18 @@ function M.translate_markdown(lines, opts, cb)
         end
       end
       local out = segment.render(seg, content)
+      local amap = map or {}
       for _, L in ipairs(seg.refdefs) do
-        local new, changed = anchors.rewrite_refdef(out[L], map)
+        local new, changed = anchors.rewrite_refdef(out[L], amap)
         if changed then
           out[L] = new
           info.anchors_changed = info.anchors_changed + 1
         end
       end
       for id = 1, #units do
-        if ust[id].anchor and ust[id].tr then
+        if ust[id].anchor then
           for _, t in ipairs(ust[id].mk.toks) do
-            local _, changed = anchors.rewrite_dest(t, map)
+            local _, changed = anchors.rewrite_dest(t, amap)
             if changed then
               info.anchors_changed = info.anchors_changed + 1
             end
