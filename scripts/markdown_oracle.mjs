@@ -6,7 +6,9 @@
 // Per pair: the sequence of block elements with their start lines, the text of every
 // <pre> block, and the multisets of link targets (anchors excluded), image sources and
 // inline code. Exit code 1 when a pair differs. Differences that are not bugs: a bare
-// URL directly followed by a backslash break (the autolink takes the backslash).
+// URL directly followed by a backslash break (the autolink takes the backslash), and an
+// inline `<pre>` tag in prose (the HTML it opens swallows the rest of the document, so the
+// translated text lands in a <pre>).
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -34,7 +36,9 @@ function describe(md) {
   const hrefs = [...html.matchAll(/<a [^>]*href="([^"]*)"/g)].map((m) => m[1]).filter((h) => !h.startsWith('#'));
   const imgs = [...html.matchAll(/<img [^>]*src="([^"]*)"/g)].map((m) => m[1]);
   const code = [...html.replace(/<pre[\s\S]*?<\/pre>/g, '').matchAll(/<code>([\s\S]*?)<\/code>/g)].map((m) =>
-    m[1].replace(/\s+/g, ' '),
+    // A code span that ran over lines carries the indent of its continuation lines;
+    // the reflow moves those, so only the words count.
+    m[1].replace(/\s+/g, ' ').trim(),
   );
   return { tags, pres, hrefs: bag(hrefs), imgs: bag(imgs), code: bag(code) };
 }

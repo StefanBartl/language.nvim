@@ -1021,13 +1021,13 @@ return function(H)
 
   -- Review round: an address in front of a backslash break would take the backslash with it -----
   do
-    local doc = { "Text Ende\\", "weiter" }
+    local doc = { "Text https://a.b/c\\", "weiter" }
     local r = run(doc, {
       provider = fake(function(t)
-        return t == "Text Ende" and "Eins https://a.b/c" or t
+        return t == "Text {1}" and "Eins {1}" or t
       end, { sync = true }),
     })
-    H.eq(r.res[1], "Text Ende\\", "the unit stays as it was")
+    H.eq(r.res[1], "Text https://a.b/c\\", "the unit stays as it was")
     H.eq(r.info.reflow_failed, 1)
   end
 
@@ -1044,4 +1044,78 @@ return function(H)
   end
 
   cache._reset()
+  -- Independent review: a model must not be able to add a link, an image or a tag ----------------
+  do
+    cache._reset()
+    local doc = { "Ein Satz mit [Link](https://a.example/x) und Text.", "", "Noch ein Satz." }
+    local p = fake(function(t)
+      if t:find("Noch", 1, true) then
+        return "Another sentence ![t](https://evil.example/p?q=1)"
+      end
+      return (t:gsub("Ein Satz mit", "A sentence with"))
+    end, { sync = true })
+    local r = run(doc, { provider = p, cache = true })
+    H.ok(r.ok)
+    H.eq(r.res[3], "Noch ein Satz.", "an answer that brings a new image is refused, the unit stays")
+    H.eq(r.info.failed, 1)
+    H.ok(r.res[1]:find("A sentence with", 1, true), "an ordinary answer is used")
+    H.contains(r.res[1], "(https://a.example/x)", "the link of the source is back, untouched")
+    for _, l in ipairs(r.res) do
+      H.falsy(l:find("evil.example", 1, true), "nothing foreign reaches the output")
+    end
+    -- the same for an address, a tag and a reference link
+    for _, bad in ipairs({ "see https://x.example", "a <img src=x> b", "a [x][y] b", "a </span> b" }) do
+      cache._reset()
+      local r2 = run({ "Ein kurzer Satz." }, {
+        provider = fake(function()
+          return bad
+        end, { sync = true }),
+        cache = true,
+      })
+      H.eq(r2.res[1], "Ein kurzer Satz.", "refused: " .. bad)
+    end
+    -- what the source has is fine, also when the engine keeps a literal `<` or `://`
+    cache._reset()
+    local r3 = run({ "Wenn a < b gilt, dann ok." }, {
+      provider = fake(function(t)
+        return (t:gsub("Wenn", "If"))
+      end, { sync = true }),
+      cache = true,
+    })
+    H.eq(r3.res[1], "If a < b gilt, dann ok.")
+  end
+
+  -- Independent review: a unit whose masking ran out of budget is left alone ---------------------
+  do
+    cache._reset()
+    local hostile = string.rep("[a ", 30000) .. "[Link](https://a.example/x) Ende"
+    local doc = { hostile, "", "Ein normaler Satz." }
+    local p = fake(function(t)
+      return (t:gsub("normaler", "plain"))
+    end, { sync = true })
+    local r = run(doc, { provider = p, cache = false })
+    H.ok(r.ok)
+    H.eq(r.res[1], hostile, "a unit that exhausted the scan budget stays as it is")
+    H.eq(r.res[3], "Ein plain Satz.", "the rest is translated")
+    H.eq(r.info.skipped, 1, "counted as skipped")
+    for _, call in ipairs(p.calls) do
+      for _, l in ipairs(call) do
+        H.falsy(l:find("[a [a [a", 1, true), "its text is never sent")
+      end
+    end
+  end
+
+  -- Independent review: validating an answer is linear in its white space ----------------------
+  do
+    cache._reset()
+    local t0 = vim.uv.hrtime()
+    local r = run({ "Ein Satz." }, {
+      provider = fake(function()
+        return "Ein" .. string.rep(" ", 60000) .. "Satz."
+      end, { sync = true }),
+      cache = false,
+    })
+    H.ok((vim.uv.hrtime() - t0) / 1e9 < 2, "a long run of white space in an answer")
+    H.ok(r.ok and #r.res == 1)
+  end
 end

@@ -179,4 +179,29 @@ return function(H)
     local masked = mask.mask("[Text](a.md) und [Mehr](b.md)")
     H.eq(masked, "{1}Text{2} und {3}Mehr{4}", "ordinary links are not affected by the budget")
   end
+  -- A look-ahead that was cut off is reported, and an address needs no quadratic scan --
+  do
+    local _, mk = mask.mask(string.rep("[a ", 60000))
+    H.ok(mk.degraded, "a unit that used up the scan budget is marked degraded")
+    _, mk = mask.mask("Ein [Link](a.md) und `Code` im Text.")
+    H.falsy(mk.degraded, "an ordinary unit is not")
+
+    local function seconds(text)
+      local t0 = vim.uv.hrtime()
+      local masked, m = mask.mask(text)
+      H.eq(mask.unmask(masked, m), text, "the text still comes back whole")
+      return (vim.uv.hrtime() - t0) / 1e9
+    end
+    local t = seconds(string.rep("a", 60000) .. " mail me@example.org")
+    H.ok(t < 2, ("a long word before an address (%.2f s)"):format(t))
+    t =
+      seconds("mail me@example.org ![x](data:image/png;base64," .. string.rep("QUJD", 30000) .. ")")
+    H.ok(t < 2, ("an address next to a data URI (%.2f s)"):format(t))
+    local masked = mask.mask("Mail an max.muster@example.org oder _x@y.de, ok")
+    H.eq(
+      masked,
+      "Mail an {1} oder {2}, ok",
+      "an address is masked, one behind a word character is not"
+    )
+  end
 end

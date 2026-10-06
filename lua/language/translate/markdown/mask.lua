@@ -24,6 +24,7 @@ local M = {}
 ---@class LanguageMdMask
 ---@field toks string[]               -- the protected text of placeholder n
 ---@field pair table<integer, integer> -- open placeholder -> its closing placeholder
+---@field degraded? boolean            -- the scan budget ran out: a look-ahead was skipped, the masking is not to be trusted
 
 -- Fullwidth braces: an engine translating into CJK likes to "localise" `{1}`.
 local FW_OPEN = "\239\189\155"
@@ -53,7 +54,8 @@ end
 ---Spend `n` of the unit's scan budget; false once it is used up. Every look-ahead
 ---(a closing bracket, a closing parenthesis, a closing backtick run) runs to the
 ---end of the unit when it finds nothing, so `[a [a [a ...` would cost n * n. The
----budget keeps the whole mask linear; what it cuts off stays literal text.
+---budget keeps the whole mask linear; what it cuts off stays literal text, and the mask
+---is marked `degraded` (the caller leaves such a unit alone).
 ---@param ctx table
 ---@param n integer
 ---@return boolean
@@ -355,16 +357,28 @@ end
 local function bare_ranges(text)
   local out = {}
   if text:find("@", 1, true) then
+    -- Anchored at each `@` (the local part is taken backwards, the domain forwards): a
+    -- find for the whole address from every byte of a long run of letters costs run^2.
     local init = 1
     while true do
-      local a, b = text:find("[%w%._%%%+%-]+@[%w%-]+%.[%w%.%-]*%w", init)
-      if not a then
+      local at = text:find("@", init, true)
+      if not at then
         break
       end
-      if a == 1 or not text:sub(a - 1, a - 1):match("[%w_]") then
-        out[#out + 1] = { a, b }
+      local a = at
+      while a > init and at - a <= 256 and text:sub(a - 1, a - 1):match("[%w%._%%%+%-]") do
+        a = a - 1
       end
-      init = b + 1
+      local dom = text:match("^[%w%-]+%.[%w%.%-]*%w", at + 1)
+      if a < at and dom then
+        local b = at + #dom
+        if a == 1 or not text:sub(a - 1, a - 1):match("[%w_]") then
+          out[#out + 1] = { a, b }
+        end
+        init = b + 1
+      else
+        init = at + 1
+      end
     end
   end
   if text:find("www.", 1, true) then
@@ -429,7 +443,11 @@ function M.mask(text, opts)
     special = "[`\\!%[<&{h" .. table.concat(extra) .. "]",
   }
   scan(ctx, 1, #text)
-  return table.concat(ctx.out), { toks = ctx.toks, pair = ctx.pair }
+  -- A look-ahead that was cut off left a link or a code span as plain text. The
+  -- caller keeps such a unit as it is: translating it would let the engine touch
+  -- syntax that was not protected.
+  return table.concat(ctx.out),
+    { toks = ctx.toks, pair = ctx.pair, degraded = ctx.budget < 0 or nil }
 end
 
 ---Does `masked` carry anything to translate besides placeholders, digits and

@@ -154,10 +154,18 @@ runs over lines it is just text and does not.
 The line parser follows CommonMark where it decides what is code: a fence ends
 with its container (a line left of the list item's content, or without the
 `>` of its quote), a block that starts in the first column ends a list, four
-columns of indent are code outside of a list item, an ordered list that does
-not start at 1 cannot interrupt a paragraph, a table ends at a quote or a list
-item, CRLF endings and tab indents count like their LF/space counterparts.
+columns of indent beyond the container (the page, or the content of the list
+item) are code, so neither a fence nor a table opens there, and a closing fence
+indented that far does not close; text indented to an outer item belongs to that
+item, an ordered list that does not start at 1 cannot interrupt a paragraph, a
+table ends at a quote, a list item or an indented line, a `>` inside a fence is
+text, CRLF endings and tab indents count like their LF/space counterparts.
 Where it is unsure it prefers "literal" (German stays German) to "text".
+
+Every scan is linear: the look-aheads of the masking work on a budget per unit,
+and a unit that used it up (`mask.degraded`, a pathological run of brackets or
+backticks) is not sent at all and stays as it is, rather than being translated
+with syntax that was not protected.
 
 Inside a unit, inline code, link and image targets, autolinks, bare URLs and
 e-mail / `www.` addresses (the previewer links them), inline HTML, entities, footnote references, `{#id}` attribute lists and the
@@ -180,7 +188,10 @@ curl and a loopback server to keep it that way.
 
 Each answer is checked: every placeholder present exactly once (the halves of a
 link in the right order; fullwidth braces and `{ 1 }` are put right first),
-not empty, a plausible length compared with the source. A unit that fails is
+not empty, a plausible length compared with the source, and no link, image, HTML
+tag or address that the source did not have (the targets of the source are
+placeholders, so a model cannot be talked into adding a link or a tracking
+image by the text of the document). A unit that fails is
 retried once (a batch with an unattributable line count is retried unit by
 unit); if it fails again, **the original unit stays**: the preview shows German
 for that paragraph and is never empty or half. Three failed requests in a row
@@ -307,8 +318,8 @@ not deterministic, so the engine distrusts every answer.
   concurrency, cumulative budget, temperature 0 where the provider has one.
 - **Strict parse.** Valid JSON (one Markdown fence around the array is
   tolerated, any other text is not), an array, exactly as many elements as sent,
-  all strings, and every `{n}` placeholder of an element present exactly as often
-  as in the input. A deviation is asked once more, with the reason in the
+  all strings without a line break, and every `{n}` placeholder of an element
+  present exactly as often as in the input. A deviation is asked once more, with the reason in the
   system prompt; a second deviation is an error to the caller. `translate_markdown`
   then keeps the original unit (and never caches it).
 - **Policy.** Document text is stricter than a chat selection: a provider
@@ -325,14 +336,22 @@ not deterministic, so the engine distrusts every answer.
   `translate.max_blocks` applies as for every engine.
 - **Run label and budget.** Calls within 5 s of each other share one bulk label
   (one document is many calls), so `concurrency` and `max_total_chars` hold per
-  run; a later run starts a fresh label and resets the old one.
+  run; a later run starts a fresh label with a fresh `max_total_chars` budget.
+  The old label is **not** reset: `bulk.reset(label)` would give its characters
+  back to ai.nvim's session cap (`config.bulk.max_session_chars`), which must
+  keep counting every run of the session.
 - **Cancel.** `cancel()` kills the ai.nvim request and drops the callback. An
   already sent request cannot be aborted (ai.nvim): its answer is discarded.
 - **Cache.** `cache_id` joins provider, model, prompt version and a hash of
-  glossary and style into the `translate_markdown` cache key. The model is the
-  configured one (`translate.ai.model`, else ai.nvim's `model[provider]`); where
-  nothing names it, the `res.bulk.model` of the last answer is used. A model
-  switch therefore never serves old translations.
+  the system prompt (base text, glossary, style) into the `translate_markdown`
+  cache key. Provider and model are the ones ai.nvim resolves for a request
+  right now (`ai.providers.resolve`, then `translate.ai.model`, ai.nvim's
+  `model[provider]`, the provider's default), so a switch of provider, model or
+  provider order never serves old translations, also before the first answer
+  and across sessions. Only where that cannot be told (a provider reachable
+  through a bulk grant only) the `res.bulk.model` of the last answer is used.
+- **ai.nvim version.** An ai.nvim without `ai.bulk` counts as not installed: it
+  would ignore `req.bulk` and send the document as a plain chat request.
 
 ```lua
 translate = {

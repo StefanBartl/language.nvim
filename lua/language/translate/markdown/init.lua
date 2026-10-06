@@ -99,6 +99,29 @@ local function plausible(orig, text)
   return b <= a * 8 + 40
 end
 
+-- What would turn translated prose into a link, an image or markup the source did not
+-- have: an inline link or image, a reference link, an HTML tag, an address.
+local NEW_SYNTAX = { "%]%(", "%]%[", "<%a", "</", "<!", "://" }
+
+---@internal
+---Does `text` carry link or HTML syntax that the masked source `orig` does not? The
+---destinations of the source are placeholders, so anything of this kind left over is
+---new: an engine (a language model, with a document that argues with it) must not be
+---able to add a link, a tracking image or a tag to the output.
+---@param orig string
+---@param text string
+---@return boolean
+local function adds_syntax(orig, text)
+  for _, pat in ipairs(NEW_SYNTAX) do
+    local _, a = orig:gsub(pat, "")
+    local _, b = text:gsub(pat, "")
+    if b > a then
+      return true
+    end
+  end
+  return false
+end
+
 ---@internal
 ---Number of unescaped pipes in `s`.
 ---@param s string
@@ -124,7 +147,57 @@ end
 ---@param text string
 ---@return boolean
 local function cell_breaks(orig, text)
-  return pipe_count(text) ~= pipe_count(orig) or #text:match("\\*$") % 2 == 1
+  local bs = 0 -- trailing backslashes
+  while bs < #text and text:byte(#text - bs) == 92 do
+    bs = bs + 1
+  end
+  return pipe_count(text) ~= pipe_count(orig) or bs % 2 == 1
+end
+
+---@internal
+---White space as `%s` sees it (ASCII).
+---@param b integer|nil
+---@return boolean
+local function is_ws(b)
+  return b ~= nil and (b == 32 or (b >= 9 and b <= 13))
+end
+
+---@internal
+---One line: every run of white space around a line break becomes one space, the ends are
+---trimmed. A byte scan, not `%s*[\r\n]+%s*` and `%s+$`, which are quadratic on a long run
+---of white space.
+---@param text string
+---@return string
+local function flatten(text)
+  local out, n, pos = {}, 0, 1
+  while true do
+    local p = text:find("[\r\n]", pos)
+    if not p then
+      n = n + 1
+      out[n] = text:sub(pos)
+      break
+    end
+    local l = p - 1
+    while l >= pos and is_ws(text:byte(l)) do
+      l = l - 1
+    end
+    local r = p + 1
+    while is_ws(text:byte(r)) do
+      r = r + 1
+    end
+    out[n + 1], out[n + 2] = text:sub(pos, l), " "
+    n = n + 2
+    pos = r
+  end
+  text = table.concat(out)
+  local a, z = 1, #text
+  while is_ws(text:byte(a)) do
+    a = a + 1
+  end
+  while z >= a and is_ws(text:byte(z)) do
+    z = z - 1
+  end
+  return text:sub(a, z)
 end
 
 ---Translate a Markdown document.
@@ -298,7 +371,8 @@ function M.translate_markdown(lines, opts, cb)
         end
       end
       ust[id] = s
-      if mask.has_text(masked) then
+      -- A mask that ran out of budget is not trusted: the unit stays as it is.
+      if mask.has_text(masked) and not mk.degraded then
         local e = entries[masked]
         if not e then
           e = { masked = masked, mk = mk, units = {}, heading = false }
@@ -518,13 +592,16 @@ function M.translate_markdown(lines, opts, cb)
       if type(text) ~= "string" then
         return nil, "the engine returned no text"
       end
-      text = mask.normalize(text):gsub("%s*[\r\n]+%s*", " "):gsub("^%s+", ""):gsub("%s+$", "")
+      text = flatten(mask.normalize(text))
       if text == "" then
         return nil, "the engine returned an empty translation"
       end
       local ok, err = mask.check(text, entry.mk)
       if not ok then
         return nil, err
+      end
+      if adds_syntax(entry.masked, text) then
+        return nil, "the translation adds link or HTML syntax"
       end
       if not plausible(entry.masked, text) then
         return nil, "implausible length of the translation"
@@ -537,8 +614,9 @@ function M.translate_markdown(lines, opts, cb)
 
     -- Cache pass ---------------------------------------------------------------
     local misses = {}
+    local read_model = use_cache and cache_model() or nil
     for _, e in ipairs(todo) do
-      e.key = use_cache and cache.key(engine, cache_model(), target, source, e.masked) or nil
+      e.key = use_cache and cache.key(engine, read_model, target, source, e.masked) or nil
       local hit = e.key and cache.get(e.key)
       local value = hit and validate(e, hit)
       if value then
@@ -709,13 +787,14 @@ function M.translate_markdown(lines, opts, cb)
       end
 
       local invalid, first_err = {}, nil
+      local write_model = use_cache and cache_model() or nil
       for i, e in ipairs(req.entries) do
         local value, err = validate(e, res[i])
         if value then
           consec_fail = 0
           remaining = remaining - 1
           if use_cache then
-            e.key = cache.key(engine, cache_model(), target, source, e.masked)
+            e.key = cache.key(engine, write_model, target, source, e.masked)
             cache.set(e.key, value)
           end
           resolve_entry(e, value, false)

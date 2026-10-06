@@ -156,14 +156,20 @@ M.limits = {
   override = block_budget,
 }
 
----Load ai.nvim, or nil.
+---Load ai.nvim, or nil. An ai.nvim without `ai.bulk` is as good as none: it would
+---ignore `req.bulk` and send the document as an ordinary chat request, without the
+---caps and without the strict policy for document text.
 ---@return table|nil
 local function load_ai()
   local ok, ai = pcall(require, "ai")
-  if ok and type(ai) == "table" and type(ai.ask) == "function" then
-    return ai
+  if not (ok and type(ai) == "table" and type(ai.ask) == "function") then
+    return nil
   end
-  return nil
+  local ok_b, bulk = pcall(require, "ai.bulk")
+  if not (ok_b and type(bulk) == "table") then
+    return nil
+  end
+  return ai
 end
 
 ---Why `translate.ai` cannot be used, or nil when it can: ai.nvim missing, or
@@ -175,7 +181,7 @@ end
 function M.blocked(cfg)
   local ai = load_ai()
   if not ai then
-    return "the ai engine needs ai.nvim, which is not installed or fails to load"
+    return "the ai engine needs ai.nvim with bulk requests (`ai.bulk`), which is not installed or fails to load"
   end
   local a = settings(cfg)
   local ok_c, aicfg = pcall(function()
@@ -224,8 +230,34 @@ local function signature(a)
   return (a.provider or "") .. "|" .. (a.model or "")
 end
 
----Cache identity of an answer: provider/model (what the last answer said, else
----what the config names), the prompt version and a hash of glossary and style.
+---The provider and model that a request would reach right now, as ai.nvim resolves
+---them (`ai.providers.resolve`, the same call `ai.ask` makes), or nil when that
+---cannot be told (a provider that is only reachable through a bulk grant, an
+---ai.nvim without that module). Exact before the first answer, so a switch of
+---provider, model or provider order never serves the translations of the old one.
+---@param ai table
+---@param a table
+---@return string|nil
+local function resolved_identity(ai, a)
+  local ok, id = pcall(function()
+    local aicfg = type(ai.config) == "function" and ai.config() or {}
+    local requested = a.provider or aicfg.provider or "auto"
+    local provider = require("ai.providers").resolve(requested, aicfg.provider_order or {}, {})
+    if type(provider) ~= "table" or type(provider.id) ~= "string" then
+      return nil
+    end
+    local model = a.model
+      or (type(aicfg.model) == "table" and aicfg.model[provider.id])
+      or provider.default_model
+      or "default"
+    return provider.id .. "/" .. tostring(model)
+  end)
+  return ok and type(id) == "string" and id or nil
+end
+
+---Cache identity of an answer: provider/model (as ai.nvim resolves them now; else what
+---the last answer said, else what the config names), the prompt version and a hash of
+---the system prompt (base text, glossary, style).
 ---@param cfg table|nil
 ---@return string
 function M.cache_id(cfg)
@@ -234,7 +266,8 @@ function M.cache_id(cfg)
   do
     local provider, model = a.provider, a.model
     local ai = load_ai()
-    if ai then
+    who = ai and resolved_identity(ai, a)
+    if ai and not who then
       local ok, aicfg = pcall(function()
         return type(ai.config) == "function" and ai.config() or {}
       end)
@@ -247,12 +280,12 @@ function M.cache_id(cfg)
     end
     -- Only a model that nothing names (the provider's own default, or the
     -- choice of provider "auto") is taken from what an answer said.
-    who = model and ((provider or "auto") .. "/" .. model)
+    who = who
+      or (model and ((provider or "auto") .. "/" .. model))
       or seen[signature(a)]
       or ((provider or "auto") .. "/default")
   end
-  local extra =
-    vim.fn.sha256(table.concat(glossary_lines(a.glossary), "\n") .. "\0" .. (a.style or ""))
+  local extra = vim.fn.sha256(build_system("", nil, a))
   return ("ai:%s:p%d:%s"):format(who, PROMPT_VERSION, extra:sub(1, 12))
 end
 
@@ -264,12 +297,10 @@ local run = { n = 0, label = nil, active = 0, last_end = 0 }
 local function enter_run()
   local now = vim.uv.hrtime()
   if run.active == 0 and (not run.label or now - run.last_end > RUN_GRACE_NS) then
-    if run.label then
-      local ok, bulk = pcall(require, "ai.bulk")
-      if ok and type(bulk.reset) == "function" then
-        pcall(bulk.reset, run.label)
-      end
-    end
+    -- No `bulk.reset(old label)` here: it hands the characters of that run back to the
+    -- session total, which would let every new run start below `max_session_chars` (the
+    -- cost cap of the whole session) however much was sent before. A new label has a
+    -- fresh `max_total_chars` budget of its own anyway.
     run.n = run.n + 1
     run.label = ("language.nvim:translate:%d:%d"):format(vim.uv.os_getpid(), run.n)
   end
@@ -328,6 +359,10 @@ function M.parse(text, lines)
     if type(v) ~= "string" then
       return nil, ("element %d is not a string."):format(i)
     end
+    -- One element is one line: a line break would shift every line after it.
+    if v:find("\n", 1, true) and not lines[i]:find("\n", 1, true) then
+      return nil, ("element %d contains a line break; keep one line per element."):format(i)
+    end
     local want, got = placeholders(lines[i]), placeholders(v)
     for tok, n in pairs(want) do
       if got[tok] ~= n then
@@ -336,7 +371,9 @@ function M.parse(text, lines)
     end
     for tok in pairs(got) do
       if not want[tok] then
-        return nil, ("element %d has the placeholder %s that the input has not."):format(i, tok)
+        -- `tok` is the model's own text: cut it, it goes into the next request.
+        return nil,
+          ("element %d has the placeholder %s that the input has not."):format(i, tok:sub(1, 24))
       end
     end
   end
@@ -354,7 +391,13 @@ local function describe(err)
   local msg = err.message or err.msg or "request failed"
   local text = kind and ("ai (%s): %s"):format(kind, msg) or ("ai: " .. tostring(msg))
   if kind == "bulk_limit" then
-    text = text .. " -- see translate.ai.max_chars / max_total_chars"
+    local reason = type(err.data) == "table" and err.data.reason or nil
+    text = text
+      .. (
+        reason == "max_session_chars"
+          and " -- the session cap of ai.nvim (config.bulk.max_session_chars)"
+        or " -- see translate.ai.max_chars / max_total_chars"
+      )
   end
   return text
 end

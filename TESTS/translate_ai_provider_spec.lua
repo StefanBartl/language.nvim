@@ -334,6 +334,103 @@ return function(H)
   H.ok(#fake.requests > first, "a model switch asks again instead of serving old translations")
   md.cache._reset()
 
+  -- Independent review ------------------------------------------------------------------
+  -- A new run never resets the label of the old one: bulk.reset(label) refunds that run's
+  -- characters to ai.nvim's session cap, which must keep counting the whole session.
+  do
+    local resets = {}
+    install(function(req)
+      return answer(vim.json.decode(req.prompt))
+    end)
+    package.loaded["ai.bulk"] = {
+      reset = function(label)
+        resets[#resets + 1] = label
+      end,
+    }
+    ai = ai_mod()
+    local real_hrtime, offset = vim.uv.hrtime, 0
+    vim.uv.hrtime = function()
+      return real_hrtime() + offset
+    end
+    local r1 = call(ai, { "a" })
+    offset = offset + 10 * 1e9
+    local r2 = call(ai, { "b" })
+    vim.uv.hrtime = real_hrtime
+    H.ok(r1.ok and r2.ok, "both runs succeed")
+    H.ok(
+      fake.requests[2].bulk.label ~= fake.requests[1].bulk.label,
+      "a run after the grace period has a label of its own"
+    )
+    H.eq(#resets, 0, "...and the old label is not reset (it would refund the session cap)")
+  end
+
+  -- A line break inside an element would shift every line behind it
+  install(function(req)
+    local items = vim.json.decode(req.prompt)
+    items[1] = items[1] .. "\nextra"
+    return answer(items)
+  end)
+  ai = ai_mod()
+  r = call(ai, { "a", "b" })
+  H.ok(not r.ok and r.res:find("line break", 1, true), "an element with a line break is refused")
+  H.eq(#fake.requests, 2, "...after one retry")
+
+  -- The note of the retry goes into the next request: a placeholder the model made up is cut
+  install(function()
+    return answer({ "Hallo {" .. ("9"):rep(5000) .. "}" })
+  end)
+  ai = ai_mod()
+  r = call(ai, { "Hello" })
+  H.ok(not r.ok and #r.res < 400, "the error message stays short")
+  H.ok(#fake.requests[2].system < 2000, "...and so does the system prompt of the retry")
+
+  -- An ai.nvim without ai.bulk would ignore req.bulk and send the document as a chat
+  install(function() end)
+  package.loaded["ai.bulk"] = nil
+  package.preload["ai.bulk"] = function()
+    error("no bulk here")
+  end
+  ai = ai_mod()
+  H.eq(ai.available({}), false, "without ai.bulk the engine is unavailable")
+  H.contains(ai.blocked({}), "bulk", "and says why")
+  package.preload["ai.bulk"] = nil
+  package.loaded["ai.bulk"] = { reset = function() end }
+
+  -- The identity is what ai.nvim resolves now, not what an earlier answer said
+  install(function() end, { provider = "auto", model = { claude = "m1" } })
+  local resolved = { id = "claude", default_model = "dm" }
+  package.loaded["ai.providers"] = {
+    resolve = function()
+      return resolved
+    end,
+  }
+  ai = ai_mod()
+  H.contains(
+    ai.cache_id({}),
+    "claude/m1",
+    "provider auto: the model of the provider it resolves to"
+  )
+  fake.config_value = { provider = "auto", model = {} }
+  H.contains(ai.cache_id({}), "claude/dm", "...else the provider's own default")
+  resolved = { id = "ollama", default_model = "llama" }
+  H.contains(ai.cache_id({}), "ollama/llama", "a changed provider order changes the identity")
+  package.loaded["ai.providers"] = {
+    resolve = function()
+      return nil, { kind = "provider_resolution" }
+    end,
+  }
+  H.contains(ai.cache_id({}), "auto/default", "when nothing resolves the configuration speaks")
+  package.loaded["ai.providers"] = nil
+
+  -- The session cap is named for what it is
+  install(function()
+    return false,
+      { kind = "bulk_limit", message = "over the cap", data = { reason = "max_session_chars" } }
+  end)
+  ai = ai_mod()
+  r = call(ai, { "a" })
+  H.contains(r.res, "max_session_chars", "the hint names ai.nvim's session cap")
+
   package.loaded["ai"], package.loaded["ai.bulk"] = saved_ai, saved_bulk
   package.loaded["language.translate.providers.ai"] = saved_prov
   package.loaded["language.translate.providers.registry"] = nil
