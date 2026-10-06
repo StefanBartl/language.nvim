@@ -378,6 +378,579 @@ return function(H)
   local rone = run(pone, { "a", "b" })
   H.eq(rone.result(), "HTTP 429", "no 'block 1/1' decoration for a single request")
 
+  -- Rules that were unpinned until a mutation run -----------------------------------------
+  -- Every assertion in the sections below fails when the rule it names is deleted or bent in
+  -- chunk.lua (checked by running this spec against hand-made mutants of the module). The
+  -- fixtures are small on purpose: a tiny budget makes the boundary cases exact.
+  --
+  -- Mutants that cannot be killed because they do not change behaviour (a differential fuzz of
+  -- 60 000 random inputs found no difference for any of them):
+  --   * `return ws` instead of `ws - 1` in pick_boundary: the white space ends up in the piece
+  --     and rtrim_ws removes it again;
+  --   * dropping `stop <= n` in pick_boundary: the head is n + 1 bytes, so a sentence end that is
+  --     followed by white space inside it is always at most n;
+  --   * dropping the `math.min(.., max_bytes)` in fit(): only the upper bound of a binary search;
+  --   * `while e > 1` in rtrim_ws, `lo < hi` in text_span, dropping the `n > 0` guard, the
+  --     `stop >= len` break in split_line or the `#group > 0` guard in pack_pieces: each is
+  --     redundant with a check right next to it.
+
+  ---@param bl table[]
+  ---@return string  -- a plain block as `first-last`, a piece block as `<line>p<pieces>`
+  local function shape(bl)
+    local out = {}
+    for _, b in ipairs(bl) do
+      out[#out + 1] = b.pieces and ("%dp%d"):format(b.first, #b.pieces)
+        or ("%d-%d"):format(b.first, b.last)
+    end
+    return table.concat(out, " ")
+  end
+
+  ---@param bl table[]
+  ---@return string  -- how many pieces each block carries, e.g. "3,3,1"
+  local function per_block(bl)
+    local out = {}
+    for _, b in ipairs(bl) do
+      out[#out + 1] = tostring(#(b.pieces or {}))
+    end
+    return table.concat(out, ",")
+  end
+
+  ---The pieces one over-long line is cut into, joined with "|".
+  ---@param line string
+  ---@param limits table
+  ---@return string   -- "ERR <message>" when the line cannot be cut
+  local function cut(line, limits)
+    local bl, e = chunk.split({ line }, limits)
+    if not bl then
+      return "ERR " .. e
+    end
+    local all = {}
+    for _, b in ipairs(bl) do
+      vim.list_extend(all, b.pieces or {})
+    end
+    return table.concat(all, "|")
+  end
+
+  -- limits_for(): what an engine's override and max_chars may and may not do -----------------
+  do
+    local function const(v)
+      return function()
+        return v
+      end
+    end
+    local function budget(override)
+      return chunk.limits_for(fake({ max_bytes = 100, override = override }), {}).max_bytes
+    end
+    H.eq(budget(const(0)), 100, "an override of 0 is not a budget")
+    H.eq(budget(const(-5)), 100, "nor is a negative one")
+    H.eq(budget(const("5000")), 100, "nor a string")
+    H.eq(
+      budget(function()
+        error("override exploded")
+      end),
+      100,
+      "an override that throws leaves the declared budget"
+    )
+    H.eq(budget(const(5000.9)), 5000, "a fractional override is rounded down")
+    H.eq(
+      chunk.limits_for(fake({ max_bytes = 100 }), { max_chars = 40.7 }).max_bytes,
+      40,
+      "a fractional max_chars is rounded down too"
+    )
+
+    local carried = chunk.limits_for(
+      fake({
+        max_bytes = 100,
+        max_lines = 50,
+        cost = function(line)
+          return #line + 8
+        end,
+      }),
+      {}
+    )
+    H.eq(carried.max_lines, 50, "the engine's max_lines reaches the splitter")
+    H.eq(carried.cost("abc"), 11, "and so does its cost function")
+  end
+
+  -- a cut prefers a blank line, but only in the second half of the block ----------------------
+  do
+    local early = chunk.split(
+      { "a", "", "bbbbbb", "cccccc", "dddddd", "eeeeee" },
+      { max_bytes = 25 }
+    )
+    H.eq(
+      shape(early),
+      "1-5 6-6",
+      "a blank line in the first half of the block is not worth a short block"
+    )
+
+    local two = { "x", "x", "x", "x", "", "x", "", "x", "x" }
+    H.eq(
+      shape(chunk.split(two, { max_bytes = 15 })),
+      "1-7 8-9",
+      "of two blank lines in the second half the LAST one ends the block"
+    )
+  end
+
+  -- block structure around an over-long line: no empty blocks, nothing stale left over --------
+  do
+    local long = "aaaa bbbb cccc dddd eeee"
+    local exact = chunk.split({ "aaaaaaaaa" }, { max_bytes = 10 })
+    H.eq(shape(exact), "1-1", "a line that costs exactly the budget is an ordinary block")
+    H.eq(exact[1].pieces, nil, "it is not cut into pieces")
+
+    H.eq(shape(chunk.split({ long }, { max_bytes = 10 })), "1p1 1p1 1p1", "a long first line")
+    H.eq(
+      shape(chunk.split({ "aaaa", "bbbb", long, "cccc", "dddd" }, { max_bytes = 10 })),
+      "1-2 3p1 3p1 3p1 4-5",
+      "lines before and after a long line form blocks of their own, with a fresh budget"
+    )
+    H.eq(
+      shape(chunk.split({ "aaaa", long }, { max_bytes = 10 })),
+      "1-1 2p1 2p1 2p1",
+      "a long last line"
+    )
+    H.eq(
+      shape(chunk.split({ string.rep(" ", 50), "x" }, { max_bytes = 10 })),
+      "1-1 2-2",
+      "an over-long blank line is an ordinary (blank) block, not a piece list"
+    )
+
+    local pws = fake({ max_bytes = 10 })
+    local rws = run(pws, { string.rep(" ", 50), "x", string.rep("\t", 20) })
+    H.ok(rws.ok(), "blank over-long lines do not fail the call")
+    H.eq(#pws.calls, 1, "only the line with text is sent")
+    H.eq(pws.calls[1][1], "x", "and it is sent alone")
+    H.eq(rws.result()[1], string.rep(" ", 50), "the blank line comes back untouched")
+    H.eq(rws.result()[2], "X", "the text line is translated")
+    H.eq(rws.result()[3], string.rep("\t", 20), "a tab-only line too")
+  end
+
+  -- an over-long line is cut exactly where the doc says ----------------------------------------
+  do
+    H.eq(
+      cut("aaaa bbbb cccc dddd", { max_bytes = 10 }),
+      "aaaa bbbb|cccc dddd",
+      "a piece may cost exactly the budget (and the byte after it is looked at)"
+    )
+    H.eq(
+      cut("xxxxxxxxx yyyyyyyyy", { max_bytes = 10 }),
+      "xxxxxxxxx|yyyyyyyyy",
+      "a remainder that exactly fits is the last piece, not an unsplittable token"
+    )
+
+    for _, p in ipairs({ ".", "!", "?", ";" }) do
+      H.eq(
+        cut(("alpha beta gamma%s delta epsilon zeta eta"):format(p), { max_bytes = 25 }),
+        ("alpha beta gamma%s|delta epsilon zeta eta"):format(p),
+        ("'%s' ends a sentence: the cut is after it, not at the last blank"):format(p)
+      )
+    end
+    H.eq(
+      cut("One. Two three. four five six seven eight", { max_bytes = 25 }),
+      "One. Two three.|four five six seven|eight",
+      "of several sentence ends in range the LAST one wins"
+    )
+    H.eq(
+      cut("123456789. abcdefghi jklmnopqr stuvwx", { max_bytes = 21 }),
+      "123456789.|abcdefghi jklmnopqr|stuvwx",
+      "a sentence end at exactly half the budget is taken"
+    )
+    H.eq(
+      cut("12345678. abcdefghij klmn opqr", { max_bytes = 21 }),
+      "12345678. abcdefghij|klmn opqr",
+      "a sentence end one byte short of half loses against the last blank"
+    )
+    H.eq(
+      cut("a xxxxxxxxxxxxxxxxxxx", { max_bytes = 21 }),
+      "a|xxxxxxxxxxxxxxxxxxx",
+      "a one-letter word in front of a long token is cut off at the blank"
+    )
+
+    local lead = cut("   alpha beta gamma delta epsilon zeta", { max_bytes = 20 })
+    H.eq(
+      lead,
+      "alpha beta gamma|delta epsilon zeta",
+      "white space in front of a line, and at a cut, is dropped"
+    )
+    H.eq(
+      cut("word" .. string.rep(" ", 50) .. "word", { max_bytes = 20 }),
+      "word|word",
+      "a long run of blanks is one separator"
+    )
+  end
+
+  -- trailing white space is stripped from a piece, nothing else is -----------------------------
+  do
+    local stem = string.rep("word ", 8)
+    for name, tail in pairs({
+      space = " ",
+      tab = "\t",
+      newline = "\n",
+      vtab = "\v",
+      formfeed = "\f",
+      cr = "\r",
+      mixed = " \t \r",
+    }) do
+      H.eq(
+        cut(stem .. "end" .. tail, { max_bytes = 20 }):match("[^|]*$"),
+        "end",
+        "a trailing " .. name .. " is not sent to the engine"
+      )
+    end
+    for _, byte in ipairs({ 8, 14 }) do
+      H.eq(
+        cut(stem .. "end" .. string.char(byte), { max_bytes = 20 }):match("[^|]*$"),
+        "end" .. string.char(byte),
+        ("byte %d is not white space and stays"):format(byte)
+      )
+    end
+  end
+
+  -- CJK: every sentence mark and every clause mark ends a piece ---------------------------------
+  do
+    local limits = { max_bytes = 40 } -- 39 bytes per piece: three 12-byte units fit
+    for _, mark in ipairs({ "。", "！", "？", "；", "｡", "．" }) do
+      local unit = "あいう" .. mark
+      H.eq(
+        cut(string.rep(unit, 8), limits),
+        string.rep(unit, 3) .. "|" .. string.rep(unit, 3) .. "|" .. string.rep(unit, 2),
+        ("'%s' is a sentence mark"):format(mark)
+      )
+    end
+    for _, mark in ipairs({ "，", "、", "：", "､" }) do
+      local unit = "あいう" .. mark
+      H.eq(
+        cut(string.rep(unit, 8), limits),
+        string.rep(unit, 3) .. "|" .. string.rep(unit, 3) .. "|" .. string.rep(unit, 2),
+        ("'%s' is a clause mark: the last resort when there is no sentence end and no blank"):format(
+          mark
+        )
+      )
+    end
+
+    local jp_text = string.rep("これは文章です。", 20) -- sentences of 24 bytes
+    local at_limit = chunk.split({ jp_text }, { max_bytes = 97 })
+    H.eq(
+      per_block(at_limit),
+      "1,1,1,1,1",
+      "a mark that ends exactly at the budget (96 of 96 bytes) is taken: four sentences a piece"
+    )
+    H.eq(#at_limit[1].pieces[1], 96, "the first piece is four sentences long")
+    local past_limit = chunk.split({ jp_text }, { max_bytes = 96 })
+    H.eq(#past_limit, 7, "a mark that ends one byte past the budget is not taken")
+    H.eq(#past_limit[1].pieces[1], 72, "so the pieces are three sentences long")
+
+    H.eq(
+      cut("ab cd. あいうえおかきくけ。さしすせそ", { max_bytes = 40 }),
+      "ab cd. あいうえおかきくけ。|さしすせそ",
+      "a CJK mark later than an ASCII sentence end wins"
+    )
+    H.eq(
+      cut("あいう。abc def ghi. jkl mno pqr stu", { max_bytes = 40 }),
+      "あいう。abc def ghi.|jkl mno pqr stu",
+      "an ASCII sentence end later than a CJK mark wins"
+    )
+    H.eq(
+      cut("あ。" .. string.rep("いう，", 6), { max_bytes = 40 }),
+      "あ。|いう，いう，いう，いう，|いう，いう，",
+      "any sentence end beats a clause mark, even an early one"
+    )
+    H.eq(
+      cut(string.rep("あ", 40), { max_bytes = 40 }),
+      "ERR line 1 is too long to translate (121, limit 40): "
+        .. "no sentence or word boundary inside the budget",
+      "CJK without any mark has no boundary to cut at"
+    )
+  end
+
+  -- an unsplittable token: the message says why --------------------------------------------------
+  do
+    local _, e = chunk.split({ "ok", string.rep("z", 30) }, { max_bytes = 10 })
+    H.contains(
+      e,
+      "line 2 is too long to translate (31, limit 10)",
+      "the line, its cost and the limit"
+    )
+    H.contains(e, "no sentence or word boundary inside the budget", "and the reason")
+  end
+
+  -- packing the pieces of one line into requests -----------------------------------------------
+  do
+    -- Words spread over a gap that is wider than the budget: every word is a piece of its own
+    -- (the gap is dropped at the cut), so many tiny pieces can share one request.
+    local function spread(count, gap)
+      local letters = {}
+      for i = 1, count do
+        letters[i] = string.char(96 + i)
+      end
+      return table.concat(letters, string.rep(" ", gap))
+    end
+
+    local seven = spread(7, 8)
+    local free = chunk.split({ seven }, { max_bytes = 6 })
+    H.eq(per_block(free), "3,3,1", "three pieces of cost 2 fill a budget of 6 exactly")
+    H.ok(free[#free].tail, "only the last block of a line is flagged as its tail")
+    H.falsy(free[1].tail, "the first one is not")
+    H.eq(
+      per_block(chunk.split({ seven }, { max_bytes = 6, max_lines = 2 })),
+      "2,2,2,1",
+      "max_lines caps the pieces of one request"
+    )
+    H.eq(
+      per_block(chunk.split({ seven }, { max_bytes = 6, max_lines = 3 })),
+      "3,3,1",
+      "and a cap that is exactly met is fine"
+    )
+    H.eq(
+      per_block(chunk.split({ seven }, { max_bytes = 6, max_lines = 1 })),
+      "1,1,1,1,1,1,1",
+      "a cap of one request line each"
+    )
+
+    local deepl_loaded = package.loaded["language.translate.providers.deepl"]
+    local deepl = require("language.translate.providers.deepl").limits
+    package.loaded["language.translate.providers.deepl"] = deepl_loaded
+    H.eq(deepl.max_lines, 50, "fixture: DeepL takes at most 50 texts per request")
+
+    -- A DeepL-like engine at a budget of 500 bytes: 130 words, each further apart than a
+    -- request is wide, are 130 pieces of cost 9, and 55 of them would fit by bytes alone.
+    local many = {}
+    for i = 1, 130 do
+      many[i] = "w"
+    end
+    local wide = table.concat(many, string.rep(" ", 520))
+    H.eq(
+      per_block(chunk.split({ wide }, { max_bytes = 500, cost = deepl.cost })),
+      "55,55,20",
+      "fixture: without max_lines more than 50 pieces would share a request"
+    )
+    local pdeepl = fake(vim.deepcopy(deepl))
+    local rdeepl = run(pdeepl, { wide }, { max_chars = 500 })
+    H.ok(rdeepl.ok(), "a line of 130 pieces is translated")
+    local sizes, costs_ok = {}, true
+    for _, c in ipairs(pdeepl.calls) do
+      sizes[#sizes + 1] = #c
+      local used = 0
+      for _, l in ipairs(c) do
+        used = used + deepl.cost(l)
+      end
+      costs_ok = costs_ok and used <= 500
+    end
+    H.eq(table.concat(sizes, ","), "50,50,30", "no request carries more than 50 texts")
+    H.ok(costs_ok, "and none exceeds the byte budget")
+    H.eq(#rdeepl.result(), 1, "the line is still one line")
+    H.eq(
+      rdeepl.result()[1],
+      table.concat(vim.fn.split(string.rep("W ", 130), " "), " "),
+      "re-joined in order, every piece present"
+    )
+
+    -- budget by the cost function, not by bytes: two pieces of cost 10 fill a budget of 20
+    local by_len = { max_bytes = 20, cost = string.len }
+    H.eq(
+      per_block(chunk.split({ string.rep("abcdefghi. ", 4) }, by_len)),
+      "2,2",
+      "a custom cost is what is summed (two 10-byte pieces fill 20 exactly)"
+    )
+
+    -- end to end through the wrapper: max_lines = 1 sends every piece alone
+    local pone_each = fake({ max_bytes = 25, max_lines = 1 })
+    local rone_each = run(pone_each, { string.rep("a", 15) .. string.rep(" ", 10) .. "bbbbb" })
+    H.ok(rone_each.ok(), "a line cut at a wide gap is translated")
+    H.eq(#pone_each.calls, 2, "max_lines = 1: two pieces, two requests")
+    H.eq(#pone_each.calls[1], 1, "one text in the first")
+    H.eq(rone_each.result()[1], string.rep("A", 15) .. " BBBBB", "joined with a single space")
+    local pshare = fake({ max_bytes = 25 })
+    run(pshare, { string.rep("a", 15) .. string.rep(" ", 10) .. "bbbbb" })
+    H.eq(#pshare.calls, 1, "fixture: without max_lines both pieces share one request")
+  end
+
+  -- wrap(): what the callers can rely on around the engine call ------------------------------
+  do
+    local plain = {
+      name = "plain",
+      available = function()
+        return true
+      end,
+      translate = function() end,
+    }
+    H.eq(chunk.wrap(plain), plain, "a provider that declares no limits is returned as it is")
+
+    local pempty = fake({ max_bytes = 10 })
+    local rempty = run(pempty, {})
+    H.eq(#pempty.calls, 1, "an empty input still reaches the engine")
+    H.eq(#rempty.result(), 0, "and the engine's answer is returned")
+
+    H.eq(
+      rfail.result(),
+      "block 2/3 (lines 3-4): HTTP 429",
+      "a failed block is named by its number and its lines"
+    )
+
+    local whole = { "a", "b" }
+    local pwhole = fake({ max_bytes = 1000 })
+    run(pwhole, whole)
+    H.eq(pwhole.calls[1], whole, "a request that is the whole input is handed over without a copy")
+
+    local pstring = fake({ max_bytes = 1000 }, function(_, cb)
+      cb(true, "not a list")
+      return nil
+    end)
+    local rstring = run(pstring, { "a" })
+    H.falsy(rstring.ok(), "an engine that answers with something else than lines fails the call")
+    H.contains(rstring.result(), "returned no lines", "and says so")
+    H.eq(rstring.calls(), 1, "once")
+
+    -- the pieces of each over-long line are re-joined on their own
+    local long = "aaaa bbbb cccc dddd eeee"
+    local rtwice = run(fake({ max_bytes = 10 }), { long, "mid", long })
+    H.eq(#rtwice.result(), 3, "three lines in, three out")
+    H.eq(rtwice.result()[1], long:upper(), "the first long line is whole again")
+    H.eq(rtwice.result()[2], "MID", "the line between is untouched")
+    H.eq(
+      rtwice.result()[3],
+      long:upper(),
+      "and the second one holds none of the first one's pieces"
+    )
+
+    -- a piece the engine translates to nothing leaves no gap
+    local pgap = fake({ max_bytes = 10 }, function(lines, cb, n)
+      local out = {}
+      for i, l in ipairs(lines) do
+        out[i] = n == 2 and "" or l:upper()
+      end
+      cb(true, out)
+      return nil
+    end)
+    H.eq(
+      run(pgap, { long }).result()[1],
+      "AAAA BBBB EEEE",
+      "an empty translation of a piece is skipped, not joined as a double space"
+    )
+
+    -- surplus lines in an answer: only blank ones go, and never more than the surplus
+    local function answering(result)
+      return fake({ max_bytes = 1000 }, function(_, cb)
+        cb(true, result)
+        return nil
+      end)
+    end
+    local rblank_last = run(answering({ "A", "" }), { "a", "..." })
+    H.eq(
+      table.concat(rblank_last.result(), "|"),
+      "A|",
+      "a line the engine translated to nothing is a line, not a surplus"
+    )
+    local rsurplus = run(answering({ "A", "", "" }), { "a", "." })
+    H.eq(table.concat(rsurplus.result(), "|"), "A|", "one surplus blank line is dropped, not two")
+    local rtext = run(answering({ "A", "B", "C" }), { "a", "b" })
+    H.eq(table.concat(rtext.result(), "|"), "A|B|C", "surplus text is never silently dropped")
+
+    -- a misbehaving engine that calls back twice
+    local pdouble = fake({ max_bytes = 1000 }, function(_, cb)
+      cb(true, { "A", "B" })
+      cb(true, { "X", "Y" })
+      return nil
+    end)
+    local rdouble = run(pdouble, { "a", "b" })
+    H.eq(rdouble.calls(), 1, "cb exactly once")
+    H.eq(
+      table.concat(rdouble.result(), ","),
+      "A,B",
+      "a second answer does not touch the delivered result"
+    )
+
+    -- cancel(): the request in flight, and nothing that raises
+    local cancelled_now = { 0, 0 }
+    local pafter_sync = fake({ max_bytes = 10 }, function(lines, cb, n)
+      if n == 1 then
+        cb(true, lines) -- answers before translate() has even returned
+      end
+      return {
+        cancel = function()
+          cancelled_now[n] = cancelled_now[n] + 1
+        end,
+      }
+    end)
+    local rafter_sync = run(pafter_sync, { "aaaa", "bbbb", "cccc", "dddd" })
+    rafter_sync.job.cancel()
+    H.eq(cancelled_now[2], 1, "cancel() reaches the request that is in flight")
+    H.eq(cancelled_now[1], 0, "and not the one that had already answered")
+
+    local pcancel_throws = fake({ max_bytes = 10 }, function()
+      return {
+        cancel = function()
+          error("cancel exploded")
+        end,
+      }
+    end)
+    local rthrows = run(pcancel_throws, { "aaaa", "bbbb", "cccc", "dddd" })
+    H.ok(pcall(rthrows.job.cancel), "a cancel that throws does not raise out of the wrapper")
+    local pno_job = fake({ max_bytes = 10 }, function()
+      return nil
+    end)
+    local rno_job = run(pno_job, { "aaaa", "bbbb", "cccc", "dddd" })
+    H.ok(pcall(rno_job.job.cancel), "cancel() with no job behind it is fine")
+
+    -- a call that is already settled or cancelled stays quiet, whatever the engine does next
+    local plate = fake({ max_bytes = 1000 }, function(lines, cb)
+      cb(true, vim.tbl_map(string.upper, lines))
+      error("died after answering")
+    end)
+    local rlate = run(plate, { "a" })
+    H.eq(rlate.calls(), 1, "an engine that answers and then throws is reported once")
+    H.ok(rlate.ok(), "with the answer it gave")
+
+    local resume, victim = nil, nil
+    local pdies = fake({ max_bytes = 10 }, function(lines, cb, n)
+      if n == 1 then
+        resume = function()
+          cb(true, lines)
+        end
+        return nil
+      end
+      victim.job.cancel()
+      error("died while being cancelled")
+    end)
+    victim = run(pdies, { "aaaa", "bbbb", "cccc", "dddd" })
+    resume()
+    H.eq(victim.calls(), 0, "a cancelled call stays silent, even when the engine dies afterwards")
+
+    -- the failure of the second of two requests carries its position
+    local pfail2 = fake({ max_bytes = 10 }, function(lines, cb, n)
+      cb(n ~= 2, n == 2 and "HTTP 500" or lines)
+      return nil
+    end)
+    H.eq(
+      run(pfail2, { "aaaa", "bbbb", "cccc", "dddd" }).result(),
+      "block 2/2 (lines 3-4): HTTP 500",
+      "two requests are already worth saying which one failed"
+    )
+
+    -- configuration that cannot be used degrades to "no limit" instead of raising
+    H.eq(
+      chunk.limits_for(fake({ max_bytes = 100 }), nil).max_bytes,
+      100,
+      "no config at all: the declared budget"
+    )
+    H.eq(chunk.limits_for(pov, nil).max_bytes, 100, "an override that cannot read it is ignored")
+    local rnil_cfg
+    local wrapped_nil = chunk.wrap(fake({ max_bytes = 10 }))
+    wrapped_nil.translate({ "aaaa", "bbbb", "cccc" }, "DE", nil, nil, function(_, got)
+      rnil_cfg = got
+    end)
+    H.eq(table.concat(rnil_cfg, ","), "AAAA,BBBB,CCCC", "translate() without a config table works")
+    for _, junk in ipairs({ "2", true, -1 }) do
+      H.ok(
+        run(fake({ max_bytes = 10 }), six, { max_blocks = junk }).ok(),
+        ("max_blocks = %s is not a cap"):format(tostring(junk))
+      )
+    end
+    H.contains(rcap.result(), "needs 3 requests", "the max_blocks message counts the requests")
+    H.contains(rcap.result(), "translate.max_blocks (2)", "and names the cap")
+  end
+
   -- registry: every engine is wrapped ---------------------------------------------------
   package.loaded["language.translate.providers.registry"] = nil
   package.loaded["language.translate.providers.google"] = nil
