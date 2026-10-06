@@ -30,9 +30,49 @@ return function(H)
   H.eq(anchors.slug("123 Zahlen"), "123-zahlen")
   H.eq(anchors.slug(""), "")
 
+  -- The classes are the previewer's `\p{L}`, `\p{N}` and `\s`, not Neovim's charclass().
+  H.eq(anchors.slug("nb\194\160sp"), "nb-sp", "a no-break space is white space")
+  H.eq(anchors.slug("a\227\128\128b"), "a-b", "so is an ideographic space")
+  H.eq(anchors.slug("a\239\187\191b"), "a-b", "and a byte order mark")
+  H.eq(anchors.slug("x\194\178 \194\189 cup"), "x\194\178-\194\189-cup", "other numbers are kept")
+  H.eq(
+    anchors.slug("e\204\129"),
+    "e",
+    "a combining mark is dropped (the previewer's p{M}-less rule)"
+  )
+  H.eq(
+    anchors.slug("\224\164\185\224\164\191\224\164\168\224\165\141\224\164\166\224\165\128"),
+    "\224\164\185\224\164\168\224\164\166",
+    "Devanagari vowel signs are marks and go"
+  )
+  H.eq(
+    anchors.slug("\206\145\206\163 \206\146\206\163"),
+    "\206\177\207\130-\206\178\207\130",
+    "a capital sigma at the end of a word lower-cases to the final sigma, as in JavaScript"
+  )
+  H.eq(
+    anchors.slug("a\255\254b"),
+    "ab",
+    "bytes that are no UTF-8 are not taken for Latin-1 letters"
+  )
+
   -- plain: Markdown out of a heading ------------------------------------------------------
   H.eq(anchors.plain("Der `code` im [Link](#x) und **fett**"), "Der code im Link und fett")
-  H.eq(anchors.plain("Bild ![Alt](a.png) <b>x</b>"), "Bild Alt x")
+  H.eq(
+    anchors.plain("Bild ![Alt](a.png) <b>x</b>"),
+    "Bild  x",
+    "an image has no text node: its alt text is not part of the heading's text"
+  )
+  H.eq(
+    anchors.plain("Siehe <https://a.b/c>"),
+    "Siehe https://a.b/c",
+    "an autolink shows its address"
+  )
+  H.eq(
+    anchors.plain("Gr&ouml;&szlig;e &#228; &#xE4;"),
+    "Gr\195\182\195\159e \195\164 \195\164",
+    "references"
+  )
   H.eq(
     anchors.slug(anchors.plain("`npm install` ausf\195\188hren")),
     "npm-install-ausf\195\188hren"
@@ -56,6 +96,16 @@ return function(H)
 
     map = anchors.build_map({ "Gleich", "Gleich" }, { "Same", "Other" })
     H.eq(map["gleich"], "same", "the first heading with a slug wins, as in the client")
+
+    -- A repeated slug is numbered like GitHub and markdown.nvim number it, on both sides.
+    map = anchors.build_map({ "Intro", "Intro", "Intro" }, { "Einleitung", "Einleitung", "Anfang" })
+    H.eq(map["intro"], "einleitung")
+    H.eq(map["intro-1"], "einleitung-1", "the second heading of a slug has the suffix -1")
+    H.eq(map["intro-2"], "anfang", "and the third one the suffix -2, mapped to its own translation")
+
+    map = anchors.build_map({ "Ein", "Zwei" }, { "One", "One" })
+    H.eq(map["ein"], "one")
+    H.eq(map["zwei"], "one-1", "two headings that translate alike stay apart")
 
     map = anchors.build_map({ "???" }, { "!!!" })
     H.eq(next(map), nil, "a heading with an empty slug maps nothing")
