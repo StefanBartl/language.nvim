@@ -5,8 +5,10 @@
 --- established keyless endpoint used by translate-shell and many CLI tools —
 --- instead of the fragile private Apps-Script relay of the original
 --- uga-rosa/translate.nvim. Requires only `curl`. The request is built as an
---- argv list (via language.util.job) so the payload is never shell-interpolated;
---- the text is passed through `curl --data-urlencode` for safe encoding.
+--- argv list (via language.util.job) so the payload is never shell-interpolated.
+--- The text is a POST body handed to curl on stdin (`--data-urlencode q@-`), so
+--- it is neither part of the URL (no URL-length limit, no percent-encoding
+--- budget) nor of the command line (no Windows command-line limit).
 ---
 --- Response shape: `[[["translated","source",...],[...]], ...]`. The first
 --- element is a list of segments; segment[1] holds each translated chunk.
@@ -20,17 +22,13 @@ local M = {}
 M.name = "google"
 
 ---@internal
----The query travels in the URL, so a line costs its percent-encoded length
----(`%0A` for the separator). The budget stays well below the gtx URL limit
----and the Windows command-line limit (~32 700 characters).
+---A block is a POST body, so a line costs its raw bytes (+1 for the separator,
+---the default cost). 15 000 is conservative: the endpoint answered complete
+---translations for bodies of 57 000 bytes in a measurement (multi-line ASCII,
+---Cyrillic, one 15 000-byte Japanese line). A line above it is cut at sentence
+---or word boundaries by `translate/chunk.lua`.
 ---@type LanguageTranslateLimits
-M.limits = {
-  max_bytes = 5000,
-  cost = function(line)
-    local _, escaped = line:gsub("[^%w%-_.~]", "")
-    return #line + 2 * escaped + 3
-  end,
-}
+M.limits = { max_bytes = 15000 }
 
 local ENDPOINT = "https://translate.googleapis.com/translate_a/single"
 
@@ -75,8 +73,10 @@ end
 ---@return Language.Job|nil
 function M.translate(lines, target, source, cfg, cb)
   local text = table.concat(lines, "\n")
-  if text == "" then
-    cb(true, {})
+  if text:match("^[ \t\r\n\f\v]*$") then
+    -- Nothing to translate (the endpoint would answer with nothing, too): the
+    -- lines come back as they are, so the line count survives.
+    cb(true, vim.list_slice(lines))
     return nil
   end
 
@@ -86,18 +86,19 @@ function M.translate(lines, target, source, cfg, cb)
     target
   )
 
+  -- `q@-`: curl reads the value from stdin and url-encodes it (newlines kept).
   local argv = {
     "curl",
     "-s",
     "--compressed",
-    "-G",
     "--data-urlencode",
-    "q=" .. text,
+    "q@-",
     url,
   }
 
   return job.run(argv, {
     timeout_ms = cfg.timeout_ms or 8000,
+    stdin = text,
     on_done = function(ok, out, err)
       if not ok then
         cb(false, err ~= "" and err or "translation request failed")

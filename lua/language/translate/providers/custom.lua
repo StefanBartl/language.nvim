@@ -15,10 +15,19 @@ local M = {}
 M.name = "custom"
 
 ---@internal
----The user's argv builder usually puts the block into argv; stay below the
----Windows command-line limit. `translate.max_chars` lowers this further.
+---The user's argv builder usually puts the block into argv, so the budget is
+---the one of the `shell` engine (6000 bytes on Windows, 20000 elsewhere). A
+---`cmd` that does not use argv for the text (temp file, own stdin handling)
+---can raise it with `translate.custom.max_bytes`; `translate.max_chars` still
+---lowers whatever applies.
 ---@type LanguageTranslateLimits
-M.limits = { max_bytes = 6000 }
+M.limits = {
+  max_bytes = vim.fn.has("win32") == 1 and 6000 or 20000,
+  override = function(cfg)
+    local custom = cfg and cfg.custom
+    return type(custom) == "table" and custom.max_bytes or nil
+  end,
+}
 
 ---@see LanguageTranslateProvider
 ---@param cfg LanguageTranslateCfg

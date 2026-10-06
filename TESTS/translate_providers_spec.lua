@@ -53,11 +53,38 @@ return function(H)
   H.eq(result_r[1], "Bonjour", "the first segment's translated text is extracted")
   H.eq(calls[1].argv[1], "curl", "curl is the argv[1]")
   H.contains(table.concat(calls[1].argv, " "), "tl=FR", "the target language is in the query")
+  -- The text is a POST body on stdin (`--data-urlencode q@-`): not in the URL, so
+  -- no percent-encoding budget, and not in argv, so no command-line limit.
   H.contains(
     table.concat(calls[1].argv, " "),
-    "q=hello",
-    "the source text is passed via --data-urlencode"
+    "q@-",
+    "curl url-encodes the body it reads from stdin"
   )
+  H.eq(calls[1].opts.stdin, "hello", "the source text is the stdin of the request")
+  H.excludes(table.concat(calls[1].argv, " "), "hello", "and not an argv element")
+  H.excludes(table.concat(calls[1].argv, " "), " -G", "it is a POST, not a GET with a query")
+
+  -- Embedded newlines (blank lines included) reach the endpoint untouched.
+  google.translate({ "a", "", "b & c=d" }, "FR", nil, {}, function() end)
+  H.eq(
+    calls[#calls].opts.stdin,
+    "a\n\nb & c=d",
+    "lines are joined with newlines, nothing else changes"
+  )
+
+  -- Whitespace-only text has nothing to translate: no request, the lines come back as they are.
+  local nc = #calls
+  local blank_ok, blank_res
+  google.translate({ "" }, "FR", nil, {}, function(ok_b, res_b)
+    blank_ok, blank_res = ok_b, res_b
+  end)
+  H.ok(blank_ok, "a blank line is not an error")
+  H.eq(#blank_res, 1, "one line in, one line out (not an empty list)")
+  H.eq(blank_res[1], "", "unchanged")
+  H.eq(#calls, nc, "without a request")
+
+  H.eq(google.limits.max_bytes, 15000, "the budget is the raw body size")
+  H.eq(google.limits.cost, nil, "plain bytes, no percent-encoding cost")
 
   stub_job(true, "not json at all")
   google = reload("language.translate.providers.google")
@@ -133,6 +160,38 @@ return function(H)
   -- the Windows command-line limit and shows the text in the process list).
   H.excludes(table.concat(calls[1].argv, " "), "hello", "the text is not in argv either")
   H.excludes(table.concat(calls[1].argv, " "), "-d", "no -d body argument")
+  -- LUA-02: the quoting of that config is lib.nvim's one copy. A stand-in proves
+  -- DeepL goes through it instead of carrying an escaper of its own.
+  local real_curl = package.loaded["lib.nvim.net.curl"]
+  package.loaded["lib.nvim.net.curl"] = {
+    config_quote = function(value)
+      return "<" .. value .. ">"
+    end,
+  }
+  stub_job(true, [[{"translations":[{"text":"x"}]}]])
+  local deepl_lib = reload("language.translate.providers.deepl")
+  deepl_lib.translate({ "hi" }, "FR", nil, { deepl = { api_key = "k1" } }, function() end)
+  H.contains(
+    calls[1].opts.stdin,
+    "header = <Authorization: DeepL-Auth-Key k1>",
+    "the header is quoted by lib.nvim.net.curl.config_quote"
+  )
+  H.contains(calls[1].opts.stdin, "data = <{", "and so is the body")
+  package.loaded["lib.nvim.net.curl"] = { config_quote = "not a function" }
+  stub_job(true, "{}")
+  deepl_lib = reload("language.translate.providers.deepl")
+  local old_ok, old_err
+  deepl_lib.translate({ "hi" }, "FR", nil, { deepl = { api_key = "k1" } }, function(ok_o, err_o)
+    old_ok, old_err = ok_o, err_o
+  end)
+  H.falsy(old_ok, "an old lib.nvim without config_quote is a failure ...")
+  H.contains(old_err, "lib.nvim", "... that says what to update")
+  H.eq(#calls, 0, "and no request was made")
+  package.loaded["lib.nvim.net.curl"] = real_curl
+  stub_job(true, [[{"translations":[{"text":"Bonjour"}]}]])
+  deepl = reload("language.translate.providers.deepl")
+  deepl.translate({ "hello" }, "FR", nil, { deepl = { api_key = "abc123:fx" } }, function() end)
+
   H.contains(calls[1].opts.stdin, 'data = "{', "the body is a `data` line of the stdin config")
   H.contains(calls[1].opts.stdin, [=[\"text\":[\"hello\"]]=], "with the JSON quoted for curl")
   H.eq(
@@ -204,6 +263,20 @@ return function(H)
   H.ok(empty_s_done, "empty input short-circuits")
   H.eq(#empty_s_result, 0, "with nothing")
 
+  local blank_calls = #calls
+  local blank_s
+  shell.translate({ "", "" }, "FR", nil, {}, function(_, result)
+    blank_s = result
+  end)
+  H.eq(#blank_s, 2, "blank lines come back as the same number of lines")
+  H.eq(#calls, blank_calls, "without starting trans")
+
+  H.eq(
+    shell.limits.max_bytes,
+    vim.fn.has("win32") == 1 and 6000 or 20000,
+    "the argv budget follows the platform (Windows: shim limit, elsewhere: 128 KiB per argument)"
+  )
+
   -- custom.lua (translate) ---------------------------------------------------
   local custom = reload("language.translate.providers.custom")
   H.falsy(custom.available({}), "no custom.cmd configured: unavailable")
@@ -250,6 +323,29 @@ return function(H)
   end)
   H.ok(p_done, "resolves")
   H.eq(p_result[1], "parsed:raw output", "a custom parse() is used when given")
+
+  H.eq(
+    custom.limits.max_bytes,
+    vim.fn.has("win32") == 1 and 6000 or 20000,
+    "custom starts at the same budget as shell"
+  )
+  H.eq(custom.limits.override({}), nil, "no custom config: no override")
+  H.eq(
+    custom.limits.override({ custom = { max_bytes = 90000 } }),
+    90000,
+    "translate.custom.max_bytes raises it for a cmd that does not use argv"
+  )
+  local chunk_mod = require("language.translate.chunk")
+  H.eq(
+    chunk_mod.limits_for(custom, { custom = { max_bytes = 90000 } }).max_bytes,
+    90000,
+    "limits_for honours the override"
+  )
+  H.eq(
+    chunk_mod.limits_for(custom, { custom = { max_bytes = 90000 }, max_chars = 500 }).max_bytes,
+    500,
+    "while max_chars still wins when lower"
+  )
 
   local bad_cmd_done, bad_cmd_ok, bad_cmd_err = false, nil, nil
   custom.translate({ "a" }, "FR", nil, { custom = { cmd = function() end } }, function(ok11, err)

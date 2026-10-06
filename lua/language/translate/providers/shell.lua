@@ -15,10 +15,12 @@ local M = {}
 M.name = "shell"
 
 ---@internal
----The block is a single argv element; keep it far below the Windows limit
----(~32 700) and the 8 191 of a `cmd.exe /c` shim.
+---The block is a single argv element. On Windows keep it far below the
+---command-line limit (~32 700) and the 8 191 of a `cmd.exe /c` shim; elsewhere
+---one argument may be 128 KiB (Linux MAX_ARG_STRLEN), so the budget is looser.
+---A line above it is cut at sentence or word boundaries by `translate/chunk.lua`.
 ---@type LanguageTranslateLimits
-M.limits = { max_bytes = 6000 }
+M.limits = { max_bytes = vim.fn.has("win32") == 1 and 6000 or 20000 }
 
 ---@see LanguageTranslateProvider
 ---@param _cfg LanguageTranslateCfg
@@ -35,8 +37,9 @@ end
 ---@return Language.Job|nil
 function M.translate(lines, target, source, cfg, cb)
   local text = table.concat(lines, "\n")
-  if text == "" then
-    cb(true, {})
+  if text:match("^[ \t\r\n\f\v]*$") then
+    -- Nothing to translate: the lines come back as they are (same line count).
+    cb(true, vim.list_slice(lines))
     return nil
   end
 

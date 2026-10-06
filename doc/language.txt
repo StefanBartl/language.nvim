@@ -251,12 +251,25 @@ when the chosen engine is unavailable (e.g. deepl without a key -> google).
 Large inputs are split on line boundaries (blank lines preferred) into blocks
 that fit the engine, translated one after the other and joined again with the
 line count unchanged, so a whole README no longer overruns the Windows
-command-line limit (~32 700 characters). Budget per block: google 5000
-(percent-encoded, it travels in the URL), shell and custom 6000 bytes, deepl
-50 lines / ~60 000 bytes. DeepL sends key and body on stdin (never argv).
-`translate.max_chars` (bytes, default 0 = engine default) can only lower the
-budget. A single line over the budget cannot be split and fails the call with
-a message naming the line; a failing block fails the whole call.
+command-line limit (~32 700 characters). Budget per block, in bytes (DeepL:
+bytes + 8 per line for the JSON quoting): google 15 000 (the text is a POST
+body on stdin), shell and custom 6000 on Windows / 20 000 elsewhere, deepl
+50 lines / 60 000. DeepL sends key and body on stdin (never argv).
+`translate.max_chars` (default 0 = engine default) can only lower the budget;
+`translate.custom.max_bytes` replaces the custom engine's budget (for a `cmd`
+that does not put the text into argv).
+Blank lines at the edge of a block are not sent (the engines trim them) and
+are put back, so paragraphs are never merged. A single line over the budget is
+cut at sentence ends, else at white space, and the translated pieces are
+re-joined with a space into one line; only a line without any such boundary
+(one giant token) fails the call, with a message naming the line.
+`translate.max_blocks` (default 50, 0 = no limit) refuses an input that would
+need more requests than that before the first one is sent.
+`translate.timeout_ms` applies to each request, not to the whole call. A
+failing block fails the whole call.
+On Windows a `.cmd`/`.bat` launcher (not an .exe) runs through `cmd.exe /c`;
+a command whose text contains `"` `%` `^` `&` `|` `<` `>` or a line break is
+refused there instead of being run.
 
                                                         *language-translate-maps*
 Motion / visual mappings (opt-in via `translate.keymaps`):
