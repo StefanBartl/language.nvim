@@ -209,6 +209,97 @@ return function(H)
     H.eq(#segment.render(seg, {}), 0)
   end
 
+  -- a setext heading has no marker in front of its first line: guard it like text -----------
+  do
+    local seg = seg_of({ "Titel", "=====" })
+    H.eq(seg.units[1].block, "heading")
+    H.eq(seg.units[1].guard_first, true, "a translation that starts with `- ` would make a list")
+    H.eq(seg_of({ "# Titel" }).units[1].guard_first, false, "an ATX heading has its `#` in front")
+  end
+
+  -- a block in the first column ends a list: the indented line after it is code -----------
+  do
+    local closers = {
+      { "<div>", "</div>" },
+      { "```", "x", "```" },
+      { "$$", "x", "$$" },
+      { "#" },
+      { "> Zitat" },
+      { "[ref]: /x" },
+      { "| a | b |", "|---|---|" },
+    }
+    for _, closer in ipairs(closers) do
+      local doc = { "- Punkt", "" }
+      vim.list_extend(doc, closer)
+      vim.list_extend(doc, { "", "    code" })
+      local seg = seg_of(doc)
+      H.ok(literal(seg, #doc), "an indented line after " .. closer[1] .. " is code, not item text")
+    end
+    local seg = seg_of({ "- Punkt", "", "    Folge" })
+    H.falsy(literal(seg, 3), "inside the list the same line is a continuation of the item")
+  end
+
+  -- a fence lives inside its container: a line outside of it ends the fence ------------------
+  do
+    local seg = seg_of({ "- item", "  ```", "  code", "text danach" })
+    H.ok(literal(seg, 3), "the code of a fence in an item is literal")
+    H.falsy(literal(seg, 4), "a line left of the item's content ends the fence")
+    seg = seg_of({ "- ```", "  code", "text danach" })
+    H.falsy(literal(seg, 3), "same for a fence on the marker line")
+    seg = seg_of({ "> ```", "> code", "text danach" })
+    H.falsy(literal(seg, 3), "and for a fence in a quote, once the quote ends")
+    seg = seg_of({ "```", "> ```", "x", "```", "y" })
+    H.ok(literal(seg, 3), "a quoted fence line does not close a fence outside of the quote")
+    H.falsy(literal(seg, 5))
+  end
+
+  -- a table ends where a quote or a list begins -------------------------------------------------
+  do
+    local seg = seg_of({ "| a | b |", "|---|---|", "| c | d |", "> Zitat" })
+    H.eq(seg.units[#seg.units].block, "quote")
+    seg = seg_of({ "| a | b |", "|---|---|", "| c | d |", "- Punkt" })
+    H.eq(seg.units[#seg.units].block, "item")
+    seg = seg_of({ "a | b", "---|---" })
+    H.eq(seg.units[1].guard_first, true, "a cell with no pipe in front starts the line")
+    H.eq(seg.units[2].guard_first, false)
+  end
+
+  -- front matter opens with a `key:` line, as in the previewer --------------------------------
+  do
+    local seg = seg_of({ "---", "Text", "", "viel Text", "---", "Text" })
+    H.falsy(literal(seg, 2), "a rule, text and a rule is no metadata")
+    seg = seg_of({ "---", "title: x", "---", "Text" })
+    H.ok(literal(seg, 2) and literal(seg, 3))
+  end
+
+  -- a `$$` that nothing closes is text ----------------------------------------------------------------
+  do
+    local seg = seg_of({ "Preis", "", "$$ nur Text" })
+    H.falsy(literal(seg, 3), "no closing line below: no math block")
+    seg = seg_of({ "$$", "x", "$$", "Text" })
+    H.ok(literal(seg, 1) and literal(seg, 2) and literal(seg, 3))
+    H.falsy(literal(seg, 4))
+  end
+
+  -- list and code edge cases ---------------------------------------------------------------------------------
+  do
+    H.ok(literal(seg_of({ "    - c" }), 1), "four spaces outside of a list: indented code")
+    local seg = seg_of({ "Absatz", "10. zehn" })
+    H.eq(#seg.units, 1, "an ordered list that does not start at 1 cannot interrupt a paragraph")
+    H.eq(#seg_of({ "Absatz", "1. eins" }).units, 2, "one that starts at 1 can")
+    seg = seg_of({ "> Zitat", "10. zehn" })
+    H.eq(#seg.units, 2, "but a quote's paragraph is another container")
+    H.eq(#seg_of({ "- a", "\t- b" }).units, 2, "a tab-indented line is a nested item")
+    H.ok(literal(seg_of({ "a\r", "\r", "*\r" }), 3), "a marker alone, with a CR behind it")
+    H.ok(literal(seg_of({ "a\r", "\r", "1.\r" }), 3))
+    seg = seg_of({ "[ref]:", "/x", "Text" })
+    H.ok(literal(seg, 2), "the destination on the line after `[label]:` stays as it is")
+    seg = seg_of({ "[ref]:", "# Titel" })
+    H.falsy(literal(seg, 2), "a heading is no destination")
+    seg = seg_of({ "- leer", "-", "", "    code" })
+    H.ok(literal(seg, 4), "an empty item has no content for an indented line to continue")
+  end
+
   -- fuzz: any mixture of fragments round-trips and keeps its line count ------------------------
   do
     math.randomseed(20261006)

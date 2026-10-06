@@ -50,17 +50,31 @@ local function lit(ctx, text)
 end
 
 ---@internal
+---Spend `n` of the unit's scan budget; false once it is used up. Every look-ahead
+---(a closing bracket, a closing parenthesis, a closing backtick run) runs to the
+---end of the unit when it finds nothing, so `[a [a [a ...` would cost n * n. The
+---budget keeps the whole mask linear; what it cuts off stays literal text.
+---@param ctx table
+---@param n integer
+---@return boolean
+local function spend(ctx, n)
+  ctx.budget = ctx.budget - n
+  return ctx.budget >= 0
+end
+
+---@internal
 ---Position of the backtick run closing a span opened by `k` backticks at `from`.
+---@param ctx table
 ---@param s string
 ---@param from integer
 ---@param k integer
 ---@param j integer
 ---@return integer|nil
-local function span_end(s, from, k, j)
+local function span_end(ctx, s, from, k, j)
   local q = from
   while true do
     local a, b = s:find("`+", q)
-    if not a or a > j then
+    if not a or a > j or not spend(ctx, 4) then
       return nil
     end
     if b - a + 1 == k then
@@ -72,19 +86,23 @@ end
 
 ---@internal
 ---The `]` that closes the `[` at `i`: skips escapes, code spans and nested pairs.
+---@param ctx table
 ---@param s string
 ---@param i integer
 ---@param j integer
 ---@return integer|nil
-local function find_close(s, i, j)
+local function find_close(ctx, s, i, j)
   local depth, p = 1, i + 1
   while p <= j do
+    if not spend(ctx, 1) then
+      return nil
+    end
     local c = s:sub(p, p)
     if c == "\\" then
       p = p + 2
     elseif c == "`" then
       local run = s:match("^`+", p)
-      local e = span_end(s, p + #run, #run, j)
+      local e = span_end(ctx, s, p + #run, #run, j)
       p = (e or (p + #run - 1)) + 1
     elseif c == "[" then
       depth = depth + 1
@@ -105,13 +123,17 @@ end
 ---@internal
 ---The `)` closing the destination that opens at `p` (a `(`): balanced
 ---parentheses, escapes, `<...>` and a quoted title are honoured.
+---@param ctx table
 ---@param s string
 ---@param p integer
 ---@param j integer
 ---@return integer|nil
-local function parse_dest(s, p, j)
+local function parse_dest(ctx, s, p, j)
   local depth, i, quote = 1, p + 1, nil
   while i <= j do
+    if not spend(ctx, 1) then
+      return nil
+    end
     local c = s:sub(i, i)
     if c == "\\" then
       i = i + 1
@@ -161,14 +183,14 @@ local function try_bracket(ctx, i, j, img)
       return b + #fn
     end
   end
-  local close = find_close(s, b, j)
+  local close = find_close(ctx, s, b, j)
   if not close then
     return nil
   end
   local nx = s:sub(close + 1, close + 1)
   local stop
   if nx == "(" then
-    stop = parse_dest(s, close + 1, j)
+    stop = parse_dest(ctx, s, close + 1, j)
   elseif nx == "[" then
     local lab = s:match("^%[[^%]]*%]", close + 1)
     if lab and close + #lab <= j then
@@ -218,7 +240,7 @@ scan = function(ctx, i, j)
       nxt = i + 2
     elseif c == "`" then
       local run = s:match("^`+", i)
-      local e = span_end(s, i + #run, #run, j)
+      local e = span_end(ctx, s, i + #run, #run, j)
       if e then
         tok(ctx, s:sub(i, e))
         nxt = e + 1
@@ -335,6 +357,7 @@ function M.mask(text, opts)
     pair = {},
     defs = opts.defs or {},
     keepby = keepby,
+    budget = 64 * #text + 4096,
     special = "[`\\!%[<&{h" .. table.concat(extra) .. "]",
   }
   scan(ctx, 1, #text)
@@ -378,7 +401,8 @@ function M.check(text, mask)
     return false, ("%d of %d placeholders came back"):format(total, n)
   end
   for open, close in pairs(mask.pair) do
-    if pos[open] > pos[close] then
+    local a, b = pos[open], pos[close]
+    if a and b and a > b then
       return false, "a link's halves changed places"
     end
   end

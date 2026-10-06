@@ -893,5 +893,143 @@ return function(H)
     end
   end
 
+  -- Review round: structure-changing translations ----------------------------------------------
+  do
+    local DICT2 = { Einleitung = "Introduction", Text = "Words" }
+    local function dict2(t)
+      return (t:gsub("%a+", function(w)
+        return DICT2[w]
+      end))
+    end
+    local function same(a, b, what)
+      H.eq(#a, #b, what)
+      for i = 1, #a do
+        H.eq(a[i], b[i], what .. ": line " .. i)
+      end
+    end
+
+    -- A setext heading: its first line has no marker, a leading `- ` would make a list.
+    local doc = { "Einleitung", "=====", "", "Text" }
+    local r = run(doc, {
+      provider = fake(function(t)
+        return t == "Einleitung" and "- Introduction" or dict2(t)
+      end, { sync = true }),
+    })
+    H.ok(r.ok)
+    H.eq(r.res[1], "Einleitung", "the heading stays German rather than become a list")
+    H.eq(r.res[2], "=====")
+    H.eq(r.res[4], "Words", "the paragraph below it is translated as usual")
+    H.eq(r.info.reflow_failed, 1)
+
+    -- The first cell of a row with no leading pipe starts the line.
+    r = run({ "Text | Text", "---|---", "Text | Text" }, {
+      provider = fake(function(t)
+        return "- " .. dict2(t)
+      end, { sync = true }),
+    })
+    H.eq(r.res[1], "Text | - Words", "only the second cell may start with a dash")
+    H.eq(r.res[3], "Text | - Words")
+
+    -- A cell may not get a pipe of its own, nor a backslash that escapes the pipe behind it.
+    local rows = { "| Text | Text |", "|---|---|", "| Text | Text |" }
+    r = run(rows, {
+      provider = fake(function(t)
+        return dict2(t) .. " | x"
+      end, { sync = true }),
+    })
+    same(r.res, rows, "a translation with a pipe leaves the cell as it was")
+    H.eq(r.info.failed, 4)
+    r = run(rows, {
+      provider = fake(function(t)
+        return dict2(t) .. "\\"
+      end, { sync = true }),
+    })
+    same(r.res, rows, "a trailing backslash would escape the closing pipe")
+    r = run(rows, {
+      provider = fake(function(t)
+        return dict2(t) .. " \\| x"
+      end, { sync = true }),
+    })
+    H.eq(r.res[1], "| Words \\| x | Words \\| x |", "an escaped pipe is no cell border")
+
+    -- In-page links of a unit that stays as it is still follow the heading.
+    r = run({ "## Einleitung", "", "[1](#einleitung)", "", "Siehe [oben](#einleitung)." }, {
+      provider = fake(function(t)
+        if t:find("Siehe", 1, true) then
+          return ""
+        end
+        return dict2(t)
+      end, { sync = true }),
+    })
+    H.eq(r.res[1], "## Introduction")
+    H.eq(r.res[3], "[1](#introduction)", "a unit with nothing to translate keeps its link current")
+    H.eq(r.res[5], "Siehe [oben](#introduction).", "so does one whose translation failed")
+    H.eq(r.info.failed, 1)
+    H.eq(r.info.anchors_changed, 2)
+
+    -- Repeated headings: `-1` links follow their own heading.
+    r = run({ "## Text", "", "## Text", "", "[a](#text) [b](#text-1)" }, {
+      provider = fake(function(t)
+        return t == "Text" and "Words" or t
+      end, { sync = true }),
+    })
+    H.eq(r.res[5], "[a](#words) [b](#words-1)")
+  end
+
+  -- Review round: no quadratic work -------------------------------------------------------------
+  do
+    local function seconds(f)
+      local t0 = vim.uv.hrtime()
+      f()
+      return (vim.uv.hrtime() - t0) / 1e9
+    end
+    local para = {}
+    for i = 1, 6000 do
+      para[i] = "Zeile " .. i .. " eines sehr langen Absatzes mit vielen Woertern darin"
+    end
+    local t = seconds(function()
+      local r = run(para, { provider = fake(scramble, { sync = true }) })
+      H.ok(r.ok)
+      H.eq(#r.res, #para)
+    end)
+    H.ok(t < 3, ("a paragraph of 6000 lines is wrapped in linear time (%.1f s)"):format(t))
+    local brackets = { string.rep("[a ", 40000) }
+    t = seconds(function()
+      local r = run(brackets, { provider = fake(scramble, { sync = true }) })
+      H.ok(r.ok)
+    end)
+    H.ok(t < 3, ("a line of unclosed brackets is masked in linear time (%.1f s)"):format(t))
+  end
+
+  -- Review round: a wrap must not turn text into a table -----------------------------------------
+  do
+    local reflow = require("language.translate.markdown.reflow")
+    local doc = { "{#custom} Heading", "| --- | :-: |" }
+    local r = run(doc, {
+      provider = fake(function()
+        return "Kopf | --- | :-: | -"
+      end, { sync = true }),
+    })
+    H.ok(r.ok)
+    for i, l in ipairs(r.res) do
+      H.falsy(
+        reflow.is_table_rule(l) and not reflow.is_table_rule(doc[i]),
+        "line " .. i .. ": " .. l
+      )
+    end
+  end
+
+  -- Review round: CRLF documents -------------------------------------------------------------------------
+  do
+    local doc = { "Text\r", "\r", "*\r", "", "Text\r", "* \r", "\r", "    code\r" }
+    local r = run(doc, { provider = fake(scramble, { sync = true }) })
+    H.ok(r.ok)
+    H.eq(r.res[3], "*\r", "a bare marker is no text, with a CR behind it")
+    H.eq(r.res[8], "    code\r", "an indented line after an empty item is code")
+    for i, l in ipairs(doc) do
+      H.eq(r.res[i]:sub(-#l:match("\r*$")), l:match("\r*$"), "line " .. i .. " keeps its CR")
+    end
+  end
+
   cache._reset()
 end

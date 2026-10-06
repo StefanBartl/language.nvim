@@ -140,13 +140,23 @@ original after validation and retry), `skipped` (nothing to translate),
 
 ### What is translated
 
-Never translated, kept byte for byte: front matter (`---`/`+++`), fenced code
-(``` and `~~~`), indented code, `$$` math blocks, HTML blocks and comments,
-reference definitions, thematic breaks, setext underlines, table delimiter
+Never translated, kept byte for byte: front matter (`---` opening with a `key:`
+line, as the previewer reads it, or `+++`), fenced code (``` and `~~~`),
+indented code, `$$` math blocks (only when a closing `$$` follows; a stray
+`$$` is text), HTML blocks and comments, reference definitions (with the line
+after a bare `[label]:`), thematic breaks, setext underlines, table delimiter
 rows, blank lines. Translated, each as a unit of its own: headings,
 paragraphs, list items, block quotes, footnote definitions and **every table
 cell** (the pipes stay). A hard line break (two trailing spaces or a
 backslash) ends a unit, since the reflow would move it.
+
+The line parser follows CommonMark where it decides what is code: a fence ends
+with its container (a line left of the list item's content, or without the
+`>` of its quote), a block that starts in the first column ends a list, four
+columns of indent are code outside of a list item, an ordered list that does
+not start at 1 cannot interrupt a paragraph, a table ends at a quote or a list
+item, CRLF endings and tab indents count like their LF/space counterparts.
+Where it is unsure it prefers "literal" (German stays German) to "text".
 
 Inside a unit, inline code, link and image targets, autolinks, bare URLs,
 inline HTML, entities, footnote references, `{#id}` attribute lists and the
@@ -187,8 +197,12 @@ word that Markdown reads as a block start**: `-`, `*`, `+`, `1.`, `#`, `>`,
 `|`, a fence, a thematic break or setext underline, `<`, `$$`, `:::`, a
 definition `[x]:`. The spike lost a sentence to a dash at the start of a line,
 which became a list item (98 blocks turned into 102); the rule has a golden
-test. The same check guards the first line of a paragraph, an item or a quote.
-If no safe break exists, the unit stays original (`info.reflow_failed`).
+test. The same check guards the first line of a paragraph, an item, a quote, a setext
+heading and the first cell of a row that has no leading pipe, and a wrap that
+would make a table delimiter row (`| --- | :-: |`) out of a line of text is
+refused. A table cell is also refused when its translation has a pipe of its
+own or ends in a backslash. If no safe break exists, the unit stays original
+(`info.reflow_failed`).
 
 Fewer words than lines (a short translation, or CJK without spaces): the words
 take one line each and the surplus lines are padded: blank lines at the end of
@@ -202,9 +216,15 @@ masked target `(#installation)` does not: 16 of 18 table-of-contents links
 broke in the spike. The i-th original heading's slug is mapped to the i-th
 translated heading's slug and every `](#old)` target (and a `[x]: #old`
 definition) is rewritten. The slug function is the one the mdview client
-resolves anchors with (lower case; letters, digits, white space and hyphens
-only; the first heading with a slug wins). A target that matches no heading
-stays as it is. Blocks that contain such a link are held back from `on_unit`
+resolves anchors with, letter for letter (lower case; Unicode letters and
+numbers, white space and hyphens only, so combining marks and symbols go; the
+first heading with a slug wins); the heading text is read the way the previewer
+reads it (an image contributes nothing, an autolink shows its address,
+character references are decoded). A repeated slug is numbered `-1`, `-2`, as
+GitHub and markdown.nvim number it, on both sides, so a generated table of
+contents maps too. A target that matches no heading stays as it is. A unit
+that stays as it is (nothing to translate, or its translation failed) still
+gets its in-page links rewritten. Blocks that contain such a link are held back from `on_unit`
 until the headings are known (headings are sent first).
 
 ### Cache
@@ -252,7 +272,7 @@ translate = {
 }
 ```
 
-- **Modules:** `translate/markdown/{init,segment,mask,reflow,anchors,cache}.lua`
+- **Modules:** `translate/markdown/{init,segment,mask,reflow,anchors,unicode,cache}.lua`
 - **Specs:** `translate_markdown_*_spec.lua` (golden documents in
   `TESTS/fixtures/markdown/`, a property test of the reflow, a fuzz run of the
   whole pipeline, the real-curl placeholder spec)
