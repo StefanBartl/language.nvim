@@ -277,6 +277,12 @@ translate = {
 - **Specs:** `translate_markdown_*_spec.lua` (golden documents in
   `TESTS/fixtures/markdown/`, a property test of the reflow, a fuzz run of the
   whole pipeline, the real-curl placeholder spec)
+- **Oracle:** `scripts/markdown_oracle.lua` + `scripts/markdown_oracle.mjs`
+  translate real Markdown files with a fake engine and compare source and
+  result with the previewer's own renderer (comrak, from a sibling
+  `mdview.nvim` checkout): block structure, literal blocks, link / image /
+  code targets. Run it over a few hundred files after every change of the
+  segmenter (`node scripts/markdown_oracle.mjs <dir>` exits 1 on a difference).
 
 Limits worth knowing: the Markdown parser is line-based and errs on the side
 of skipping (code mistaken for prose is caught by the placeholder and length
