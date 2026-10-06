@@ -271,6 +271,35 @@ On Windows a `.cmd`/`.bat` launcher (not an .exe) runs through `cmd.exe /c`;
 a command whose text contains `"` `%` `^` `&` `|` `<` `>` or a line break is
 refused there instead of being run.
 
+                                                     *language-translate-markdown*
+Markdown documents (Lua API, no command): >lua
+    local h = require("language").translate_markdown(lines, {
+      target = "EN",            -- required
+      -- source, engine, model, token, max_chars, max_units, concurrency,
+      -- keep, cache, cache_only, on_unit
+    }, function(ok, result, info) end)
+    h.cancel()
+<
+`result` has exactly as many lines as `lines` (`#result == #lines`, a hard
+invariant). Front matter, fenced/indented code, HTML blocks, reference
+definitions and table delimiter rows are never sent; headings, paragraphs, list
+items, quotes, footnotes and every table cell are units. Inline code, link and
+image targets, autolinks and URLs are masked as `{n}` (plain ASCII: a Unicode
+placeholder was destroyed on the Windows curl path) and restored. Each answer is
+validated, retried once, and on failure the original unit stays: a failed unit
+is never cached. A translation is wrapped onto the line count of its source and
+never broken in front of a block-start token (`-` `*` `+` `1.` `#` `>` `|`
+fences). `#anchor` link targets follow the translated headings. Units are
+cached (memory, and `stdpath("cache")/language.nvim/translate_markdown.json`
+unless `translate.markdown.disk_cache = false`) and sent in batches of at most
+`max_chars` / `max_units`, `concurrency` at a time. `cb` runs exactly once;
+`token = { generation = n, current = fn }` makes a superseded run end with
+`(false, "stale")`; `on_unit(ev)` reports every finished block
+(`first`, `last`, `lines`, `status`); `cache_only = true` never asks the engine.
+Config: `translate.markdown = { concurrency, max_chars, disk_cache,
+cache_max_kb, keep }`. `require("language").translate_markdown_clear_cache()`
+forgets the cache. See docs/FEATURES/TRANSLATE.md.
+
                                                         *language-translate-maps*
 Motion / visual mappings (opt-in via `translate.keymaps`):
     operator   `<lhs>{motion}` translates the moved-over text object, e.g.

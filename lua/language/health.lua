@@ -133,6 +133,25 @@ local function check_translate()
   else
     info_s("trans not found (optional shell engine)")
   end
+
+  -- translate_markdown(): where its unit cache lives and how big it is.
+  local md = {}
+  if ok then
+    md = (cfg_mod.get().translate or {}).markdown or {}
+  end
+  if md.disk_cache == false then
+    info_s("translate_markdown cache: memory only (translate.markdown.disk_cache = false)")
+  else
+    local file = vim.fn.stdpath("cache") .. "/language.nvim/translate_markdown.json"
+    local size = vim.fn.getfsize(file)
+    info_s(
+      ("translate_markdown cache: %s (%s, cap %s KiB)"):format(
+        file,
+        size >= 0 and (math.ceil(size / 1024) .. " KiB") or "not written yet",
+        tostring(md.cache_max_kb or 2048)
+      )
+    )
+  end
 end
 
 ---@internal
