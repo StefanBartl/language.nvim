@@ -45,7 +45,7 @@ require("language").setup({
     keymaps = { panel = "<leader>ss", next = "]s", fix = "<leader>z=", fix1 = "<leader>z1" },
   },
   translate = {
-    engine = "google",           -- "google" (keyless) | "deepl" | "shell" | "custom"
+    engine = "google",           -- "google" (keyless) | "deepl" | "shell" | "ai" | "custom"
     fallback = { "google" },     -- engine chain used if the selected engine is unavailable
     default_output = "popup",    -- popup | replace | buffer | vsplit | split | tab | insert | clipboard | notify
     default_target = nil,        -- fixed target language for motion/visual maps; nil = selection
@@ -54,6 +54,7 @@ require("language").setup({
     max_chars = 0,               -- lower the per-request block budget in bytes (DeepL: bytes + 8 per line; 0 = provider default)
     max_blocks = 50,             -- most requests one call may need; more is refused before the first (0 = no limit)
     deepl = { api_key = nil },   -- or $DEEPL_API_KEY
+    ai = { max_chars = 6000, concurrency = 2, max_total_chars = 500000 }, -- engine "ai" (ai.nvim); also provider, model, glossary, style
     -- require("language").translate_markdown(): Markdown-safe, line-true document translation
     markdown = {
       concurrency = 3,           -- requests in flight at once

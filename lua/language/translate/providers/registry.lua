@@ -2,8 +2,8 @@
 ---@brief Resolves the active translate provider from config, with fallback.
 ---@description
 --- Registered engines: `google` (keyless default), `deepl` (official API, key
---- from config/env), `shell` (translate-shell `trans`), and `custom` (any CLI
---- via a user-supplied cmd/parse). `resolve` tries the configured engine, then
+--- from config/env), `shell` (translate-shell `trans`), `ai` (ai.nvim, a soft
+--- dependency) and `custom` (any CLI via a user-supplied cmd/parse). `resolve` tries the configured engine, then
 --- the fallback chain, returning the first whose `available()` is true. The
 --- returned providers split large inputs into line-aligned blocks
 --- (`language.translate.chunk`).
@@ -23,6 +23,7 @@ local PROVIDERS = {
   deepl = chunk.wrap(require("language.translate.providers.deepl")),
   shell = chunk.wrap(require("language.translate.providers.shell")),
   custom = chunk.wrap(require("language.translate.providers.custom")),
+  ai = chunk.wrap(require("language.translate.providers.ai")),
 }
 
 ---Return a provider by name (or nil if unknown).
@@ -45,10 +46,19 @@ function M.resolve(cfg)
     order[#order + 1] = name
   end
 
-  for _, name in ipairs(order) do
+  for i, name in ipairs(order) do
     local p = PROVIDERS[name]
     if p and p.available(cfg) then
       return p, nil
+    end
+    -- An engine that sends the text to a model the user chose (`ai`) is not
+    -- replaced silently by a keyless third party when it is the configured one:
+    -- the reason is reported instead.
+    if i == 1 and p and type(p.blocked) == "function" then
+      local ok, why = pcall(p.blocked, cfg)
+      if ok and type(why) == "string" then
+        return nil, ("translate engine '%s' is not usable: %s"):format(name, why)
+      end
     end
   end
   return nil, ("no available translate engine (tried: %s)"):format(table.concat(order, ", "))

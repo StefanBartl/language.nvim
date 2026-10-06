@@ -75,7 +75,7 @@ local defaults = {
   hover = true,
 
   translate = {
-    engine = "google", -- "google"|"deepl"|"shell"|<custom>
+    engine = "google", -- "google"|"deepl"|"shell"|"ai"|<custom>
     fallback = { "google" }, -- engine fallback chain (graceful degradation)
     default_output = "popup", -- "popup"|"replace"|"buffer"|"vsplit"|"split"|"tab"|"insert"|"clipboard"|"notify"
     default_input = "selection", -- selection|clipboard|input
@@ -86,6 +86,16 @@ local defaults = {
     max_chars = 0, -- lower the per-request block budget in bytes (DeepL: bytes + 8 per line; 0 = provider default); larger inputs are split on line boundaries
     max_blocks = 50, -- most requests one call may need; an input that needs more is refused before the first request (0 = no limit)
     deepl = { api_key = nil }, -- or ENV "DEEPL_API_KEY"
+    -- engine = "ai": translation through ai.nvim (soft dependency, bulk profile, policy-checked).
+    ai = {
+      provider = nil, -- ai.nvim provider id ("claude", "ollama", ...); nil = ai.nvim's own choice
+      model = nil, -- model; nil = the one ai.nvim is configured with
+      glossary = nil, -- { Term = "Begriff" } fixed translations, or { "Neovim" } terms kept as they are
+      style = nil, -- tone, e.g. "formal, second person"
+      max_chars = 6000, -- largest request (prompt + system), in characters
+      concurrency = 2, -- requests in flight per run
+      max_total_chars = 500000, -- cumulative characters per run (a document); false = no cap
+    },
     custom = nil, -- { cmd = function(text, target) ... end, parse = function(out) ... end, max_bytes = nil }
     -- translate_markdown(): the Markdown-safe document translation (docs/FEATURES/TRANSLATE.md).
     markdown = {

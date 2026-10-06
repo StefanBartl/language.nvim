@@ -242,6 +242,8 @@ Which providers run per scope is controlled by `spell.providers` (see
                 DEEPL_API_KEY environment variable. Free keys (suffix ":fx")
                 use api-free.deepl.com automatically.
     shell       the `trans` CLI (translate-shell).
+    ai          ai.nvim (Claude, Ollama, OpenAI, Gemini ...), a soft
+                dependency; see |language-translate-ai|.
     custom      any CLI: provide `translate.custom = { cmd = fun(lines,
                 target, source) -> argv, parse = fun(stdout) -> lines }`.
 
@@ -271,11 +273,37 @@ On Windows a `.cmd`/`.bat` launcher (not an .exe) runs through `cmd.exe /c`;
 a command whose text contains `"` `%` `^` `&` `|` `<` `>` or a line break is
 refused there instead of being run.
 
+                                                           *language-translate-ai*
+Engine `ai` (translate.engine = "ai"): the text goes through ai.nvim's bulk
+profile (`ai.ask` with `bulk`), so ai.nvim's size and budget caps, concurrency
+and strict policy apply. The request is a system prompt (target, optional
+source, glossary, style; code, identifiers, URLs, `{n}` placeholders and
+Markdown syntax unchanged) and the lines as a JSON array; the answer must be a
+JSON array of the same length, every placeholder kept (a fence around it is
+tolerated, nothing else). A deviation is asked once more, then the call fails
+and translate_markdown keeps the original unit. A policy refusal or a bulk limit
+is reported as it is, never retried, never routed to another engine; a
+configured `ai` engine that is unusable (ai.nvim missing, provider outside the
+allow-list) is an error and does not fall back to google. The unit cache of
+translate_markdown includes provider, model and prompt version, so a model
+switch never serves old translations. >lua
+    translate = { engine = "ai", ai = {
+      provider = nil, model = nil,   -- nil = what ai.nvim is configured with
+      glossary = nil,                -- { Term = "Begriff" } or { "Neovim" }
+      style = nil,                   -- e.g. "formal"
+      max_chars = 6000,              -- largest request, in characters
+      concurrency = 2,               -- requests in flight per run
+      max_total_chars = 500000,      -- per run (a document); false = no cap
+    } }
+<
+:checkhealth language shows the engine and the policy. See
+docs/FEATURES/TRANSLATE.md.
+
                                                      *language-translate-markdown*
 Markdown documents (Lua API, no command): >lua
     local h = require("language").translate_markdown(lines, {
       target = "EN",            -- required
-      -- source, engine, model, token, max_chars, max_units, concurrency,
+      -- source, engine, model (joins the cache key), token, max_chars, max_units, concurrency,
       -- keep, cache, cache_only, on_unit
     }, function(ok, result, info) end)
     h.cancel()

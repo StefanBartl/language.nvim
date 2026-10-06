@@ -95,6 +95,7 @@
 ---@field max_chars      integer                 -- lowers the per-request block budget (bytes, DeepL: bytes + 8 per line); 0 = provider default
 ---@field max_blocks     integer                 -- most requests one call may need (an input that needs more is refused up front); 0 = no limit
 ---@field deepl          { api_key: string|nil }
+---@field ai             LanguageTranslateAiCfg
 ---@field custom         LanguageTranslateCustomProviderCfg|nil
 ---@field markdown       LanguageTranslateMarkdownCfg
 ---@field keymaps        LanguageTranslateKeymaps
@@ -188,6 +189,24 @@
 ---@field enable? boolean
 ---@field style?  "underline"|"undercurl"
 
+---@class LanguageTranslateAiCfg
+---@field provider?        string                    -- ai.nvim provider id; nil = ai.nvim's own choice (`provider`/`auto`)
+---@field model?           string                    -- model; nil = ai.nvim's configured one
+---@field glossary?        table<string|integer, string> -- `{ term = "translation" }`, or a list of terms kept as they are
+---@field style?           string                    -- tone, e.g. "formal, second person"
+---@field max_chars        integer                   -- largest request (prompt + system) in characters
+---@field concurrency      integer                   -- requests in flight per run (1-16)
+---@field max_total_chars  integer|false             -- cumulative characters per run; false = no cap
+
+---@class LanguageTranslateAiOpts
+---@field provider?        string
+---@field model?           string
+---@field glossary?        table<string|integer, string>
+---@field style?           string
+---@field max_chars?       integer
+---@field concurrency?     integer
+---@field max_total_chars? integer|false
+
 ---@class LanguageTranslateMarkdownCfg
 ---@field concurrency  integer    -- requests in flight at once (1-16)
 ---@field max_chars    integer    -- masked bytes per request
@@ -216,6 +235,7 @@
 ---@field max_chars?      integer                 -- lowers the per-request block budget (bytes, DeepL: bytes + 8 per line); 0 = provider default
 ---@field max_blocks?     integer                 -- most requests one call may need (an input that needs more is refused up front); 0 = no limit
 ---@field deepl?          { api_key: string|nil }
+---@field ai?             LanguageTranslateAiOpts
 ---@field custom?         LanguageTranslateCustomProviderCfg|nil
 ---@field keymaps?        LanguageTranslateKeymaps
 ---@field history?        { enable: boolean, max: integer, persist: boolean, file: string }

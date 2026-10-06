@@ -222,6 +222,19 @@ function M.translate_markdown(lines, opts, cb)
     local target, source = opts.target, opts.source
 
     local use_cache = opts.cache ~= false
+
+    ---The model part of the cache key: `opts.model`, plus what the engine says
+    ---about itself (`cache_id`: provider, model, prompt version of the `ai`
+    ---engine). Asked again at write time, since an answer may have named the
+    ---model that "default" turned out to be.
+    ---@return string|nil
+    local function cache_model()
+      local id = provider and type(provider.cache_id) == "function" and provider.cache_id(tr)
+      if type(id) ~= "string" or id == "" then
+        return opts.model
+      end
+      return opts.model and (opts.model .. "|" .. id) or id
+    end
     if use_cache then
       cache.configure({ disk = st.disk, max_kb = st.cache_max_kb, dir = st.cache_dir })
     end
@@ -525,7 +538,7 @@ function M.translate_markdown(lines, opts, cb)
     -- Cache pass ---------------------------------------------------------------
     local misses = {}
     for _, e in ipairs(todo) do
-      e.key = use_cache and cache.key(engine, opts.model, target, source, e.masked) or nil
+      e.key = use_cache and cache.key(engine, cache_model(), target, source, e.masked) or nil
       local hit = e.key and cache.get(e.key)
       local value = hit and validate(e, hit)
       if value then
@@ -702,6 +715,7 @@ function M.translate_markdown(lines, opts, cb)
           consec_fail = 0
           remaining = remaining - 1
           if use_cache then
+            e.key = cache.key(engine, cache_model(), target, source, e.masked)
             cache.set(e.key, value)
           end
           resolve_entry(e, value, false)
