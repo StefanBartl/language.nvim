@@ -87,6 +87,14 @@ local defaults = {
     max_blocks = 50, -- most requests one call may need; an input that needs more is refused before the first request (0 = no limit)
     deepl = { api_key = nil }, -- or ENV "DEEPL_API_KEY"
     custom = nil, -- { cmd = function(text, target) ... end, parse = function(out) ... end, max_bytes = nil }
+    -- translate_markdown(): the Markdown-safe document translation (docs/FEATURES/TRANSLATE.md).
+    markdown = {
+      concurrency = 3, -- requests in flight at once
+      max_chars = 3000, -- masked bytes per request (units are batched up to this)
+      disk_cache = true, -- keep translated units in stdpath("cache")/language.nvim across sessions
+      cache_max_kb = 2048, -- size cap of that file; the oldest entries go first
+      keep = {}, -- words that are never translated (proper names), e.g. { "Neovim" }
+    },
     -- Recall previous translations (:Translate history picker / window <C-h>).
     history = {
       enable = true,

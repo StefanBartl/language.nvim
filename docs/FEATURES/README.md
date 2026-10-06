@@ -32,8 +32,10 @@ only that it exists.
   the live scan costs.
 - **[TRANSLATE.md](TRANSLATE.md)** — `:Translate` and `:TranslateReplace`: the
   engine fallback chain, the eight output destinations and why the popup is
-  the default, a custom provider, the indent-preserving round trip, and
-  column-precise selections.
+  the default, a custom provider, the indent-preserving round trip,
+  column-precise selections, and the Lua API `translate_markdown` for a whole
+  Markdown document (same line count, code and links untouched, anchors
+  followed, cached per paragraph).
 - **[THESAURUS.md](THESAURUS.md)** — the word under the cursor swapped for a
   synonym from the keyless Datamuse API or a source of your own, and how to
   take the *n*-th suggestion directly. Opt-in keymap.

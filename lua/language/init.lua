@@ -110,6 +110,27 @@ function M.translate_history()
   end)
 end
 
+---Translate a Markdown document without breaking its structure: `#result == #lines`,
+---always. Code, link targets, front matter and HTML are never sent to the engine, a
+---unit that cannot be translated stays as it was, in-page anchors follow the translated
+---headings, and a unit seen before comes from the cache. Asynchronous and cancellable;
+---`cb(ok, lines_or_err, info)` runs exactly once. See docs/FEATURES/TRANSLATE.md.
+---@param lines string[]
+---@param opts LanguageMdTranslateOpts  { target, source?, engine?, model?, token?, max_chars?, concurrency?, keep?, cache?, cache_only?, on_unit? }
+---@param cb LanguageMdTranslateCb
+---@return { cancel: fun() } handle
+function M.translate_markdown(lines, opts, cb)
+  return require("language.translate.markdown").translate_markdown(lines, opts, cb)
+end
+
+---Forget the translations cached by `translate_markdown` (memory, and with
+---`opts.disk` the file in `stdpath("cache")`).
+---@param opts? { disk?: boolean }
+---@return nil
+function M.translate_markdown_clear_cache(opts)
+  require("language.translate.markdown.cache").clear(opts)
+end
+
 ---Replace the word under the cursor with a synonym (thesaurus lookup).
 ---@return nil
 function M.synonyms()

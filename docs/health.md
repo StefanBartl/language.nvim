@@ -14,7 +14,7 @@ to choose from, never a broken install.
 | `lib.nvim` (required dependency) | The plugin itself, plus `lib.nvim.bindings.usercmd.composer` (the `:Spellcheck`/`:Translate`/`:TranslateReplace` command layer) |
 | Spell providers (optional external tools) | `typos`, `cspell`, `codespell` — each independently `info` if missing; separately, `node` for the persistent `cspell` sidecar (`spell.providers.buffer = "cspell_server"`) |
 | Grammar providers (optional LSP) | Whether `harper_ls` or `ltex` is attached to the current buffer |
-| Translate engines | `curl` (needed by the default `google` and the `deepl` engine — `error` if missing), a configured DeepL API key, and `trans` (translate-shell, the optional `shell` engine) |
+| Translate engines | `curl` (needed by the default `google` and the `deepl` engine — `error` if missing), a configured DeepL API key, `trans` (translate-shell, the optional `shell` engine), and where the `translate_markdown` unit cache lives and how big it is (`info`) |
 | Configuration | Dumps `spell.default_scope`, `spell.live` / `live_scope`, `spell.filetypes`, `translate.engine`; separately checks `'spelllang'` is actually set (`warn` if empty — nothing here sets it for you) |
 | which-key (optional) | Whether group labels get registered; keymap `desc` fields work either way |
 | Declared tools (`lib.nvim.deps`) | Cross-check against [install.json](install.json) |

@@ -54,6 +54,14 @@ require("language").setup({
     max_chars = 0,               -- lower the per-request block budget in bytes (DeepL: bytes + 8 per line; 0 = provider default)
     max_blocks = 50,             -- most requests one call may need; more is refused before the first (0 = no limit)
     deepl = { api_key = nil },   -- or $DEEPL_API_KEY
+    -- require("language").translate_markdown(): Markdown-safe, line-true document translation
+    markdown = {
+      concurrency = 3,           -- requests in flight at once
+      max_chars = 3000,          -- masked bytes per request
+      disk_cache = true,         -- keep translated units in stdpath("cache")/language.nvim
+      cache_max_kb = 2048,       -- size cap of that file, oldest entries go first
+      keep = {},                 -- words that are never translated, e.g. { "Neovim" }
+    },
     -- Opt-in motion/visual keymaps (off by default, to avoid claiming keys):
     --   operator: <lhs>{motion} translates the text object (e.g. gtrip)
     --   visual:   <lhs> translates the selection

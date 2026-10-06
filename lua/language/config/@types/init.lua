@@ -96,6 +96,7 @@
 ---@field max_blocks     integer                 -- most requests one call may need (an input that needs more is refused up front); 0 = no limit
 ---@field deepl          { api_key: string|nil }
 ---@field custom         LanguageTranslateCustomProviderCfg|nil
+---@field markdown       LanguageTranslateMarkdownCfg
 ---@field keymaps        LanguageTranslateKeymaps
 ---@field history        { enable: boolean, max: integer, persist: boolean, file: string }
 ---@field files          { output: "suffix"|"replace"|"buffers", extensions: string[], max_kb: integer }
@@ -186,6 +187,20 @@
 ---@class LanguageSpellHighlightsOpts
 ---@field enable? boolean
 ---@field style?  "underline"|"undercurl"
+
+---@class LanguageTranslateMarkdownCfg
+---@field concurrency  integer    -- requests in flight at once (1-16)
+---@field max_chars    integer    -- masked bytes per request
+---@field disk_cache   boolean    -- persist the unit cache in stdpath("cache")/language.nvim
+---@field cache_max_kb integer    -- size cap of the cache file
+---@field keep         string[]   -- words that are never translated
+
+---@class LanguageTranslateMarkdownOpts
+---@field concurrency?  integer
+---@field max_chars?    integer
+---@field disk_cache?   boolean
+---@field cache_max_kb? integer
+---@field keep?         string[]
 
 ---@class LanguageTranslateOpts
 ---@field engine?         string                  -- "google"|"deepl"|"shell"|<custom key>

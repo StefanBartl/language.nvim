@@ -92,6 +92,176 @@ the JSON quoting of each text. This is the unit of `translate.max_chars`.
   message instead of running it; use an `.exe` for the engine (or one of the
   curl-based engines) to translate arbitrary text.
 
+## Markdown API: `translate_markdown`
+
+```lua
+local handle = require("language").translate_markdown(lines, opts, function(ok, result, info)
+  -- ok == true:  result is string[], exactly #lines long; info is the report
+  -- ok == false: result is a message ("cancelled", "stale", "no available translate engine ...")
+end)
+handle.cancel() -- optional; the callback then runs once with (false, "cancelled")
+```
+
+Translates a whole Markdown document and gives back **exactly as many lines as
+it got** (`#result == #lines`, a hard invariant: when an internal check ever
+disagrees, the original comes back). It is the engine behind a translated
+preview: the buffer stays German, the previewer shows English, and every
+line-based mapping of the previewer (scroll sync, cursor marker,
+click-to-navigate) stays valid because no line moves.
+
+Not a command: there is no `:Translate` flag for it. It is for Lua callers
+(mdview.nvim is the first).
+
+### Options
+
+| Option | Meaning |
+| --- | --- |
+| `target` | **Required.** Target language, e.g. `"EN"`. |
+| `source` | Source language; `nil` lets the engine detect it. |
+| `engine` | Overrides `translate.engine` for this call (no fallback chain). |
+| `model` | Part of the cache key, for engines where a model matters (the AI engine to come). |
+| `token` | `{ generation, current = fn }` (or `{ cancelled = true }`): the run is abandoned, `cb(false, "stale")`, once `current() ~= generation`. |
+| `max_chars` | Bytes of masked text per request (default `translate.markdown.max_chars`, 3000). |
+| `max_units` | Units per request (default 40; DeepL accepts 50 texts). |
+| `concurrency` | Requests in flight (default `translate.markdown.concurrency`, 3). |
+| `keep` | Words that are never translated (proper names), added to `translate.markdown.keep`. |
+| `cache` | `false` bypasses the cache (read and write). |
+| `cache_only` | Never asks the engine: a cached unit is translated, every other stays original, `info.pending` counts them. The building block for stale-while-revalidate: show this at once, then run again without it. |
+| `on_unit` | `fun(ev)`: called once per finished block with `{ first, last, lines, status, done, total }`. `lines` replaces source lines `first..last` (same count). Progressive filling: patch the view as events arrive, finish with the `result` of `cb`. `status` is `"translated"`, `"cached"` or `"partial"`. A reference definition is no block, so its rewritten anchor target only appears in the final result. |
+
+Every callback runs on the main loop and never before `translate_markdown` has
+returned. `cb` runs **exactly once**, also after `cancel()`, a stale token or an
+internal error.
+
+`info` is the report: `units`, `translated`, `cached`, `failed` (stayed
+original after validation and retry), `skipped` (nothing to translate),
+`pending` (`cache_only`), `reflow_failed`, `requests`, `retries`,
+`anchors_changed`, `errors` (the first few messages) and `ms`.
+
+### What is translated
+
+Never translated, kept byte for byte: front matter (`---`/`+++`), fenced code
+(``` and `~~~`), indented code, `$$` math blocks, HTML blocks and comments,
+reference definitions, thematic breaks, setext underlines, table delimiter
+rows, blank lines. Translated, each as a unit of its own: headings,
+paragraphs, list items, block quotes, footnote definitions and **every table
+cell** (the pipes stay). A hard line break (two trailing spaces or a
+backslash) ends a unit, since the reflow would move it.
+
+Inside a unit, inline code, link and image targets, autolinks, bare URLs,
+inline HTML, entities, footnote references, `{#id}` attribute lists and the
+`keep` words are **masked**: replaced by a placeholder, translated around, put
+back afterwards. The text of a link stays translatable. Collapsed and shortcut
+references (`[text][]`, `[label]` with a definition) are masked whole, since
+their text is their key.
+
+The placeholder is plain ASCII, `{n}`. This is measured, not a taste: in the
+spike (2026-10-06) the Unicode pair U+27E6/U+27E7 came back as `?1?` for 25 % of
+the units on the Windows curl path. It reproduces on a current machine too: with
+the text as one argv element, `curl` hands a loopback server `?1?` for the
+Unicode pair and `{1}` for the ASCII one (and even `ü` arrives as the single
+byte `%FC`, not UTF-8, which is why the argv-based `custom`/`shell` engines are
+the weak spot on Windows, while `google` and `deepl` send stdin).
+`TESTS/translate_markdown_curl_spec.lua` runs the whole pipeline through a real
+curl and a loopback server to keep it that way.
+
+### Never broken: validation, retry, fall back
+
+Each answer is checked: every placeholder present exactly once (the halves of a
+link in the right order; fullwidth braces and `{ 1 }` are put right first),
+not empty, a plausible length compared with the source. A unit that fails is
+retried once (a batch with an unattributable line count is retried unit by
+unit); if it fails again, **the original unit stays**: the preview shows German
+for that paragraph and is never empty or half. Three failed requests in a row
+stop the run (a down engine or a 429 is not hammered); the document then comes
+back as it was, with `info.failed` and `info.errors` telling why. A failed unit
+is **never cached**: the spike saw 27 requests instead of 1 for a one-paragraph
+change because failures had been remembered as answers.
+
+### Reflow: the same number of lines
+
+A unit's translation is wrapped onto exactly the line count of its source,
+distributing the words in proportion to the width of the original lines. Soft
+line breaks are invisible in the rendered HTML. **No break lands in front of a
+word that Markdown reads as a block start**: `-`, `*`, `+`, `1.`, `#`, `>`,
+`|`, a fence, a thematic break or setext underline, `<`, `$$`, `:::`, a
+definition `[x]:`. The spike lost a sentence to a dash at the start of a line,
+which became a list item (98 blocks turned into 102); the rule has a golden
+test. The same check guards the first line of a paragraph, an item or a quote.
+If no safe break exists, the unit stays original (`info.reflow_failed`).
+
+Fewer words than lines (a short translation, or CJK without spaces): the words
+take one line each and the surplus lines are padded: blank lines at the end of
+a plain paragraph, a zero-width space (U+200B) line inside an item, a quote or
+mid-paragraph, where a blank line would split the block or loosen the list.
+
+### Anchors
+
+Translating the heading `Installation` to `Setup` changes its slug, while the
+masked target `(#installation)` does not: 16 of 18 table-of-contents links
+broke in the spike. The i-th original heading's slug is mapped to the i-th
+translated heading's slug and every `](#old)` target (and a `[x]: #old`
+definition) is rewritten. The slug function is the one the mdview client
+resolves anchors with (lower case; letters, digits, white space and hyphens
+only; the first heading with a slug wins). A target that matches no heading
+stays as it is. Blocks that contain such a link are held back from `on_unit`
+until the headings are known (headings are sent first).
+
+### Cache
+
+Key = hash of (engine, model, target, source, masked unit text); the value is
+the validated translation with the placeholders still in it, so two units that
+differ only in a link target share an entry. Memory is bounded (20 000 units);
+an optional disk file (`stdpath("cache")/language.nvim/translate_markdown.json`,
+through `lib.nvim.cache.disk`) is read lazily, written debounced after a change
+and at exit, merged with what another Neovim wrote, and cut to
+`translate.markdown.cache_max_kb` (oldest first). A damaged file or an entry of
+the wrong shape is ignored, and a cached value goes through the same
+placeholder check as a fresh answer. `require("language").translate_markdown_clear_cache({ disk = true })`
+forgets everything. **Privacy:** the disk cache holds your translated text in
+plain JSON; switch it off with `translate.markdown.disk_cache = false`.
+
+### Requests
+
+Units are deduplicated, then packed (headings first) into requests of at most
+`max_chars` bytes and `max_units` units, `concurrency` of them in flight.
+The request goes through the existing provider registry and its chunk wrapper,
+so every engine's own limits apply on top. DeepL's `tag_handling` is **not**
+used: the `{n}` placeholders need no tags, and the provider signature stays
+unchanged.
+
+Measured on a laptop with a fake engine (no network): a 1 460-line document of
+619 units took 23 ms cold, 19 ms with every unit cached and 17 ms for a
+one-paragraph change (one request, one unit). Real engines add their latency:
+the spike measured 8-18 s for a cold 105-unit document with four parallel
+single-unit requests and 48 s serially, which is why units are batched and the
+cold start is meant to be shown progressively (`on_unit`) over the original.
+
+### Config
+
+```lua
+translate = {
+  markdown = {
+    concurrency = 3,     -- requests in flight
+    max_chars = 3000,    -- masked bytes per request
+    disk_cache = true,   -- persist the unit cache in stdpath("cache")
+    cache_max_kb = 2048, -- size cap of that file
+    keep = {},           -- words that are never translated, e.g. { "Neovim" }
+  },
+}
+```
+
+- **Modules:** `translate/markdown/{init,segment,mask,reflow,anchors,cache}.lua`
+- **Specs:** `translate_markdown_*_spec.lua` (golden documents in
+  `TESTS/fixtures/markdown/`, a property test of the reflow, a fuzz run of the
+  whole pipeline, the real-curl placeholder spec)
+
+Limits worth knowing: the Markdown parser is line-based and errs on the side
+of skipping (code mistaken for prose is caught by the placeholder and length
+checks; prose mistaken for code stays German); there is no inline parse for
+emphasis, so `*`/`_` stay in the text for the engine to keep; math in single
+`$...$` is not recognised.
+
 ## Custom translate provider
 
 `translate.custom = { cmd = function(lines, target) return {"trans", "-b", ...} end, parse = function(out) return vim.split(out, "\n") end }` —

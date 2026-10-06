@@ -37,6 +37,8 @@ return {
     fs = { "TESTS" },
     -- Specs start headless nvim children (job stdin / sleep, version probe) to exercise the job
     -- wrapper; the nonexistent executable is the deliberate negative probe of the spawn-failure path.
-    spawn = { "nvim", "zzqqxx-nonexistent-executable-language-nvim" },
+    -- translate_markdown_curl_spec runs a real curl against a loopback server inside the spec's own
+    -- editor (no external network): the placeholder must survive the argv path of a real process.
+    spawn = { "nvim", "curl", "zzqqxx-nonexistent-executable-language-nvim" },
   },
 }
