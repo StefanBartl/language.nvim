@@ -148,7 +148,8 @@ after a bare `[label]:`), thematic breaks, setext underlines, table delimiter
 rows, blank lines. Translated, each as a unit of its own: headings,
 paragraphs, list items, block quotes, footnote definitions and **every table
 cell** (the pipes stay). A hard line break (two trailing spaces or a
-backslash) ends a unit, since the reflow would move it.
+backslash) ends a unit, since the reflow would move it; inside a code span that
+runs over lines it is just text and does not.
 
 The line parser follows CommonMark where it decides what is code: a fence ends
 with its container (a line left of the list item's content, or without the
@@ -158,8 +159,8 @@ not start at 1 cannot interrupt a paragraph, a table ends at a quote or a list
 item, CRLF endings and tab indents count like their LF/space counterparts.
 Where it is unsure it prefers "literal" (German stays German) to "text".
 
-Inside a unit, inline code, link and image targets, autolinks, bare URLs,
-inline HTML, entities, footnote references, `{#id}` attribute lists and the
+Inside a unit, inline code, link and image targets, autolinks, bare URLs and
+e-mail / `www.` addresses (the previewer links them), inline HTML, entities, footnote references, `{#id}` attribute lists and the
 `keep` words are **masked**: replaced by a placeholder, translated around, put
 back afterwards. The text of a link stays translatable. Collapsed and shortcut
 references (`[text][]`, `[label]` with a definition) are masked whole, since

@@ -38,6 +38,7 @@ local M = {}
 ---@field lines integer
 ---@field guard_first boolean               -- line 1 is not preceded by a block marker of its own
 ---@field pad "blank"|"zwsp"                -- how a surplus line of a short translation looks
+---@field hard_backslash? boolean           -- the last line ends in a backslash break
 
 ---@class LanguageMdBlock
 ---@field first integer
@@ -249,6 +250,70 @@ local function is_delimiter(line)
   return true
 end
 
+---@internal
+---Which lines of a paragraph end inside a code span? A span may run over several
+---lines, and then a hard break at the end of one of them (a backslash, two spaces)
+---belongs to the code, not to the paragraph. The spans are paired the way
+---CommonMark pairs them: a run of backticks closes with the next run of the same
+---length; one that finds no partner is text.
+---@param plines { content: string }[]
+---@return table<integer, boolean>
+local function code_span_ends(plines)
+  local runs, any = {}, false
+  for i, ln in ipairs(plines) do
+    if ln.content:find("`", 1, true) then
+      any = true
+      local at = 1
+      while true do
+        local a, b = ln.content:find("`+", at)
+        if not a then
+          break
+        end
+        local escaped = #ln.content:sub(1, a - 1):match("\\*$") % 2 == 1
+        runs[#runs + 1] = { line = i, len = b - a + 1, open_len = b - a + 1 - (escaped and 1 or 0) }
+        at = b + 1
+      end
+    end
+  end
+  local inside = {}
+  if not any then
+    return inside
+  end
+  ---@type table<integer, integer[]>
+  local by_len = {}
+  for idx, r in ipairs(runs) do
+    local l = by_len[r.len] or {}
+    by_len[r.len] = l
+    l[#l + 1] = idx
+  end
+  local pos = {} ---@type table<integer, integer>
+  local i = 1
+  while i <= #runs do
+    local r = runs[i]
+    local partner
+    if r.open_len >= 1 then
+      local list = by_len[r.open_len]
+      if list then
+        local k = pos[r.open_len] or 1
+        while list[k] and list[k] <= i do
+          k = k + 1
+        end
+        pos[r.open_len] = k
+        partner = list[k]
+      end
+    end
+    if partner then
+      for l = r.line, runs[partner].line - 1 do
+        inside[l] = true
+      end
+      i = partner + 1
+    else
+      i = i + 1
+    end
+  end
+  return inside
+end
+
 ---Segment a document.
 ---@param lines string[]
 ---@return LanguageMdSegmentation
@@ -311,8 +376,17 @@ function M.segment(lines)
       return
     end
     para = nil
+    local inside = code_span_ends(p.lines)
     local runs, cur = {}, {}
     for i, ln in ipairs(p.lines) do
+      if ln.hard and inside[i] then
+        -- Inside a code span a trailing backslash or double space is just text.
+        ln.hard = false
+        if ln.suffix:sub(1, 1) == "\\" then
+          ln.content = ln.content .. "\\"
+          ln.suffix = ln.suffix:sub(2)
+        end
+      end
       cur[#cur + 1] = ln
       if ln.hard and i < #p.lines then
         runs[#runs + 1] = cur
@@ -329,6 +403,7 @@ function M.segment(lines)
         weights = {},
         -- A setext heading has no marker in front of its first line: guard it like text.
         guard_first = p.kind ~= "heading" or p.setext == true,
+        hard_backslash = run[#run].hard and run[#run].suffix:sub(1, 1) == string.char(92) or false,
         pad = (
           p.kind == "para"
           and not p.listctx

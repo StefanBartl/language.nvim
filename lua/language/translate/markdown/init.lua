@@ -363,6 +363,11 @@ function M.translate_markdown(lines, opts, cb)
       end
       for k = 1, #out do
         out[k] = mask.unmask(out[k], mk)
+        if k == #out and u.hard_backslash and out[k]:match("https?://[^%s]*$") then
+          -- A bare address in front of the break would swallow its backslash.
+          s.reflow_failed = s.tr and "the break would join an address" or nil
+          return nil
+        end
         if reflow.is_table_rule(out[k]) and not reflow.is_table_rule(u.orig[k]) then
           -- This wrap would make a delimiter row of a line of text.
           s.reflow_failed = s.tr and "the wrap would form a table" or nil

@@ -1019,6 +1019,18 @@ return function(H)
     end
   end
 
+  -- Review round: an address in front of a backslash break would take the backslash with it -----
+  do
+    local doc = { "Text Ende\\", "weiter" }
+    local r = run(doc, {
+      provider = fake(function(t)
+        return t == "Text Ende" and "Eins https://a.b/c" or t
+      end, { sync = true }),
+    })
+    H.eq(r.res[1], "Text Ende\\", "the unit stays as it was")
+    H.eq(r.info.reflow_failed, 1)
+  end
+
   -- Review round: CRLF documents -------------------------------------------------------------------------
   do
     local doc = { "Text\r", "\r", "*\r", "", "Text\r", "* \r", "\r", "    code\r" }

@@ -224,112 +224,178 @@ scan = function(ctx, i, j)
   local s = ctx.s
   while i <= j do
     local p = s:find(ctx.special, i)
-    if not p or p > j then
-      lit(ctx, s:sub(i, j))
-      return
+    -- A bare address before the next special character (or in place of the text up to
+    -- the end) is taken whole: its pieces would otherwise be cut by the `h` of a host.
+    local bare = ctx.bare
+    while bare[ctx.bi] and bare[ctx.bi][1] < i do
+      ctx.bi = ctx.bi + 1
     end
-    if p > i then
-      lit(ctx, s:sub(i, p - 1))
-    end
-    i = p
-    local c = s:sub(i, i)
-    local nxt
+    local br = bare[ctx.bi]
+    if br and br[2] <= j and (not p or br[1] <= p) then
+      lit(ctx, s:sub(i, br[1] - 1))
+      tok(ctx, s:sub(br[1], br[2]))
+      ctx.bi = ctx.bi + 1
+      i = br[2] + 1
+    else
+      if not p or p > j then
+        lit(ctx, s:sub(i, j))
+        return
+      end
+      if p > i then
+        lit(ctx, s:sub(i, p - 1))
+      end
+      i = p
+      local c = s:sub(i, i)
+      local nxt
 
-    if c == "\\" then
-      lit(ctx, s:sub(i, i + 1))
-      nxt = i + 2
-    elseif c == "`" then
-      local run = s:match("^`+", i)
-      local e = span_end(ctx, s, i + #run, #run, j)
-      if e then
-        tok(ctx, s:sub(i, e))
-        nxt = e + 1
-      else
-        lit(ctx, run)
-        nxt = i + #run
-      end
-    elseif c == "!" then
-      if s:sub(i + 1, i + 1) == "[" then
-        nxt = try_bracket(ctx, i, j, true)
-      end
-      if not nxt then
-        lit(ctx, "!")
-        nxt = i + 1
-      end
-    elseif c == "[" then
-      nxt = try_bracket(ctx, i, j, false)
-      if not nxt then
-        lit(ctx, "[")
-        nxt = i + 1
-      end
-    elseif c == "<" then
-      local m
-      if s:sub(i, i + 3) == "<!--" then
-        local e = s:find("-->", i + 4, true)
-        m = e and s:sub(i, e + 2)
-      else
-        m = s:match("^</?%a[%w:-]*[^<>]*>", i)
-      end
-      if m and i + #m - 1 <= j then
-        tok(ctx, m)
-        nxt = i + #m
-      else
-        lit(ctx, "<")
-        nxt = i + 1
-      end
-    elseif c == "&" then
-      local m = s:match("^&#?%w+;", i)
-      if m and i + #m - 1 <= j then
-        tok(ctx, m)
-        nxt = i + #m
-      else
-        lit(ctx, "&")
-        nxt = i + 1
-      end
-    elseif c == "{" then
-      local m = s:match("^{%d+}", i) or s:match("^{[#.:][^{}]*}", i)
-      if m and i + #m - 1 <= j then
-        tok(ctx, m)
-        nxt = i + #m
-      else
-        lit(ctx, "{")
-        nxt = i + 1
-      end
-    end
-
-    if not nxt then
-      -- A "keep" word, or the `h` of a bare URL.
-      local boundary = i == 1 or not s:sub(i - 1, i - 1):match("[%w_]")
-      local taken
-      if boundary and c == "h" then
-        local u = s:match("^https?://[^%s<>]+", i)
-        if u then
-          u = u:gsub("[%.,;:!?%)%]'\"]+$", "")
-          if #u > 8 and i + #u - 1 <= j then
-            tok(ctx, u)
-            nxt = i + #u
-            taken = true
-          end
+      if c == "\\" then
+        lit(ctx, s:sub(i, i + 1))
+        nxt = i + 2
+      elseif c == "`" then
+        local run = s:match("^`+", i)
+        local e = span_end(ctx, s, i + #run, #run, j)
+        if e then
+          tok(ctx, s:sub(i, e))
+          nxt = e + 1
+        else
+          lit(ctx, run)
+          nxt = i + #run
+        end
+      elseif c == "!" then
+        if s:sub(i + 1, i + 1) == "[" then
+          nxt = try_bracket(ctx, i, j, true)
+        end
+        if not nxt then
+          lit(ctx, "!")
+          nxt = i + 1
+        end
+      elseif c == "[" then
+        nxt = try_bracket(ctx, i, j, false)
+        if not nxt then
+          lit(ctx, "[")
+          nxt = i + 1
+        end
+      elseif c == "<" then
+        local m
+        if s:sub(i, i + 3) == "<!--" then
+          local e = s:find("-->", i + 4, true)
+          m = e and s:sub(i, e + 2)
+        else
+          m = s:match("^</?%a[%w:-]*[^<>]*>", i)
+        end
+        if m and i + #m - 1 <= j then
+          tok(ctx, m)
+          nxt = i + #m
+        else
+          lit(ctx, "<")
+          nxt = i + 1
+        end
+      elseif c == "&" then
+        local m = s:match("^&#?%w+;", i)
+        if m and i + #m - 1 <= j then
+          tok(ctx, m)
+          nxt = i + #m
+        else
+          lit(ctx, "&")
+          nxt = i + 1
+        end
+      elseif c == "{" then
+        local m = s:match("^{%d+}", i) or s:match("^{[#.:][^{}]*}", i)
+        if m and i + #m - 1 <= j then
+          tok(ctx, m)
+          nxt = i + #m
+        else
+          lit(ctx, "{")
+          nxt = i + 1
         end
       end
-      if not taken and boundary then
-        for _, w in ipairs(ctx.keepby[c] or {}) do
-          local e = i + #w - 1
-          if e <= j and s:sub(i, e) == w and not s:sub(e + 1, e + 1):match("[%w_]") then
-            tok(ctx, w)
-            nxt = e + 1
-            taken = true
-            break
+
+      if not nxt then
+        -- A "keep" word, or the `h` of a bare URL.
+        local boundary = i == 1 or not s:sub(i - 1, i - 1):match("[%w_]")
+        local taken
+        if boundary and c == "h" then
+          local u = s:match("^https?://[^%s<>]+", i)
+          if u then
+            u = u:gsub("[%.,;:!?%)%]'\"]+$", "")
+            if #u > 8 and i + #u - 1 <= j then
+              tok(ctx, u)
+              nxt = i + #u
+              taken = true
+            end
           end
         end
+        if not taken and boundary then
+          for _, w in ipairs(ctx.keepby[c] or {}) do
+            local e = i + #w - 1
+            if e <= j and s:sub(i, e) == w and not s:sub(e + 1, e + 1):match("[%w_]") then
+              tok(ctx, w)
+              nxt = e + 1
+              taken = true
+              break
+            end
+          end
+        end
+        if not taken then
+          lit(ctx, c)
+          nxt = i + 1
+        end
       end
-      if not taken then
-        lit(ctx, c)
-        nxt = i + 1
-      end
+      i = nxt
     end
-    i = nxt
   end
+end
+
+---@internal
+---Bare e-mail addresses and `www.` addresses, as `{ first, last }` byte ranges in
+---order. The previewer links both (GFM autolinks); an engine that "translates"
+---`john.doe@example.com` breaks the link.
+---@param text string
+---@return integer[][]
+local function bare_ranges(text)
+  local out = {}
+  if text:find("@", 1, true) then
+    local init = 1
+    while true do
+      local a, b = text:find("[%w%._%%%+%-]+@[%w%-]+%.[%w%.%-]*%w", init)
+      if not a then
+        break
+      end
+      if a == 1 or not text:sub(a - 1, a - 1):match("[%w_]") then
+        out[#out + 1] = { a, b }
+      end
+      init = b + 1
+    end
+  end
+  if text:find("www.", 1, true) then
+    local init = 1
+    while true do
+      local a, b = text:find("www%.[%w%-]+%.[^%s<>]*", init)
+      if not a then
+        break
+      end
+      init = b + 1
+      if a == 1 or not text:sub(a - 1, a - 1):match("[%w_]") then
+        local trimmed = text:sub(a, b):gsub("[%.,;:!?%)%]'\"]+$", "")
+        b = a + #trimmed - 1
+        if #trimmed > 6 then
+          out[#out + 1] = { a, b }
+        end
+      end
+    end
+  end
+  table.sort(out, function(x, y)
+    return x[1] < y[1]
+  end)
+  -- Overlapping ranges (an address in an address): the first one wins.
+  local clean, last = {}, 0
+  for _, r in ipairs(out) do
+    if r[1] > last then
+      clean[#clean + 1] = r
+      last = r[2]
+    end
+  end
+  return clean
 end
 
 ---Mask `text`. `opts.defs` is the set of normalised reference-definition
@@ -358,6 +424,8 @@ function M.mask(text, opts)
     defs = opts.defs or {},
     keepby = keepby,
     budget = 64 * #text + 4096,
+    bare = bare_ranges(text),
+    bi = 1,
     special = "[`\\!%[<&{h" .. table.concat(extra) .. "]",
   }
   scan(ctx, 1, #text)
