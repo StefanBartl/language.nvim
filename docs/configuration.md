@@ -50,15 +50,17 @@ require("language").setup({
     default_output = "popup",    -- popup | replace | buffer | vsplit | split | tab | insert | clipboard | notify
     default_target = nil,        -- fixed target language for motion/visual maps; nil = selection
                                  -- (the hover falls back to "EN" instead: it has nowhere to ask from)
-    timeout_ms = 8000,
-    max_chars = 0,               -- lower the per-request block budget in bytes (0 = provider default)
+    timeout_ms = 8000,           -- per request: a large input is split into several, each gets this budget
+    max_chars = 0,               -- lower the per-request block budget in bytes (DeepL: bytes + 8 per line; 0 = provider default)
+    max_blocks = 50,             -- most requests one call may need; more is refused before the first (0 = no limit)
     deepl = { api_key = nil },   -- or $DEEPL_API_KEY
     -- Opt-in motion/visual keymaps (off by default, to avoid claiming keys):
     --   operator: <lhs>{motion} translates the text object (e.g. gtrip)
     --   visual:   <lhs> translates the selection
     keymaps = { operator = false, visual = false },
     -- custom = { cmd = function(lines, target) return { "trans", "-b", ... } end,
-    --           parse = function(out) return vim.split(out, "\n") end },
+    --           parse = function(out) return vim.split(out, "\n") end,
+    --           max_bytes = nil },  -- raise the block budget if cmd does not put the text in argv
   },
   thesaurus = {
     enable = true,

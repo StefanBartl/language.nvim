@@ -92,7 +92,8 @@
 ---@field default_target string|nil              -- fixed target for motion/visual maps; nil = prompt. `language.hover` falls back to "EN" instead, because a hover has nowhere to ask from.
 ---@field nocode_default boolean
 ---@field timeout_ms     integer
----@field max_chars      integer                 -- lowers the per-request block budget (bytes); 0 = provider default
+---@field max_chars      integer                 -- lowers the per-request block budget (bytes, DeepL: bytes + 8 per line); 0 = provider default
+---@field max_blocks     integer                 -- most requests one call may need (an input that needs more is refused up front); 0 = no limit
 ---@field deepl          { api_key: string|nil }
 ---@field custom         LanguageTranslateCustomProviderCfg|nil
 ---@field keymaps        LanguageTranslateKeymaps
@@ -195,7 +196,8 @@
 ---@field default_target? string|nil              -- fixed target for motion/visual maps; nil = prompt
 ---@field nocode_default? boolean
 ---@field timeout_ms?     integer
----@field max_chars?      integer                 -- lowers the per-request block budget (bytes); 0 = provider default
+---@field max_chars?      integer                 -- lowers the per-request block budget (bytes, DeepL: bytes + 8 per line); 0 = provider default
+---@field max_blocks?     integer                 -- most requests one call may need (an input that needs more is refused up front); 0 = no limit
 ---@field deepl?          { api_key: string|nil }
 ---@field custom?         LanguageTranslateCustomProviderCfg|nil
 ---@field keymaps?        LanguageTranslateKeymaps
@@ -227,8 +229,9 @@ return {}
 ---@field next?  string|string[]|false  # next spell error (default `]s`)
 
 ---@class LanguageTranslateCustomProviderCfg
----@field cmd   fun(lines: string[], target: string, source: string|nil): string[]
----@field parse fun(out: string): string[]
+---@field cmd       fun(lines: string[], target: string, source: string|nil): string[]
+---@field parse     fun(out: string): string[]
+---@field max_bytes? integer  -- block budget in bytes when `cmd` does not put the text in argv (default 6000 on Windows, 20000 elsewhere)
 
 --- All opt-in: unset by default, so nothing of yours is clobbered.
 ---

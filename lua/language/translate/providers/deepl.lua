@@ -61,24 +61,6 @@ local function host(key)
 end
 
 ---@internal
----Quote `value` as a double-quoted curl config string: backslash and double
----quote are backslash-escaped, and the control characters curl's config parser
----decodes (tab, newline, CR, VT) are written as escapes so the value stays on
----one line.
----@param value string
----@return string
-local function quote(value)
-  local escaped = value
-    :gsub("\\", "\\\\")
-    :gsub('"', '\\"')
-    :gsub("\t", "\\t")
-    :gsub("\n", "\\n")
-    :gsub("\r", "\\r")
-    :gsub("\v", "\\v")
-  return '"' .. escaped .. '"'
-end
-
----@internal
 ---Build a curl `-K -` config (read from stdin) carrying the Authorization
 ---header and the JSON request body. SEC-10: the auth key must never be an argv
 ---element -- the process list (`ps auxww`, `/proc/<pid>/cmdline`,
@@ -86,10 +68,11 @@ end
 ---stdin is not. The body goes the same way: a large body as one argv element
 ---would exceed the Windows command-line limit (ENAMETOOLONG) and expose the
 ---translated text in the process list.
+---@param quote fun(value: string): string  -- lib.nvim.net.curl.config_quote
 ---@param key string
 ---@param body string
 ---@return string
-local function request_config(key, body)
+local function request_config(quote, key, body)
   return ("header = %s\ndata = %s\n"):format(
     quote("Authorization: DeepL-Auth-Key " .. key),
     quote(body)
@@ -108,6 +91,14 @@ function M.translate(lines, target, source, cfg, cb)
   local key = api_key(cfg)
   if not key then
     cb(false, "no DeepL API key (set translate.deepl.api_key or $DEEPL_API_KEY)")
+    return nil
+  end
+  -- The config quoting is lib.nvim's (LUA-02: one copy of the escaping that
+  -- carries the secret), required here so only a DeepL request loads it; an old
+  -- lib.nvim without it is reported instead of crashing the call (LUA-05).
+  local ok_curl, curl = pcall(require, "lib.nvim.net.curl")
+  if not ok_curl or type(curl) ~= "table" or type(curl.config_quote) ~= "function" then
+    cb(false, "DeepL needs a newer lib.nvim (lib.nvim.net.curl.config_quote); please update it")
     return nil
   end
 
@@ -131,7 +122,7 @@ function M.translate(lines, target, source, cfg, cb)
 
   return job.run(argv, {
     timeout_ms = cfg.timeout_ms or 8000,
-    stdin = request_config(key, body),
+    stdin = request_config(curl.config_quote, key, body),
     on_done = function(ok, out, err)
       if not ok then
         cb(false, err ~= "" and err or "DeepL request failed")

@@ -82,10 +82,11 @@ local defaults = {
     default_langs = { "EN", "DE", "FR", "ZH", "JA" },
     default_target = nil, -- fixed target for motion/visual maps; nil = prompt
     nocode_default = false,
-    timeout_ms = 8000, -- network timeout per job
-    max_chars = 0, -- lower the per-request block budget in bytes (0 = provider default); larger inputs are split on line boundaries
+    timeout_ms = 8000, -- network timeout per request; a large input is split into several, each gets this budget
+    max_chars = 0, -- lower the per-request block budget in bytes (DeepL: bytes + 8 per line; 0 = provider default); larger inputs are split on line boundaries
+    max_blocks = 50, -- most requests one call may need; an input that needs more is refused before the first request (0 = no limit)
     deepl = { api_key = nil }, -- or ENV "DEEPL_API_KEY"
-    custom = nil, -- { cmd = function(text, target) ... end, parse = function(out) ... end }
+    custom = nil, -- { cmd = function(text, target) ... end, parse = function(out) ... end, max_bytes = nil }
     -- Recall previous translations (:Translate history picker / window <C-h>).
     history = {
       enable = true,

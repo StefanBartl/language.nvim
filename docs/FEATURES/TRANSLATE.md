@@ -46,30 +46,61 @@ other through the unchanged provider and joins the results; the line count
 is preserved, which the indent restoration relies on. This applies to the
 command, the operators, the window, the hover and multi-file translation.
 
-| Engine | Block budget | Payload |
-| --- | --- | --- |
-| google | 5000 (percent-encoded length, it is part of the URL) | argv (`--data-urlencode`) |
-| shell | 6000 bytes | argv |
-| custom | 6000 bytes | whatever `cmd` builds |
-| deepl | 50 lines, ~60 000 bytes | key **and** JSON body on stdin (`curl -K -`), never argv |
+The budget is counted in **cost units**, which are bytes of the text plus one
+per line for the separator -- except DeepL, which counts 8 extra per line for
+the JSON quoting of each text. This is the unit of `translate.max_chars`.
 
-- A single line over the budget cannot be split without breaking the line
-  layout; the call fails with a message naming the line.
+| Engine | Block budget (cost units) | Payload |
+| --- | --- | --- |
+| google | 15 000 | POST body on stdin (`--data-urlencode q@-`): neither in the URL nor in argv |
+| shell | 6000 on Windows, 20 000 elsewhere | argv (one element) |
+| custom | same as shell; `translate.custom.max_bytes` replaces it | whatever `cmd` builds |
+| deepl | 50 lines, 60 000 | key **and** JSON body on stdin (`curl -K -`), never argv |
+
+- **Blank lines at the edge of a block are layout, not content.** The engines
+  trim them (gtx drops leading and trailing newlines, `trans` output is
+  right-trimmed, a custom `vim.split(out, "\n")` adds a trailing empty
+  string), so they are not sent and are put back around the result; a block
+  that is blank throughout is not sent at all. Without this every cut at a
+  paragraph break would lose a line and merge two paragraphs.
+- **A single line over the budget is cut, not refused.** It is split at
+  sentence ends (`. ! ? ;` before white space, and the CJK `。！？；`), else at
+  white space, never inside a UTF-8 character; the pieces are translated in
+  blocks of their own and re-joined with a single space, so the input line
+  stays one output line. Only a line that has no such boundary inside the
+  budget (one giant token, e.g. minified JSON or base64) fails the call, with
+  a message naming the line.
+- `opts.translate.max_chars` (cost units, `0` = engine default) can only lower
+  the budget; `opts.translate.custom.max_bytes` is the one way to raise the
+  `custom` budget, for a `cmd` that does not put the text into argv.
+- `opts.translate.max_blocks` (default `50`, `0` = no limit) refuses an input
+  that would need more requests than that, before the first one is sent, with
+  a message naming the option. A large buffer or file is otherwise fired off
+  request by request (the keyless gtx endpoint rate-limits), and everything
+  sent before a late failure has already left the machine.
+- `opts.translate.timeout_ms` applies to **each request**, not to the whole
+  call: a chunked input can take up to `blocks * timeout_ms`.
 - A failing block fails the whole call (one callback, with the block and
   line range in the message); `cancel` stops the running block and the rest.
-- `opts.translate.max_chars` (bytes, `0` = engine default) can only lower the
-  budget.
 - `util/job.run` reports a spawn failure through `on_done(false, ...)`
   instead of throwing, and `translate.files.process` turns a failure into a
   failed file while the remaining files carry on.
+- **Windows launchers that are not `.exe`** (an npm-style or `.cmd`/`.bat`
+  shim for `trans` or a custom engine) are started through `cmd.exe /c`, and
+  its parser would interpret a `"`, `%`, `^`, `&`, `|`, `<`, `>` or line break
+  inside the translated text. `util/job.run` refuses such a command with a
+  message instead of running it; use an `.exe` for the engine (or one of the
+  curl-based engines) to translate arbitrary text.
 
 ## Custom translate provider
 
 `translate.custom = { cmd = function(lines, target) return {"trans", "-b", ...} end, parse = function(out) return vim.split(out, "\n") end }` —
-an escape hatch mirroring `spell.providers.custom`.
+an escape hatch mirroring `spell.providers.custom`. `cmd` receives one block
+of lines (see [chunking](#large-inputs-chunking)); a trailing empty entry in
+what `parse` returns is dropped when the block has gained a line.
 
 - **Module:** `translate/providers/custom.lua`
-- **Config:** `opts.translate.custom`
+- **Config:** `opts.translate.custom` (`cmd`, `parse`, optional `max_bytes`)
 
 ## Indent-preserving round trip
 
