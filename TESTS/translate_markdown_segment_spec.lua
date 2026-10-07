@@ -444,5 +444,26 @@ return function(H)
     H.ok(t < 2, ("a heading with long runs of spaces (%.2f s)"):format(t))
     t = seconds({ "| a | b |", "|---|---|", "| " .. string.rep(" ", n) .. " | x |" })
     H.ok(t < 2, ("a table cell with a long run of spaces (%.2f s)"):format(t))
+    -- A tag-like line: the name is not matched once per byte of it.
+    t = seconds({ "<" .. string.rep("a", n) })
+    H.ok(t < 2, ("a `<` and a long name without a `>` (%.2f s)"):format(t))
+    t = seconds({ "<" .. string.rep("a", n) .. ">x" })
+    H.ok(t < 2, ("a long tag name with text behind the `>` (%.2f s)"):format(t))
+    t = seconds({ "<a " .. string.rep("b", n) })
+    H.ok(t < 2, ("a tag whose attributes never end (%.2f s)"):format(t))
+  end
+
+  -- A tag on a line of its own is an HTML block (nothing to translate); text is not ------------
+  do
+    local function units(line)
+      return #seg_of({ line }).units
+    end
+    H.eq(units("<span>"), 0, "a complete tag on its own line")
+    H.eq(units("</span>  "), 0, "a closing tag, white space behind it")
+    H.eq(units('<a href="x" class="y">'), 0, "a tag with attributes")
+    H.eq(units("<span> Text"), 1, "text behind the tag")
+    H.eq(units("<span"), 1, "a tag that is not closed")
+    H.eq(units("<a <b>"), 1, "a `<` inside the tag")
+    H.eq(units("<1>"), 1, "a tag name starts with a letter")
   end
 end

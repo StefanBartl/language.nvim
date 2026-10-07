@@ -101,8 +101,19 @@ end
 
 -- What would turn translated prose into a link, an image or markup the source did not
 -- have: an inline link or image, a reference link, an HTML tag, an address with a scheme,
--- a `www.` address or an e-mail address (the last two are links to the previewer, too).
-local NEW_SYNTAX = { "%]%(", "%]%[", "<%a", "</", "<!", "://", "www%.", "%w@[%w-]+%.%w" }
+-- a `www.` address or an e-mail address (the last two are links to the previewer, too). The
+-- e-mail pattern is as wide as the previewer's autolinker: `.`, `+`, `-` and `_` in the local
+-- part (`_@x.example`, `.@x.example`), `_` in the first label of the domain (`a@x_y.example`).
+local NEW_SYNTAX = {
+  "%]%(",
+  "%]%[",
+  "<%a",
+  "</",
+  "<!",
+  "://",
+  "www%.",
+  "[%w%._%+%-]@[%w_%-]+%.%w",
+}
 
 ---@internal
 ---Does `text` carry link or HTML syntax that the masked source `orig` does not? The
@@ -161,6 +172,20 @@ end
 ---@return boolean
 local function is_ws(b)
   return b ~= nil and (b == 32 or (b >= 9 and b <= 13))
+end
+
+---@internal
+---Does the last white-space-free word of `line` hold an address with a scheme? A byte scan
+---back to the white space and a search in that word only: `match("https?://[^%s]*$")` reads to
+---the end of the word from every `http` in it, run^2 on a long word of them.
+---@param line string
+---@return boolean
+local function ends_in_address(line)
+  local k = #line
+  while k > 0 and not is_ws(line:byte(k)) do
+    k = k - 1
+  end
+  return line:find("https?://", k + 1) ~= nil
 end
 
 ---@internal
@@ -451,7 +476,7 @@ function M.translate_markdown(lines, opts, cb)
       end
       for k = 1, #out do
         out[k] = mask.unmask(out[k], mk)
-        if k == #out and u.hard_backslash and out[k]:match("https?://[^%s]*$") then
+        if k == #out and u.hard_backslash and ends_in_address(out[k]) then
           -- A bare address in front of the break would swallow its backslash.
           s.reflow_failed = s.tr and "the break would join an address" or nil
           return nil

@@ -64,6 +64,86 @@ local function spend(ctx, n)
   return ctx.budget >= 0
 end
 
+-- Punctuation that ends a sentence, not an address: of `https://a.b/c.` the address is
+-- `https://a.b/c`. A set of bytes.
+local TRAIL = {}
+for b in (".,;:!?)]'\""):gmatch(".") do
+  TRAIL[b:byte()] = true
+end
+
+---@internal
+---The last index in `first..last` of `s` that is not trailing sentence punctuation. A byte
+---scan from the end, not `gsub("[...]+$", "")`: that restarts at every byte of a long run of
+---punctuation and costs run^2.
+---@param s string
+---@param first integer
+---@param last integer
+---@return integer
+local function trim_tail(s, first, last)
+  while last >= first and TRAIL[s:byte(last)] do
+    last = last - 1
+  end
+  return last
+end
+
+---@internal
+---The index of the last byte of the run of non-blank bytes (no white space, `<` or `>`) that
+---`i` is in. Looked up once per run and kept: a run of many `https://` candidates would
+---otherwise search (and copy) to its end once per candidate, run^2.
+---@param ctx table
+---@param i integer
+---@return integer
+local function run_end(ctx, i)
+  local r = ctx.run
+  if r.from > i or r.stop < i then
+    local e = ctx.s:find("[%s<>]", i)
+    r.from, r.stop = i, (e or #ctx.s + 1) - 1
+  end
+  return r.stop
+end
+
+---@internal
+---The inline HTML tag that opens at `i` (a `<`): `<name ...>` or `</name ...>`, up to the first
+---`>`. Only the first `<` or `>` after the name decides, so one find: a pattern with a name
+---class in front of `[^<>]*` backtracks over the name once per byte and costs run^2.
+---@param s string
+---@param i integer
+---@return string|nil
+local function tag_at(s, i)
+  if s:match("^</?%a", i) then
+    local e = s:find("[<>]", i + 1)
+    if e and s:byte(e) == 62 then
+      return s:sub(i, e)
+    end
+  end
+  return nil
+end
+
+---@internal
+---The `]` that closes the footnote reference `[^label]` at `b`, or nil. The label is at least
+---one byte and has no `]` or white space, so the first such byte after `[^` decides; it is
+---remembered, as a text of many `[^` without a `]` would search to its end once per `[^`.
+---@param ctx table
+---@param b integer
+---@return integer|nil
+local function footnote_end(ctx, b)
+  local s = ctx.s
+  if s:sub(b, b + 1) ~= "[^" then
+    return nil
+  end
+  local from = b + 2
+  local fn = ctx.fn
+  if not fn or fn.from > from or fn.pos < from then
+    fn = { from = from, pos = s:find("[%]%s]", from) or math.huge }
+    ctx.fn = fn
+  end
+  local e = fn.pos
+  if e ~= math.huge and e > from and s:byte(e) == 93 then
+    return e
+  end
+  return nil
+end
+
 ---@internal
 ---Position of the backtick run closing a span opened by `k` backticks at `from`.
 ---@param ctx table
@@ -179,10 +259,10 @@ local function try_bracket(ctx, i, j, img)
   local s = ctx.s
   local b = i + (img and 1 or 0)
   if not img then
-    local fn = s:match("^%[%^[^%]%s]+%]", b)
-    if fn and b + #fn - 1 <= j then
-      tok(ctx, fn)
-      return b + #fn
+    local fe = footnote_end(ctx, b)
+    if fe and fe <= j then
+      tok(ctx, s:sub(b, fe))
+      return fe + 1
     end
   end
   local close = find_close(ctx, s, b, j)
@@ -243,11 +323,23 @@ scan = function(ctx, i, j)
       ctx.bi = ctx.bi + 1
     end
     local br = bare[ctx.bi]
-    if br and br[2] <= j and (not p or br[1] <= p) then
+    local blast
+    if br and br[1] <= j and (not p or br[1] <= p) then
+      blast = br[2]
+      if blast > j then
+        -- A `www.` address that runs on past the text of a link, into its `](dest)`: the part
+        -- inside the text is the address (an e-mail address cannot straddle a `]`).
+        blast = br[3] and trim_tail(s, br[1], j) or nil
+        if blast and blast - br[1] + 1 <= 6 then
+          blast = nil
+        end
+      end
+    end
+    if blast then
       lit(ctx, s:sub(i, br[1] - 1))
-      tok(ctx, s:sub(br[1], br[2]))
+      tok(ctx, s:sub(br[1], blast))
       ctx.bi = ctx.bi + 1
-      i = br[2] + 1
+      i = blast + 1
     else
       if not p or p > j then
         lit(ctx, s:sub(i, j))
@@ -302,7 +394,7 @@ scan = function(ctx, i, j)
           end
           m = e and e + 2 <= j and s:sub(i, e + 2) or nil
         else
-          m = s:match("^</?%a[%w:-]*[^<>]*>", i)
+          m = tag_at(s, i)
         end
         if m and i + #m - 1 <= j then
           tok(ctx, m)
@@ -335,15 +427,16 @@ scan = function(ctx, i, j)
         -- A "keep" word, or the `h` of a bare URL.
         local boundary = i == 1 or not s:sub(i - 1, i - 1):match("[%w_]")
         local taken
-        if boundary and c == "h" then
-          local u = s:match("^https?://[^%s<>]+", i)
-          if u then
-            u = u:gsub("[%.,;:!?%)%]'\"]+$", "")
-            if #u > 8 and i + #u - 1 <= j then
-              tok(ctx, u)
-              nxt = i + #u
-              taken = true
-            end
+        if boundary and c == "h" and s:match("^https?://", i) then
+          -- Up to the next white space, `<` or `>`, but not past the text of the link it stands
+          -- in (`[https://a.b](https://a.b)`: the visible address is an address, too), and
+          -- without the punctuation of the sentence. The run is not copied before it is known
+          -- to be taken.
+          local last = trim_tail(s, i, math.min(run_end(ctx, i), j))
+          if last - i + 1 > 8 then
+            tok(ctx, s:sub(i, last))
+            nxt = last + 1
+            taken = true
           end
         end
         if not taken and boundary then
@@ -368,11 +461,11 @@ scan = function(ctx, i, j)
 end
 
 ---@internal
----Bare e-mail addresses and `www.` addresses, as `{ first, last }` byte ranges in
----order. The previewer links both (GFM autolinks); an engine that "translates"
----`john.doe@example.com` breaks the link.
+---Bare e-mail addresses and `www.` addresses, as `{ first, last, www }` byte ranges in
+---order (`www` is true for a `www.` address). The previewer links both (GFM autolinks); an
+---engine that "translates" `john.doe@example.com` breaks the link.
 ---@param text string
----@return integer[][]
+---@return table[]
 local function bare_ranges(text)
   local out = {}
   if text:find("@", 1, true) then
@@ -409,10 +502,10 @@ local function bare_ranges(text)
       end
       init = b + 1
       if a == 1 or not text:sub(a - 1, a - 1):match("[%w_]") then
-        local trimmed = text:sub(a, b):gsub("[%.,;:!?%)%]'\"]+$", "")
-        b = a + #trimmed - 1
-        if #trimmed > 6 then
-          out[#out + 1] = { a, b }
+        local last = trim_tail(text, a, b)
+        if last - a + 1 > 6 then
+          -- The third field: it may be cut short at the end of a link text (see `scan`).
+          out[#out + 1] = { a, last, true }
         end
       end
     end
@@ -459,6 +552,7 @@ function M.mask(text, opts)
     budget = 64 * #text + 4096,
     bare = bare_ranges(text),
     bi = 1,
+    run = { from = 1, stop = 0 },
     special = "[`\\!%[<&{h" .. table.concat(extra) .. "]",
   }
   scan(ctx, 1, #text)

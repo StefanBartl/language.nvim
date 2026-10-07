@@ -199,8 +199,13 @@ local function html_start(rest, para_open)
   if BLOCK_TAGS[lname] and (after == "" or after:match("^[ \t>/]")) then
     return { kind = "blank" }
   end
-  if not para_open and body:match("^</?%a[%w-]*[^<>]*>[ \t\r]*$") then
-    return { kind = "blank" }
+  if not para_open and body:match("^</?%a") then
+    -- A complete tag on a line of its own. The first `<` or `>` after the name decides, one
+    -- find: `^</?%a[%w-]*[^<>]*>[ \t\r]*$` backtracks over the name once per byte (run^2).
+    local e = body:find("[<>]", 2)
+    if e and body:byte(e) == 62 and body:find("^[ \t\r]*$", e + 1) then
+      return { kind = "blank" }
+    end
   end
   return nil
 end
