@@ -1064,7 +1064,14 @@ return function(H)
       H.falsy(l:find("evil.example", 1, true), "nothing foreign reaches the output")
     end
     -- the same for an address, a tag and a reference link
-    for _, bad in ipairs({ "see https://x.example", "a <img src=x> b", "a [x][y] b", "a </span> b" }) do
+    for _, bad in ipairs({
+      "see https://x.example",
+      "a <img src=x> b",
+      "a [x][y] b",
+      "a </span> b",
+      "see www.evil.example/p",
+      "write to evil@x.example",
+    }) do
       cache._reset()
       local r2 = run({ "Ein kurzer Satz." }, {
         provider = fake(function()

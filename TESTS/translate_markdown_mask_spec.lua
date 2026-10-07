@@ -204,4 +204,26 @@ return function(H)
       "an address is masked, one behind a word character is not"
     )
   end
+  -- Many addresses, many comment openers: the search for the next special character and for
+  -- `-->` is not repeated to the end of the unit once per address / opener -------------
+  do
+    local function seconds(text)
+      local t0 = vim.uv.hrtime()
+      local masked, m = mask.mask(text)
+      H.eq(mask.unmask(masked, m), text, "the text still comes back whole")
+      return (vim.uv.hrtime() - t0) / 1e9, masked, m
+    end
+    local t, masked, m = seconds(string.rep("foo@bar.com ", 12000))
+    H.ok(t < 2, ("12000 addresses and no other special character (%.2f s)"):format(t))
+    H.eq(#m.toks, 12000, "every address is masked")
+    H.eq(masked:sub(1, 12), "{1} {2} {3} ", "and in order")
+    t = seconds("Wort " .. string.rep("<!-- ", 30000))
+    H.ok(t < 2, ("30000 unclosed comment openers (%.2f s)"):format(t))
+    t = seconds("Wort [" .. string.rep("<!-- ", 20000) .. "](a.md) -->")
+    H.ok(t < 2, ("comment openers whose `-->` lies beyond the link text (%.2f s)"):format(t))
+    masked = mask.mask("a <!-- note --> b <!-- c --> d")
+    H.eq(masked, "a {1} b {2} d", "closed comments are still masked, each by its own `-->`")
+    masked = mask.mask("[x <!-- y](a.md) -->")
+    H.eq(masked, "{1}x <!-- y{2} -->", "a comment that closes beyond the link text is not taken")
+  end
 end

@@ -189,7 +189,8 @@ curl and a loopback server to keep it that way.
 Each answer is checked: every placeholder present exactly once (the halves of a
 link in the right order; fullwidth braces and `{ 1 }` are put right first),
 not empty, a plausible length compared with the source, and no link, image, HTML
-tag or address that the source did not have (the targets of the source are
+tag or address (with a scheme, `www.` or an e-mail address) that the source did not
+have (the targets of the source are
 placeholders, so a model cannot be talked into adding a link or a tracking
 image by the text of the document). A unit that fails is
 retried once (a batch with an unattributable line count is retried unit by
