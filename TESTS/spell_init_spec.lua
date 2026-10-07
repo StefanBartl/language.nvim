@@ -59,6 +59,23 @@ return function(H)
 
   -- run() with a language temporarily changes 'spelllang' for the session ---
   local prev_spelllang = vim.bo[buf].spelllang
+  -- Hermetic German dictionary: a tiny one is compiled with :mkspell into a
+  -- fixture 'runtimepath' entry, so the spec needs neither a file installed in
+  -- the real stdpath('data') nor the runtime's download prompt (network). Without
+  -- any 'de' dictionary no word is ever flagged and the session never opens.
+  local de_dir, de_cleanup = H.fixture("spell-init-de")
+  vim.fn.mkdir(de_dir .. "/spell", "p")
+  vim.fn.writefile({ "SET UTF-8" }, de_dir .. "/spell/de.aff")
+  vim.fn.writefile({ "1", "hallo" }, de_dir .. "/spell/de.dic")
+  local de_base = vim.fn.fnameescape(de_dir .. "/spell/de")
+  vim.cmd(("silent mkspell! %s %s"):format(de_base, de_base))
+  H.eq(
+    vim.fn.filereadable(de_dir .. "/spell/de.utf-8.spl"),
+    1,
+    "the fixture dictionary was compiled"
+  )
+  local prev_rtp = vim.o.runtimepath
+  vim.opt.runtimepath:prepend(de_dir)
   spell.run("de", { kind = "buffer", bufnr = buf })
   H.eq(vim.bo[buf].spelllang, "de", "the session applies the requested language")
 
@@ -83,6 +100,8 @@ return function(H)
 
   -- Leave the buffer in a known-good state for the rest of this spec.
   vim.opt_local.spelllang = prev_spelllang
+  vim.o.runtimepath = prev_rtp
+  de_cleanup()
 
   -- No issues: informs and does not open a session ---------------------------
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "clean text" })
