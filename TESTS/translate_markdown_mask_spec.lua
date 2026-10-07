@@ -226,4 +226,74 @@ return function(H)
     masked = mask.mask("[x <!-- y](a.md) -->")
     H.eq(masked, "{1}x <!-- y{2} -->", "a comment that closes beyond the link text is not taken")
   end
+  -- The end of a bare address, the match of a tag and of a footnote reference are linear, too:
+  -- no gsub that restarts at every byte of a run of punctuation, no pattern that backtracks
+  -- over a name, no search to the end of the run once per candidate ----------------------------
+  do
+    local function seconds(text)
+      local t0 = vim.uv.hrtime()
+      local masked, m = mask.mask(text)
+      H.eq(mask.unmask(masked, m), text, "the text still comes back whole")
+      return (vim.uv.hrtime() - t0) / 1e9
+    end
+    local rep = string.rep
+    local cases = {
+      { "`www.` address, a run of `)`, a letter", "www.a.b" .. rep(")", 40000) .. "x" },
+      { "URL, a run of `)`, a letter", "https://a.b/" .. rep(")", 40000) .. "x" },
+      { "URL, a run of `:`, a letter", "Text https://example.com/" .. rep(":", 50000) .. "x" },
+      { "`https://` and a run of dots", "https://" .. rep(".", 50000) .. "x" },
+      { "`www.a.` and a run of dots", "www.a." .. rep(".", 50000) .. "x" },
+      { "`<`, a long name, no `>`", "<" .. rep("a", 40000) },
+      { "`</`, a long name, no `>`", "</" .. rep("a", 40000) },
+      { "`<a:a:a:...`", "<a" .. rep(":a", 20000) },
+      { "many `https://` in the text of a link", "[" .. rep("https://", 8000) .. "](x)" },
+      { "many `[^a` and no `]`", rep("[^a", 20000) },
+      { "many `[^` and no `]`", rep("[^", 30000) },
+    }
+    for _, c in ipairs(cases) do
+      local t = seconds(c[2])
+      H.ok(t < 2, ("%s (%.2f s)"):format(c[1], t))
+    end
+
+    -- the trim of the sentence punctuation is what it was
+    local masked, m = mask.mask("Siehe https://example.org/a.), und www.example.com/b?! Ende")
+    H.eq(masked, "Siehe {1}.), und {2}?! Ende")
+    H.eq(m.toks[1], "https://example.org/a")
+    H.eq(m.toks[2], "www.example.com/b")
+    masked = mask.mask("Nur http://x und https:// sind keine Adressen")
+    H.eq(masked, "Nur http://x und https:// sind keine Adressen", "a scheme alone is no address")
+
+    -- an address at the end of the text of a link is the visible address: masked, not
+    -- left to an engine (and not counted as the source's own when its answer is checked)
+    masked, m = mask.mask("Mehr unter [https://example.com](https://example.com) Danke.")
+    H.eq(masked, "Mehr unter {1}{2}{3} Danke.")
+    H.eq(m.toks[2], "https://example.com")
+    H.eq(m.toks[3], "](https://example.com)")
+    masked, m = mask.mask("[www.example.com](https://example.com)")
+    H.eq(masked, "{1}{2}{3}")
+    H.eq(m.toks[2], "www.example.com")
+    masked, m = mask.mask("[Siehe https://a.b/c.](x.md)")
+    H.eq(masked, "{1}Siehe {2}.{3}", "the dot of the sentence is not part of the address")
+    H.eq(m.toks[2], "https://a.b/c")
+    masked = mask.mask("[www.a.](x.md)")
+    H.eq(masked, "{1}www.a.{2}", "a `www.` that is too short is no address, also at the end")
+    masked = mask.mask("[Text www.example.com/a. und mehr](x.md)")
+    H.eq(masked, "{1}Text {2}. und mehr{3}", "an address inside the text is as before")
+
+    -- tags
+    masked = mask.mask('Ein <a href="x">Link</a> und <b> fett </b>, a <b und <i> kursiv, a < b.')
+    H.eq(
+      masked,
+      "Ein {1}Link{2} und {3} fett {4}, a <b und {5} kursiv, a < b.",
+      "a tag is taken up to its first `>`, a `<` inside it ends the try"
+    )
+    masked = mask.mask("<a:b-c> und <1> und </ x>")
+    H.eq(masked, "{1} und <1> und </ x>", "a name starts with a letter")
+
+    -- footnote references
+    masked = mask.mask("Eine [^a b] und [^] und [^x] Ende")
+    H.eq(masked, "Eine [^a b] und [^] und {1} Ende", "a label has no white space and is not empty")
+    masked = mask.mask("[^a [^b] c [^d]")
+    H.eq(masked, "[^a {1} c {2}", "the remembered end of a label is not used for a later one")
+  end
 end

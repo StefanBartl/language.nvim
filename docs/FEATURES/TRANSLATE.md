@@ -165,12 +165,22 @@ Where it is unsure it prefers "literal" (German stays German) to "text".
 Every scan is linear: the look-aheads of the masking work on a budget per unit,
 and a unit that used it up (`mask.degraded`, a pathological run of brackets or
 backticks) is not sent at all and stays as it is, rather than being translated
-with syntax that was not protected.
+with syntax that was not protected. What does not look ahead is linear on its
+own: the end of an address is found by a byte scan from its end (a
+`gsub("[...]+$", "")` restarts at every byte of a run of punctuation), the end of
+the run of non-blank bytes an address stands in is looked up once per run and
+not once per `https://` in it, an HTML tag is matched by its first `>` with one
+`find` (a pattern with a name class in front of `[^<>]*` backtracks over the
+name), and the end of a footnote label is remembered. `TESTS/translate_markdown_mask_spec.lua`
+runs each of these on a 40 000 byte line of the worst shape.
 
 Inside a unit, inline code, link and image targets, autolinks, bare URLs and
 e-mail / `www.` addresses (the previewer links them), inline HTML, entities, footnote references, `{#id}` attribute lists and the
 `keep` words are **masked**: replaced by a placeholder, translated around, put
-back afterwards. The text of a link stays translatable. Collapsed and shortcut
+back afterwards. The text of a link stays translatable, except for an address
+that is the text (or the end of it): `[https://example.com](https://example.com)`,
+the commonest form in a README, is masked as `{1}{2}{3}`, so the engine cannot
+rewrite the visible address. Collapsed and shortcut
 references (`[text][]`, `[label]` with a definition) are masked whole, since
 their text is their key.
 
@@ -192,7 +202,12 @@ not empty, a plausible length compared with the source, and no link, image, HTML
 tag or address (with a scheme, `www.` or an e-mail address) that the source did not
 have (the targets of the source are
 placeholders, so a model cannot be talked into adding a link or a tracking
-image by the text of the document). A unit that fails is
+image by the text of the document). The e-mail test is as wide as the
+previewer's autolinker, which also links `_@x.example`, `+@x.example`, `.@x.example`
+and `a@x_y.example`. The guard compares counts, not the addresses: an address
+that the source has and the mask leaves alone (`a@x_y.example` is one, the mask does
+not take `_` in a domain) is a credit, so an engine that keeps it is accepted, and one
+that swaps it for another would be too. A unit that fails is
 retried once (a batch with an unattributable line count is retried unit by
 unit); if it fails again, **the original unit stays**: the preview shows German
 for that paragraph and is never empty or half. Three failed requests in a row

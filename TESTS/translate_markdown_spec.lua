@@ -1071,6 +1071,12 @@ return function(H)
       "a </span> b",
       "see www.evil.example/p",
       "write to evil@x.example",
+      -- what the previewer links as a `mailto:` although the plain form is not in it
+      "see a@x_y.com",
+      "see evil_@x.example",
+      "see +@x.example",
+      "see .@x.example",
+      "see a@a_b.x.example",
     }) do
       cache._reset()
       local r2 = run({ "Ein kurzer Satz." }, {
@@ -1090,6 +1096,33 @@ return function(H)
       cache = true,
     })
     H.eq(r3.res[1], "If a < b gilt, dann ok.")
+    -- an address of the source stays allowed: one the mask takes is a placeholder, one it does
+    -- not take (`_` in the domain) is in the source as well, so it is not "added"
+    cache._reset()
+    local r4 = run({ "Schreibe an a@x_y.com jetzt.", "", "Mail an max@example.org jetzt." }, {
+      provider = fake(function(t)
+        return (t:gsub("Schreibe an", "Write to"):gsub("Mail an", "Mail to"):gsub("jetzt", "now"))
+      end, { sync = true }),
+      cache = true,
+    })
+    H.eq(r4.res[1], "Write to a@x_y.com now.")
+    H.eq(r4.res[3], "Mail to max@example.org now.")
+    H.eq(r4.info.failed, 0)
+    -- The visible address of a link is masked, so it is no credit for an address the engine
+    -- brings: it drops the visible address and adds another one.
+    cache._reset()
+    local src = "Mehr unter [https://example.com](https://example.com) Danke."
+    local r5 = run({ src }, {
+      provider = fake(function(t)
+        local out = t:gsub("Mehr unter", "More at"):gsub("Danke", "Thanks")
+        out = out:gsub("https://example.com", "Example")
+        return out .. " https://evil.example"
+      end, { sync = true }),
+      cache = true,
+    })
+    H.eq(r5.res[1], src, "an address swapped for a foreign one is refused, the unit stays")
+    H.eq(r5.info.failed, 1)
+    H.falsy(r5.res[1]:find("evil", 1, true))
   end
 
   -- Independent review: a unit whose masking ran out of budget is left alone ---------------------
@@ -1124,5 +1157,46 @@ return function(H)
     })
     H.ok((vim.uv.hrtime() - t0) / 1e9 < 2, "a long run of white space in an answer")
     H.ok(r.ok and #r.res == 1)
+  end
+
+  -- Review round: a long unit of addresses is masked, wrapped and checked in linear time -------
+  do
+    local function seconds(doc)
+      cache._reset()
+      local t0 = vim.uv.hrtime()
+      local r = run(doc, {
+        provider = fake(function(t)
+          return (t:gsub("Satz", "sentence"))
+        end, { sync = true }),
+        cache = false,
+      })
+      H.ok(r.ok and #r.res == #doc, "the document comes back")
+      return (vim.uv.hrtime() - t0) / 1e9, r
+    end
+    -- the break in front of the next line may not join an address: the last word is looked at
+    local t, r = seconds({ string.rep("https://", 12500) .. " Satz\\", "weiter" })
+    H.ok(t < 2, ("a hard break after a line of 12500 `https://` (%.2f s)"):format(t))
+    H.contains(r.res[1], "sentence\\", "the unit is translated")
+    t = seconds({ "Ein Satz www.a.b" .. string.rep(")", 40000) .. "x" })
+    H.ok(t < 2, ("an address with a run of `)` behind it (%.2f s)"):format(t))
+    t = seconds({ "Ein Satz <" .. string.rep("a", 40000) })
+    H.ok(t < 2, ("a `<` and a long name without a `>` (%.2f s)"):format(t))
+    t = seconds({ "<" .. string.rep("a", 40000) })
+    H.ok(t < 2, ("the same as a line of its own (%.2f s)"):format(t))
+    -- a hard break behind a word with an address in it is still refused: it would take the `\`
+    cache._reset()
+    r = run({ "Satz https://a.b/c\\", "weiter" }, {
+      provider = fake(function(x)
+        return (x:gsub("Satz", "Eins"))
+      end, { sync = true }),
+    })
+    H.eq(r.res[1], "Satz https://a.b/c\\", "an address in front of the break")
+    H.eq(r.info.reflow_failed, 1)
+    r = run({ "Satz https://a.b/c und mehr\\", "weiter" }, {
+      provider = fake(function(x)
+        return (x:gsub("Satz", "Eins"))
+      end, { sync = true }),
+    })
+    H.eq(r.res[1], "Eins https://a.b/c und mehr\\", "an address earlier in the line is no harm")
   end
 end
