@@ -225,7 +225,17 @@ end
 scan = function(ctx, i, j)
   local s = ctx.s
   while i <= j do
-    local p = s:find(ctx.special, i)
+    -- The next special character at or after `i`. Looked up once and kept: a text with few
+    -- of them but many bare addresses would otherwise search to the end of the unit once per
+    -- address (n addresses cost n * length).
+    local p
+    local sp = ctx.sp
+    if sp and sp.from <= i and sp.pos >= i then
+      p = sp.pos ~= math.huge and sp.pos or nil
+    else
+      p = s:find(ctx.special, i)
+      ctx.sp = { from = i, pos = p or math.huge }
+    end
     -- A bare address before the next special character (or in place of the text up to
     -- the end) is taken whole: its pieces would otherwise be cut by the `h` of a host.
     local bare = ctx.bare
@@ -280,8 +290,17 @@ scan = function(ctx, i, j)
       elseif c == "<" then
         local m
         if s:sub(i, i + 3) == "<!--" then
-          local e = s:find("-->", i + 4, true)
-          m = e and s:sub(i, e + 2)
+          -- The first `-->` at or after `i + 4`, remembered: a unit with many `<!--` and
+          -- no closing `-->` (or one beyond `j`) would search to its end once per opener.
+          local ce = ctx.close_at
+          local e
+          if ce and ce.from <= i + 4 and (ce.pos == false or ce.pos >= i + 4) then
+            e = ce.pos or nil
+          else
+            e = s:find("-->", i + 4, true)
+            ctx.close_at = { from = i + 4, pos = e or false }
+          end
+          m = e and e + 2 <= j and s:sub(i, e + 2) or nil
         else
           m = s:match("^</?%a[%w:-]*[^<>]*>", i)
         end

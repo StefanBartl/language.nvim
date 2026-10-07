@@ -100,8 +100,9 @@ local function plausible(orig, text)
 end
 
 -- What would turn translated prose into a link, an image or markup the source did not
--- have: an inline link or image, a reference link, an HTML tag, an address.
-local NEW_SYNTAX = { "%]%(", "%]%[", "<%a", "</", "<!", "://" }
+-- have: an inline link or image, a reference link, an HTML tag, an address with a scheme,
+-- a `www.` address or an e-mail address (the last two are links to the previewer, too).
+local NEW_SYNTAX = { "%]%(", "%]%[", "<%a", "</", "<!", "://", "www%.", "%w@[%w-]+%.%w" }
 
 ---@internal
 ---Does `text` carry link or HTML syntax that the masked source `orig` does not? The
