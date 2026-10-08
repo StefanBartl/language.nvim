@@ -19,7 +19,13 @@ local current = vim.deepcopy(defaults)
 ---@param opts LanguageOpts|nil
 ---@return nil
 function M.setup(opts)
-  current = vim.tbl_deep_extend("force", defaults, opts or {})
+  opts = vim.deepcopy(opts or {})
+  -- `keymaps = false` / `true` is the agreed boolean spelling of the switch
+  -- group (`{ enable = false }`); anything else keeps the default.
+  if opts.keymaps ~= nil then
+    opts.keymaps = require("lib.nvim.normalize").normalize_switch_group(opts.keymaps)
+  end
+  current = vim.tbl_deep_extend("force", defaults, opts)
 end
 
 ---Return the active configuration.

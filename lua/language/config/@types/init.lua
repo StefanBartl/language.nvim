@@ -120,6 +120,7 @@
 ---@field translate  LanguageTranslateCfg
 ---@field thesaurus  LanguageThesaurusCfg
 ---@field commands   boolean
+---@field keymaps    { enable: boolean }  # `false` (setup: `keymaps = false`) binds no keymap at all
 ---@field which_key  { enable: boolean }
 ---@field deps_popup? boolean  # Show the lib.nvim.deps "declared tools" popup once, ever, on first setup() after install (default true; needs lib.nvim.deps — a no-op without it)
 
@@ -133,6 +134,7 @@
 ---@field translate?  LanguageTranslateOpts
 ---@field thesaurus?  LanguageThesaurusOpts
 ---@field commands?   boolean
+---@field keymaps?    boolean|{ enable?: boolean }  # `false` binds no keymap at all
 ---@field which_key?  { enable: boolean }
 ---@field deps_popup? boolean  # Show the lib.nvim.deps "declared tools" popup once, ever, on first setup() after install (default true; needs lib.nvim.deps — a no-op without it)
 

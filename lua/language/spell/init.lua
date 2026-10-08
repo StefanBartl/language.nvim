@@ -86,6 +86,10 @@ local session_bound = {}
 ---@param bufnr integer
 ---@return nil
 local function attach_keymaps(bufnr)
+  local master = require("language.config").get().keymaps
+  if master and master.enable == false then
+    return
+  end
   local km = cfg().keymaps or {}
 
   ---@type table<string, Lib.Keymap.Action>
