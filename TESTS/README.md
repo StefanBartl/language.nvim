@@ -67,7 +67,7 @@ misleading failures.
 | `translate_files_spec.lua` | `translate.files.process`/`run` against a fake provider — suffix/replace/buffers output modes, error handling, and the early-return guards, all without reaching `ui.kit`'s file picker |
 | `thesaurus_spec.lua` | looking up and applying a synonym under the cursor, off the `ui.kit` picker branch |
 | `bindings_usrcmds_spec.lua` | `:Spellcheck`/`:Translate`/`:TranslateReplace` argument parsing and dispatch, with `language.spell`/`language.translate`/`language.translate.window` stubbed |
-| `usrcmds_help_spec.lua` | every flag of `:Translate`/`:TranslateReplace` (and `:Spellcheck`) has a line in lib.nvim's option float: `composer.help.undocumented(<verb>)` is empty |
+| `usrcmds_help_spec.lua` | every flag and positional argument of `:Translate`/`:TranslateReplace`/`:Spellcheck` has a line in lib.nvim's option float: `composer.help.undocumented(<verb>, { args = true })` is empty, and the four argument-type texts stay one line |
 | `bindings_keymaps_autocmds_spec.lua` | keymap registration for spell/translate/thesaurus, and the autocmd wiring (including the live-scan debounce arm/disarm and the write guard) |
 | `language_init_spec.lua` | `language.setup()` end to end — command registration gating, idempotency, the lazy `M.health` facade, and the programming_dict/extra_wordlists gate |
 | `spell_init_spec.lua` | the top-level `language.spell` facade — starting/closing a session, `:Spellcheck`'s scope dispatch, panel stubbed (see "Deliberately left untested") |
