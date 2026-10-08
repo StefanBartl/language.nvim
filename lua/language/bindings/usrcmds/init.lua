@@ -59,6 +59,7 @@ end
 
 -- 1st positional for :Spellcheck.
 composer.register_type("SPELL_LANG", {
+  desc = "Spelling language as in 'spelllang', e.g. en or en,de",
   validate = function(raw)
     return true, raw, nil
   end,
@@ -70,6 +71,7 @@ composer.register_type("SPELL_LANG", {
 -- 2nd+ positional for :Spellcheck: scope words + directory completion
 -- (skipped once the lead looks like a flag, matching the original guard).
 composer.register_type("SPELL_SCOPE", {
+  desc = "What to check: buffer, visible, cwd or path=<p>; or clear / refresh",
   validate = function(raw)
     return true, raw, nil
   end,
@@ -84,6 +86,7 @@ composer.register_type("SPELL_SCOPE", {
 
 -- 1st positional shared by :Translate / :TranslateReplace.
 composer.register_type("TRANSLATE_LANG", {
+  desc = "Target language code, e.g. EN or DE",
   validate = function(raw)
     return true, raw, nil
   end,
@@ -94,6 +97,7 @@ composer.register_type("TRANSLATE_LANG", {
 
 -- 2nd+ positional shared by :Translate / :TranslateReplace.
 composer.register_type("TRANSLATE_SCOPE", {
+  desc = "What to translate: cword, selection, buffer, cwd or path=<p>",
   validate = function(raw)
     return true, raw, nil
   end,
