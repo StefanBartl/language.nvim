@@ -83,7 +83,8 @@ is unaffected by this split — only the two commands changed.
 
 ## `--nocode` only matters when something actually gets written back
 
-`--nocode` skips fenced/inline code spans during translation. It's a
+`--nocode` skips fenced code blocks and every line that holds inline code (a
+lone backtick counts) during translation, prose on that line included. It's a
 no-op for `--output=popup`/`notify`/`clipboard` (nothing in the buffer
 changes anyway) — reach for it specifically on `--output=replace` /
 `:TranslateReplace` when the selection is a mixed prose+code block (a

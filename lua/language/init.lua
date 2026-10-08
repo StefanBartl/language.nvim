@@ -3,7 +3,7 @@
 ---@description
 --- Two independent domains behind two top-level commands:
 ---   :Spellcheck [lang] [buffer|visible|cwd|path=<p>|clear|refresh]
----   :Translate  <lang> [--nocode] [--output=<mode>] [selection|buffer|path=<p>]
+---   :Translate  <lang> [--nocode] [--output=<mode>] [selection|buffer|path=<dir>]
 ---
 --- Both share a common scope model (see `language/@types`) and are built on
 --- lib.nvim as a deliberate shared dependency.

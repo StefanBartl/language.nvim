@@ -10,7 +10,7 @@
 :'<,'>Translate DE           " popup with the translation, buffer untouched
 :Translate FR --output=vsplit " translation in a new vertical split
 :'<,'>TranslateReplace DE    " selection to German, REPLACES the text (classic behavior)
-:TranslateReplace EN --nocode " replaces, skips fenced/inline code
+:TranslateReplace EN --nocode " replaces, skips code blocks and lines with inline code
 :Translate!                  " interactive window (live translation while typing)
 :'<,'>Translate! DE          " window pre-filled with the selection, target DE
 :Translate DE cwd            " select files in cwd (Tab) & translate → name.DE.ext

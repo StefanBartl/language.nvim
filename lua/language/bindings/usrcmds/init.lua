@@ -29,7 +29,7 @@ local M = {}
 local SPELL_LANGS = { "en", "de", "fr", "es", "it", "pt", "nl", "en,de" }
 local SPELL_SCOPES = { "buffer", "visible", "cwd", "clear", "refresh" }
 local TR_LANGS = { "EN", "DE", "FR", "ZH", "JA", "ES", "IT" }
-local TR_SCOPES = { "cword", "selection", "buffer", "cwd" }
+local TR_SCOPES = { "cword", "selection", "buffer", "visible", "cwd" }
 local TR_OUTPUT_MODES = {
   "popup",
   "replace",
@@ -95,9 +95,11 @@ composer.register_type("TRANSLATE_LANG", {
   end,
 })
 
--- 2nd+ positional shared by :Translate / :TranslateReplace.
+-- 2nd+ positional shared by :Translate / :TranslateReplace. A path scope must
+-- be a directory (dispatch_translate hands it to run_files); a single file is
+-- translated by opening it and using `buffer`.
 composer.register_type("TRANSLATE_SCOPE", {
-  desc = "What to translate: cword, selection, buffer, cwd or path=<p>",
+  desc = "What to translate: cword, selection, buffer, visible, cwd or path=<dir>",
   validate = function(raw)
     return true, raw, nil
   end,
@@ -223,7 +225,7 @@ function M.setup()
   -- without touching the buffer). :Translate![lang] opens the interactive
   -- translation window instead.
   composer.verb("Translate", {
-    desc = "Translate (popup by default)  <lang> [--nocode|--output=<m>|--files=<m>] [cword|selection|buffer|cwd|path=<p>]  (! = window)",
+    desc = "Translate (popup by default)  <lang> [--nocode|--output=<m>|--files=<m>] [cword|selection|buffer|visible|cwd|path=<dir>]  (! = window)",
     bang = true,
     range = true,
     routes = {
@@ -237,7 +239,7 @@ function M.setup()
           {
             name = "nocode",
             bool = true,
-            desc = "Keep fenced and inline code untranslated (output=replace only)",
+            desc = "Skip code blocks and lines with inline code (output=replace, not cwd/path/cword)",
           },
           {
             name = "output",
@@ -282,7 +284,7 @@ function M.setup()
   -- `:TranslateReplace` behavior). No `--output=`/`--files=` — its whole
   -- purpose is to replace.
   composer.verb("TranslateReplace", {
-    desc = "Translate and replace in place  <lang> [--nocode] [selection|buffer|cwd|path=<p>]",
+    desc = "Translate and replace in place  <lang> [--nocode] [selection|buffer|visible|cwd|path=<dir>]",
     range = true,
     routes = {
       {
@@ -295,7 +297,7 @@ function M.setup()
           {
             name = "nocode",
             bool = true,
-            desc = "Keep fenced and inline code untranslated (not for cwd or path=<dir>)",
+            desc = "Skip code blocks and lines with inline code (not for cword, cwd, path=<dir>)",
           },
         },
         range = true,
