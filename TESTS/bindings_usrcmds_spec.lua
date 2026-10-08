@@ -104,6 +104,39 @@ return function(H)
     "--files=<mode> reaches run_files as opts.mode"
   )
 
+  -- `path=<p>` is a multi-file scope only for a DIRECTORY: a file path stays a path scope that
+  -- translate.run then refuses, which is why the help text says `path=<dir>`. `--nocode` is not
+  -- forwarded to run_files either.
+  local scratch_dir = (vim.fn.tempname() .. "-usrcmds"):gsub("\\", "/")
+  vim.fn.mkdir(scratch_dir, "p")
+  local scratch_file = scratch_dir .. "/note.md"
+  vim.fn.writefile({ "hello" }, scratch_file)
+
+  vim.cmd("Translate FR --nocode path=" .. scratch_dir)
+  local dir_call = translate_calls[#translate_calls]
+  H.eq(dir_call.fn, "run_files", "path=<dir> is routed to run_files")
+  H.eq(vim.fs.normalize(dir_call.opts.dir), vim.fs.normalize(scratch_dir), "with that directory")
+  H.eq(dir_call.opts.nocode, nil, "--nocode is not forwarded to the multi-file translation")
+
+  vim.cmd("Translate FR path=" .. scratch_file)
+  local file_call = translate_calls[#translate_calls]
+  H.eq(file_call.fn, "run", "path=<file> is not a multi-file scope")
+  H.eq(file_call.opts.scope.kind, "path", "it reaches translate.run as a path scope")
+  H.eq(
+    vim.fs.normalize(file_call.opts.scope.path),
+    vim.fs.normalize(scratch_file),
+    "carrying the file, which translate.run then refuses"
+  )
+
+  vim.fn.delete(scratch_dir, "rf")
+
+  vim.cmd("Translate FR visible")
+  H.eq(
+    translate_calls[#translate_calls].opts.scope.kind,
+    "visible",
+    "visible is a scope word of :Translate too"
+  )
+
   -- bang → the interactive window, never translate.run ----------------------
   local before_translate_calls = #translate_calls
   vim.cmd("Translate! FR")

@@ -52,4 +52,80 @@ return function(H)
       type_name .. " text is one line, without a trailing period, <= 80 characters: " .. text
     )
   end
+
+  -- So do the flag texts and the per-value texts of an enum flag.
+  ---@param text string|nil
+  ---@return boolean
+  local function house_style(text)
+    return type(text) == "string"
+      and text ~= ""
+      and not text:find("\n", 1, true)
+      and text:sub(-1) ~= "."
+      and #text <= 80
+  end
+  for _, name in ipairs({ "Translate", "TranslateReplace" }) do
+    local handle = composer.registry()[name]
+    for _, route in ipairs(handle:spec().routes or {}) do
+      for _, flag in ipairs(route.flags or {}) do
+        H.ok(
+          house_style(flag.desc),
+          ":" .. name .. " --" .. flag.name .. " text: " .. tostring(flag.desc)
+        )
+        for value, text in pairs(flag.enum_desc or {}) do
+          H.ok(
+            house_style(text),
+            ":" .. name .. " --" .. flag.name .. "=" .. value .. " text: " .. tostring(text)
+          )
+        end
+      end
+    end
+  end
+
+  -- The texts must say what the code does, not what one would hope. `--nocode` skips every line
+  -- that holds a backtick (translate/filter.lua), prose around the code included, and only for a
+  -- text scope: cwd/path=<dir> go to run_files and a word to run_region, neither reads it.
+  -- And a path scope is a multi-file scope only when it is a DIRECTORY.
+  local function flag_text(name, flag_name)
+    for _, route in ipairs(composer.registry()[name]:spec().routes or {}) do
+      for _, flag in ipairs(route.flags or {}) do
+        if flag.name == flag_name then
+          return flag.desc or ""
+        end
+      end
+    end
+    return ""
+  end
+  for _, name in ipairs({ "Translate", "TranslateReplace" }) do
+    local text = flag_text(name, "nocode")
+    H.ok(
+      text:find("lines with inline code", 1, true) ~= nil,
+      ":" .. name .. " --nocode says whole lines are skipped: " .. text
+    )
+    H.ok(
+      text:find("cwd", 1, true) ~= nil and text:find("path", 1, true) ~= nil,
+      ":" .. name .. " --nocode names the scopes it does not cover: " .. text
+    )
+    H.ok(
+      text:find("cword", 1, true) ~= nil,
+      ":" .. name .. " --nocode names the cword scope too: " .. text
+    )
+  end
+  H.ok(
+    flag_text("Translate", "nocode"):find("output=replace", 1, true) ~= nil,
+    ":Translate --nocode says it only works with output=replace"
+  )
+
+  local scope_text = argtypes.get("TRANSLATE_SCOPE").desc or ""
+  H.ok(
+    scope_text:find("path=<dir>", 1, true) ~= nil,
+    "TRANSLATE_SCOPE offers a directory, not any path: " .. scope_text
+  )
+  H.ok(
+    scope_text:find("path=<p>", 1, true) == nil,
+    "TRANSLATE_SCOPE does not offer path=<p>: " .. scope_text
+  )
+  H.ok(
+    scope_text:find("visible", 1, true) ~= nil,
+    "TRANSLATE_SCOPE lists the visible scope: " .. scope_text
+  )
 end

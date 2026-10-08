@@ -8,7 +8,7 @@
 | `:Translate <lang> --output=<m>` | `popup`, `replace`, `buffer`, `vsplit`, `split`, `tab`, `insert`, `clipboard` or `notify` |
 | `:Translate!` | Interactive window, translating live as you type; a range pre-fills it |
 | `:TranslateReplace <lang> [scope]` | The mutating counterpart — always replaces, no `--output=` |
-| `--nocode` | Skips fenced and inline code spans in replace-style output |
+| `--nocode` | Skips fenced code blocks and lines with inline code in replace-style output |
 | `<leader>ss` | Toggle the spell session in the current buffer |
 | `]s` · `<leader>z=` · `<leader>z1` | Next issue · fix and advance · take the first suggestion |
 

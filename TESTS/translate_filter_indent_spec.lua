@@ -34,6 +34,22 @@ return function(H)
   H.eq(#filter.translatable_ranges(nil, 1, 8), 0, "a nil buffer is a safe no-op, not an error")
   H.eq(#filter.translatable_ranges(buf, nil, 8), 0, "a nil start_line likewise")
 
+  -- Inline code skips the WHOLE line, prose around it included, and so does a stray lone backtick.
+  -- This is what the `--nocode` help texts promise ("lines with inline code"), so a change here
+  -- has to change those texts too.
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+    "Use `foo` to start the server", -- 1  prose around a code span: skipped whole
+    "plain prose", -- 2
+    "a lone ` backtick", -- 3  unbalanced, skipped as well
+    "more plain prose", -- 4
+  })
+  local inline = filter.translatable_ranges(buf, 1, 4)
+  H.eq(#inline, 2, "the code-span line and the stray-backtick line each end a prose run")
+  H.eq(inline[1].s, 2, "the line with a code span is not translatable")
+  H.eq(inline[1].e, 2, "only the plain line next to it is")
+  H.eq(inline[2].s, 4, "a line with one stray backtick is not translatable either")
+  H.eq(inline[2].e, 4, "the plain line after it is")
+
   -- An unclosed fence: everything from the opening fence onward is treated
   -- as code (in_fence stays true), so nothing after it is translatable.
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, {

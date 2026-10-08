@@ -102,7 +102,7 @@ defaulting to the whole-buffer scope.
         --files=<mode>      output mode when scope is cwd/path=<dir> — see
                             |language-translate-files|
         scope               selection (default with a range) | buffer | cwd
-                            | path=<p>
+                            | path=<dir>
     Examples: >
         :'<,'>Translate DE            " popup near the cursor, buffer untouched
         :Translate EN --output=vsplit " open the translation in a vertical split
@@ -116,7 +116,7 @@ defaulting to the whole-buffer scope.
     name/behavior matches the classic `:TranslateReplace`). Always replaces;
     there is no `--output=`. `--nocode` skips fenced code blocks and
     inline-code lines. `scope` is `selection` (default with a range) |
-    `buffer` | `cwd` | `path=<p>` — for `cwd`/`path=<dir>` this picks and
+    `buffer` | `cwd` | `path=<dir>` — for `cwd`/`path=<dir>` this picks and
     overwrites multiple files in place (with a confirmation prompt), see
     |language-translate-files|.
     Examples: >
