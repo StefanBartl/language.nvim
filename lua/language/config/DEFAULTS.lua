@@ -9,6 +9,9 @@ require("language.config.@types")
 
 ---@type LanguageConfig
 local defaults = {
+  -- Master switch of every keymap the plugin binds (global and session-local).
+  -- `keymaps = false` is accepted by setup() and means `{ enable = false }`.
+  keymaps = { enable = true },
   spell = {
     providers = {
       order = { "native", "lsp", "typos", "cspell", "codespell" },

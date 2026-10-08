@@ -122,4 +122,28 @@ return function(H)
   })
   local off_events = event_set(autocmd.registered({ group = "language_nvim" }))
   H.falsy(off_events.BufWritePre, "turning the guard off again really removes its autocmd")
+
+  -- keymaps = false: the master switch binds nothing --------------------------
+  local config = require("language.config")
+  config.setup({ keymaps = false })
+  H.eq(config.get().keymaps.enable, false, "keymaps = false is normalized to { enable = false }")
+  config.setup({ keymaps = true })
+  H.eq(config.get().keymaps.enable, true, "keymaps = true keeps the switch on")
+
+  config.setup({
+    keymaps = false,
+    spell = { keymaps = { panel = "<leader>Zoff" } },
+    translate = { keymaps = { operator = "<leader>Zofo", visual = "<leader>Zofv" } },
+    thesaurus = { keymap = "<leader>Zoft" },
+  })
+  keymaps.setup(config.get(), false)
+  for _, lhs in ipairs({ "<leader>Zoff", "<leader>Zofo", "<leader>Zofv", "<leader>Zoft" }) do
+    H.eq(
+      vim.fn.maparg(lhs, "n") == "" and vim.fn.maparg(lhs, "x") == "",
+      true,
+      lhs .. " is not bound"
+    )
+  end
+
+  config.setup({})
 end

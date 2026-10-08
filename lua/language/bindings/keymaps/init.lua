@@ -79,6 +79,9 @@ end
 ---@param which_key? boolean  # `false` skips the group labels only.
 ---@return nil
 function M.setup(cfg, which_key)
+  if cfg.keymaps ~= nil and cfg.keymaps.enable == false then
+    return
+  end
   local sk = (cfg.spell and cfg.spell.keymaps) or {}
   keymap.register("language", {
     order = { "panel" },

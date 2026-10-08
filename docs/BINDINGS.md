@@ -6,6 +6,9 @@ All keymaps are opt-in (disable any of them by setting the config key to
 registered with which-key automatically when `which_key.enable = true`
 (default), on whatever prefix the keys you configured actually share.
 
+`setup({ keymaps = false })` (the same as `keymaps = { enable = false }`) is the master
+switch: no keymap is bound at all, neither the global ones nor the session-local ones.
+
 Every entry below is a **named action**, declared through
 [`lib.nvim.bindings.keymap`](https://github.com/StefanBartl/lib.nvim): the
 config key is the action's name, an lhs may be a list of keys
