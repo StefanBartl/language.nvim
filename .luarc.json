@@ -5,7 +5,7 @@
   },
   "runtime.path": ["lua/?.lua", "lua/?/init.lua"],
   "diagnostics": {
-    "globals": ["vim"]
+    "globals": []
   },
   "workspace": {
     "checkThirdParty": false
