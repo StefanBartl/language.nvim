@@ -15,6 +15,9 @@ stays untouched. `--output=` selects an alternative destination:
 replace" workflow under its own name. `--nocode` skips fenced code blocks
 and every line that holds inline code (relevant to replace-style output of a
 text scope only; `cwd`, `path=<dir>` and `cword` ignore it).
+If the translated lines change while the request is running (`replace`, `insert`,
+`--nocode`), the result is discarded and the buffer stays as it is; with `--nocode`
+that holds for all ranges at once.
 
 - **Tab:** true
 - **Module:** `translate/init.lua`, `translate/output/init.lua`

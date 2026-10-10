@@ -137,6 +137,31 @@ local function scope_range(scope)
 end
 
 ---@internal
+---A line range was captured before a network round trip; before writing next
+---to it (or over it), check it still holds the text that was translated --
+---the line-based counterpart of the check in `run_region`. Warns on mismatch.
+---@param bufnr integer
+---@param s integer            1-based inclusive
+---@param e integer            1-based inclusive
+---@param lines string[]       the lines read when the request was made
+---@return boolean unchanged
+local function range_unchanged(bufnr, s, e, lines)
+  if not api.nvim_buf_is_valid(bufnr) then
+    notify.warn("Translation discarded: the buffer no longer exists")
+    return false
+  end
+  local ok, current = pcall(api.nvim_buf_get_lines, bufnr, s - 1, e, false)
+  local same = ok
+    and #current == #lines
+    and table.concat(current, "\n") == table.concat(lines, "\n")
+  if not same then
+    notify.warn("Translation discarded: the text changed while translating")
+    return false
+  end
+  return true
+end
+
+---@internal
 ---Translate a range and deliver via `mode`.
 ---@param provider LanguageTranslateProvider
 ---@param bufnr integer
@@ -156,6 +181,9 @@ local function translate_range(provider, bufnr, s, e, target, mode)
     end
     ---@cast result string[]
     result = indent.restore(result, indents)
+    if (mode == "replace" or mode == "insert") and not range_unchanged(bufnr, s, e, lines) then
+      return
+    end
     output.apply(mode, result, { bufnr = bufnr, s = s, e = e, target = target })
     require("language.translate.history").record({ input = lines, output = result, target = target })
   end)
@@ -186,10 +214,13 @@ local function translate_nocode(provider, bufnr, s, e, target)
   local results = {}
   ---@type table<integer, string[]>
   local indents = {}
+  ---@type table<integer, string[]>
+  local sources = {}
 
   for idx = 1, #ranges do
     local r = ranges[idx]
     local lines = api.nvim_buf_get_lines(bufnr, r.s - 1, r.e, false)
+    sources[idx] = lines
     local dedented
     dedented, indents[idx] = indent.strip(lines)
     local jobref
@@ -202,6 +233,13 @@ local function translate_nocode(provider, bufnr, s, e, target)
         notify.error(tostring(result))
       end
       if pending == 0 then
+        -- All or nothing: one drifted range also shifts the others, so verify
+        -- every range before the first write.
+        for i = 1, #ranges do
+          if not range_unchanged(bufnr, ranges[i].s, ranges[i].e, sources[i]) then
+            return
+          end
+        end
         for i = #ranges, 1, -1 do
           if results[i] then
             output.apply("replace", results[i], { bufnr = bufnr, s = ranges[i].s, e = ranges[i].e })
