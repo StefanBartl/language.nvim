@@ -151,9 +151,15 @@ local function range_unchanged(bufnr, s, e, lines)
     return false
   end
   local ok, current = pcall(api.nvim_buf_get_lines, bufnr, s - 1, e, false)
-  local same = ok
-    and #current == #lines
-    and table.concat(current, "\n") == table.concat(lines, "\n")
+  local same = ok and #current == #lines
+  if same then
+    for i = 1, #lines do
+      if current[i] ~= lines[i] then
+        same = false
+        break
+      end
+    end
+  end
   if not same then
     notify.warn("Translation discarded: the text changed while translating")
     return false
@@ -233,6 +239,10 @@ local function translate_nocode(provider, bufnr, s, e, target)
         notify.error(tostring(result))
       end
       if pending == 0 then
+        -- Every request failed (each already reported): nothing to write or discard.
+        if next(results) == nil then
+          return
+        end
         -- All or nothing: one drifted range also shifts the others, so verify
         -- every range before the first write.
         for i = 1, #ranges do
