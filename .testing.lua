@@ -11,7 +11,7 @@ return {
   -- Dependencies (directory names) put on the runtimepath: $<NAME>_DIR, .deps/<name>, ../<name>,
   -- stdpath('data')/lazy/<name>.
   -- ui.nvim is deliberately absent: the suite must pass without it (see TESTS/README.md).
-  deps = { "lib.nvim", "ui.nvim" },
+  deps = { "lib.nvim" },
   -- "none" = all specs in one nvim, "file" = one nvim per spec file
   -- (nothing leaks from one file into the next).
   isolated = "none",
@@ -42,5 +42,15 @@ return {
     spawn = { "nvim", "curl", "zzqqxx-nonexistent-executable-language-nvim" },
   },
   -- gated: a failed conformance check makes `scripts/test.sh conformance` exit 1 (docs/CONFORMANCE.md of testing.nvim)
-  conformance = { gate = true },
+  conformance = {
+    gate = true,
+    waivers = {
+      {
+        check = "K1",
+        file = "lua/language/spell/ui/",
+        reason = "the spell UI requires ui.kit; ui.nvim is deliberately not checked out for this suite (TESTS/README.md)",
+        expires = "2027-04-14",
+      },
+    },
+  },
 }
