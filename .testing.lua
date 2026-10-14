@@ -41,4 +41,6 @@ return {
     -- editor (no external network): the placeholder must survive the argv path of a real process.
     spawn = { "nvim", "curl", "zzqqxx-nonexistent-executable-language-nvim" },
   },
+  -- gated: a failed conformance check makes `scripts/test.sh conformance` exit 1 (docs/CONFORMANCE.md of testing.nvim)
+  conformance = { gate = true },
 }
