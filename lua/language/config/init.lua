@@ -19,7 +19,12 @@ local current = vim.deepcopy(defaults)
 ---@param opts LanguageOpts|nil
 ---@return nil
 function M.setup(opts)
+  -- A wrong shape fails here with the option's name, not deep inside the merge.
+  vim.validate("opts", opts, "table", true)
   opts = vim.deepcopy(opts or {})
+  if opts.keymaps ~= nil then
+    vim.validate("opts.keymaps", opts.keymaps, { "table", "boolean" })
+  end
   -- `keymaps = false` / `true` is the agreed boolean spelling of the switch
   -- group (`{ enable = false }`); anything else keeps the default.
   if opts.keymaps ~= nil then
