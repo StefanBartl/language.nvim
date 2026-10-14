@@ -41,6 +41,9 @@ return {
     -- editor (no external network): the placeholder must survive the argv path of a real process.
     spawn = { "nvim", "curl", "zzqqxx-nonexistent-executable-language-nvim" },
   },
+  -- The runner counts which commands, keymaps and autocommands the specs exercise (docs/SURFACE.md of testing.nvim);
+  -- `scripts/test.sh surface` compares that with surface.baseline.json (a regression gate, not a percentage).
+  surface = { track = true },
   -- gated: a failed conformance check makes `scripts/test.sh conformance` exit 1 (docs/CONFORMANCE.md of testing.nvim)
   conformance = {
     gate = true,
