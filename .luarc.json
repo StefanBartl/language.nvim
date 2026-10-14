@@ -8,6 +8,7 @@
     "globals": []
   },
   "workspace": {
-    "checkThirdParty": false
+    "checkThirdParty": false,
+    "ignoreDir": [".deps"]
   }
 }
