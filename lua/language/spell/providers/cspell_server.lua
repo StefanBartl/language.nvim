@@ -187,6 +187,24 @@ local function language(cfg)
   return (tostring(sl):match("%a%a")) or "en"
 end
 
+-- Kill the sidecar when Neovim exits. Registered on the first successful start (not at require time),
+-- so loading this module has no side effect; there is nothing to kill before a sidecar exists.
+local exit_hook_registered = false
+local function register_exit_hook()
+  if exit_hook_registered then
+    return
+  end
+  exit_hook_registered = true
+  require("lib.nvim.bindings.autocmd").create("VimLeavePre", function()
+    if state.jid and state.jid > 0 then
+      pcall(fn.jobstop, state.jid)
+    end
+  end, {
+    group = "language_nvim_cspell_server",
+    desc = "[language] stop cspell sidecar",
+  })
+end
+
 ---@internal
 ---Ensure the sidecar is running, then call `cb(ok)`.
 ---@param cfg LanguageSpellCfg
@@ -244,19 +262,10 @@ local function ensure_started(cfg, cb)
       return
     end
     state.jid = jid
+    register_exit_hook()
     -- `flush_start(true)` fires when the {ready:true} line arrives (on_stdout).
   end)
 end
-
--- Kill the sidecar when Neovim exits.
-require("lib.nvim.bindings.autocmd").create("VimLeavePre", function()
-  if state.jid and state.jid > 0 then
-    pcall(fn.jobstop, state.jid)
-  end
-end, {
-  group = "language_nvim_cspell_server",
-  desc = "[language] stop cspell sidecar",
-})
 
 -- ── Public: check a buffer scope ────────────────────────────────────────────
 

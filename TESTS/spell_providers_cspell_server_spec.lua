@@ -18,10 +18,10 @@
 -- module-level state.
 
 return function(H)
-  -- The VimLeavePre kill-on-exit autocmd is registered directly in the
-  -- module body (not inside a function), so it has to be captured via a
-  -- stub in place *before* the (fresh) require -- same ordering constraint
-  -- TESTS/health_spec.lua documents for vim.health.*.
+  -- The VimLeavePre kill-on-exit autocmd is registered on the first successful
+  -- sidecar start (never at require time), through lib.nvim's autocmd binding;
+  -- it is captured via a stub in place *before* the (fresh) require -- same
+  -- ordering constraint TESTS/health_spec.lua documents for vim.health.*.
   local autocmd_cb
   package.loaded["lib.nvim.bindings.autocmd"] = {
     create = function(event, cb)
@@ -37,6 +37,7 @@ return function(H)
   end
 
   local cspell_server = reload()
+  H.ok(autocmd_cb == nil, "requiring the module registers no autocmd")
 
   local orig_executable = vim.fn.executable
   local orig_jobstart = vim.fn.jobstart
@@ -149,7 +150,7 @@ return function(H)
   H.eq(got_split[1].word, "split", "reassembled correctly across the chunk boundary")
 
   -- The VimLeavePre handler kills the sidecar's real job id -----------------
-  H.ok(autocmd_cb ~= nil, "the kill-on-exit autocmd was registered at module load")
+  H.ok(autocmd_cb ~= nil, "the kill-on-exit autocmd was registered by the first successful start")
   local jobstop_calls = {}
   vim.fn.jobstop = function(jid)
     jobstop_calls[#jobstop_calls + 1] = jid
