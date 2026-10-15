@@ -140,7 +140,16 @@ internal error.
 `info` is the report: `units`, `translated`, `cached`, `failed` (stayed
 original after validation and retry), `skipped` (nothing to translate),
 `pending` (`cache_only`), `reflow_failed`, `requests`, `retries`,
-`anchors_changed`, `errors` (the first few messages) and `ms`.
+`anchors_changed`, `anchor_collisions`, `errors` (the first few messages) and `ms`.
+
+**Anchor collisions.** Links to a heading (`](#setup)`) follow the translated heading. When two
+headings that had different anchors translate to the *same* one (`Setup` and `Installation` both
+become `Setup`), the later one is numbered the way GitHub and markdown.nvim number repeated
+headings (`#setup-1`), and a link to it is rewritten to that. That is right where the numbering is
+known; a previewer that resolves only the first match would take the link to the first heading.
+The numbering is kept (the alternative, leaving the second heading in the original language,
+would mix languages in the output); `info.anchor_collisions` counts the cases and `info.errors`
+names each, so the caller can say so.
 
 ### What is translated
 

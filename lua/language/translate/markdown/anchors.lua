@@ -183,12 +183,19 @@ end
 ---Map the slug of each original heading to the slug of its translation. A
 ---repeated slug is numbered the way GitHub and markdown.nvim number it
 ---(`intro`, `intro-1`, `intro-2`), on both sides.
+---
+---A collision is the case the numbering was not made for: two headings that had different
+---slugs in the original and the same one after the translation (`Setup` and `Installation`
+---both becoming `Setup`). The second one is numbered (`setup-1`), which GitHub and
+---markdown.nvim resolve right; a previewer that does not know the numbering finds the first.
 ---@param old string[]  -- original heading texts (Markdown)
 ---@param new string[]  -- translated heading texts, same order
----@return table<string, string> map, integer changed
+---@return table<string, string> map, integer changed, string[] collisions  -- one message per collision
 function M.build_map(old, new)
   local map, changed = {}, 0
+  local collisions = {}
   local seen_old, seen_new = {}, {}
+  local first_origin = {} ---@type table<string, string>  -- translated slug -> original slug of the first heading with it
   ---@param seen table<string, integer>
   ---@param slug string
   ---@return string
@@ -202,6 +209,14 @@ function M.build_map(old, new)
     local b = new[i] and M.slug(M.plain(new[i])) or ""
     if a ~= "" and b ~= "" then
       local ka, kb = numbered(seen_old, a), numbered(seen_new, b)
+      if first_origin[b] == nil then
+        first_origin[b] = a
+      elseif first_origin[b] ~= a then
+        collisions[#collisions + 1] = ("two headings translate to the anchor '#%s' (the later one becomes '#%s')"):format(
+          b,
+          kb
+        )
+      end
       if map[ka] == nil then
         map[ka] = kb
         if ka ~= kb then
@@ -212,7 +227,7 @@ function M.build_map(old, new)
       numbered(seen_old, a)
     end
   end
-  return map, changed
+  return map, changed, collisions
 end
 
 ---@internal
