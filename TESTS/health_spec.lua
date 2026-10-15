@@ -370,7 +370,7 @@ return function(H)
   -- H: ui.nvim is reported, not required: the popup, panel and pickers open through ui.kit
   package.loaded["ui.kit"] = nil
   package.preload["ui.kit"] = function()
-    error("simulated: ui.nvim is not installed", 0)
+    error("module 'ui.kit' not found: simulated, ui.nvim is not installed", 0)
   end
   capture()
   health = reload_health()
@@ -389,6 +389,36 @@ return function(H)
   H.excludes(text(), "ui.nvim not found", "and no warning")
   package.preload["ui.kit"] = nil
   package.loaded["ui.kit"] = nil
+
+  -- I: ui.kit exists but raises while loading: say so, do not ask for an install
+  package.loaded["ui.kit"] = nil
+  package.preload["ui.kit"] = function()
+    error("boom while loading", 0)
+  end
+  capture()
+  health = reload_health()
+  H.ok(pcall(health.check), "check() runs when ui.kit raises")
+  H.contains(text(), "ui.kit failed to load: boom while loading", "the reason is named")
+  H.excludes(text(), "ui.nvim not found", "and it is not mistaken for a missing plugin")
+  package.preload["ui.kit"] = nil
+  package.loaded["ui.kit"] = nil
+
+  -- J: an ai.nvim without `policy()` (an old one) must not end the report (review of b64ad37)
+  do
+    local saved_ai, saved_bulk = package.loaded["ai"], package.loaded["ai.bulk"]
+    package.loaded["ai"] = { ask = function() end }
+    package.loaded["ai.bulk"] = package.loaded["ai.bulk"] or {}
+    local cfg = config.get()
+    local saved_engine = cfg.translate.engine
+    cfg.translate.engine = "ai"
+    capture()
+    health = reload_health()
+    local ok_j, err_j = pcall(health.check)
+    cfg.translate.engine = saved_engine
+    package.loaded["ai"], package.loaded["ai.bulk"] = saved_ai, saved_bulk
+    H.ok(ok_j, "an ai.nvim without policy() does not crash check(): " .. tostring(err_j))
+    H.contains(text(), "hover.nvim integration", "and the sections after it are there")
+  end
 
   -- Teardown ------------------------------------------------------------------
   vim.fn.executable = orig_executable

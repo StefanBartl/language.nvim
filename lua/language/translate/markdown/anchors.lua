@@ -196,6 +196,7 @@ function M.build_map(old, new)
   local collisions = {}
   local seen_old, seen_new = {}, {}
   local first_origin = {} ---@type table<string, string>  -- translated slug -> original slug of the first heading with it
+  local mixed = {} ---@type table<string, boolean>  -- translated slugs that came from more than one original slug
   ---@param seen table<string, integer>
   ---@param slug string
   ---@return string
@@ -211,7 +212,8 @@ function M.build_map(old, new)
       local ka, kb = numbered(seen_old, a), numbered(seen_new, b)
       if first_origin[b] == nil then
         first_origin[b] = a
-      elseif first_origin[b] ~= a then
+      elseif mixed[b] or first_origin[b] ~= a then
+        mixed[b] = true
         collisions[#collisions + 1] = ("two headings translate to the anchor '#%s' (the later one becomes '#%s')"):format(
           b,
           kb

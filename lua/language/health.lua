@@ -65,12 +65,19 @@ end
 ---@return nil
 local function check_ui()
   start_s("ui.nvim (popup, panel and pickers)")
-  if pcall(require, "ui.kit") then
+  local loaded, err = pcall(require, "ui.kit")
+  if loaded then
     ok_s("ui.nvim available (translate popup, spell panel and item menu, pickers, history window)")
-  else
+  elseif tostring(err):find("module 'ui.kit' not found", 1, true) then
     warn_s(
       "ui.nvim not found — the default :Translate popup, the spell panel and the pickers cannot open",
       { "Install StefanBartl/ui.nvim" }
+    )
+  else
+    -- there, but it raised while loading: say what it said instead of asking for an install
+    warn_s(
+      "ui.nvim is installed but ui.kit failed to load: " .. (tostring(err):match("[^\n]+") or "?"),
+      { "Update StefanBartl/ui.nvim, or check :messages" }
     )
   end
 end
@@ -158,7 +165,9 @@ local function check_translate()
   local why = aip.blocked(tcfg)
   local ai_on = tcfg.engine == "ai" or vim.tbl_contains(tcfg.fallback or {}, "ai")
   if why == nil then
-    local pol = require("ai").policy()
+    -- guarded like the rest: an ai.nvim without `policy` (an old one) must not end the report
+    local ok_ai, ai_mod = pcall(require, "ai")
+    local pol = ok_ai and type(ai_mod.policy) == "function" and ai_mod.policy() or {}
     local a = tcfg.ai or {}
     ok_s(
       ("ai engine ready (ai.nvim; provider %s, model %s; policy: %s)"):format(
