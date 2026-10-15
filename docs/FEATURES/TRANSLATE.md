@@ -221,7 +221,10 @@ and `a@x_y.example` (the mask takes `_` in a domain label as well). The patterns
 a tag, `://`) are counted; the addresses are compared themselves: an address that the source
 has and the mask leaves alone (`http://x` is too short, `xhttps://a.example` follows a word
 character) may be kept, with other punctuation around it or in front of CJK text, but not
-swapped for another one or repeated. An address is the ASCII run cut out of the text, so text
+swapped for another one or repeated. The spelling that does not change the target is not a
+swap: the scheme and the host in another case, the hex digits of a `%XX` escape in another
+case and a lone trailing `/` (`FTP://Host.example` -> `ftp://host.example/`); the path is case
+sensitive and stays as it is. An address is the ASCII run cut out of the text, so text
 of a CJK target that follows it without a blank is not part of it (an address with non-ASCII
 characters is compared up to the first one). A unit that fails is
 retried once (a batch with an unattributable line count is retried unit by

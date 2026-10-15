@@ -123,6 +123,34 @@ local function trim_address(s)
   return (s:gsub("[%.,;:!?%)%]}'\"*_~]+$", ""))
 end
 
+---@internal
+---The spelling of an address that does not change what it points at: the scheme and the host in lower
+---case, the hex digits of a `%XX` escape in upper case, a lone trailing `/` dropped. A translation may
+---re-case or re-slash these without anything having been swapped; the path stays as it is, it is case
+---sensitive.
+---@param a string
+---@return string
+local function normalize_address(a)
+  a = a:gsub("%%(%x%x)", function(h)
+    return "%" .. h:upper()
+  end)
+  local scheme, host, rest = a:match("^(%a[%w%+%.%-]*://)([^/?#]*)(.*)$")
+  if not scheme then
+    if not a:find("^www%.") then
+      local local_part, domain = a:match("^([^@]+@)([^@]+)$")
+      if local_part then
+        return local_part .. domain:lower()
+      end
+    end
+    host, rest = a:match("^([^/?#]*)(.*)$")
+    scheme = ""
+  end
+  if rest == "/" then
+    rest = ""
+  end
+  return scheme:lower() .. host:lower() .. rest
+end
+
 local ADDRESS_CHARS = "[%w%-%._~:/%?#%[%]@!$&'()*+,;=%%]"
 
 ---@internal
@@ -145,6 +173,7 @@ local function addresses(s)
   local function add(a)
     a = trim_address(a)
     if a ~= "" then
+      a = normalize_address(a)
       counts[a] = (counts[a] or 0) + 1
     end
   end
