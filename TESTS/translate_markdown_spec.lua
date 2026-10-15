@@ -1135,6 +1135,11 @@ return function(H)
         "an address behind a word character swapped",
       },
     }
+    -- the path is case sensitive and a deeper path is another address: those are still swaps
+    swap[#swap + 1] =
+      { "Siehe ftp://h.example/A jetzt.", "See ftp://h.example/a now.", "path case changed" }
+    swap[#swap + 1] =
+      { "Siehe ftp://h.example/p jetzt.", "See ftp://h.example/p/q now.", "a deeper path" }
     for _, c in ipairs(swap) do
       cache._reset()
       local rr = run({ c[1] }, {
@@ -1151,6 +1156,17 @@ return function(H)
       { "Siehe http://x jetzt.", "See http://x, now!", "other punctuation" },
       { "Siehe http://x jetzt.", "参见http://x现在。", "CJK text right behind the address" },
       { "Siehe http://x jetzt.", "See (http://x) now.", "in parentheses" },
+      -- the spelling that does not change the target: scheme and host case, a lone trailing slash, %XX hex case
+      {
+        "Siehe FTP://Host.Example jetzt.",
+        "See ftp://host.example/ now.",
+        "scheme, host case and a trailing slash",
+      },
+      {
+        "Siehe ftp://h.example/p%c3%a4 jetzt.",
+        "See ftp://h.example/p%C3%A4 now.",
+        "hex case of an escape",
+      },
     }) do
       cache._reset()
       local rr = run({ c[1] }, {
