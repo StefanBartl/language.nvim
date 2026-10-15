@@ -208,10 +208,13 @@ have (the targets of the source are
 placeholders, so a model cannot be talked into adding a link or a tracking
 image by the text of the document). The e-mail test is as wide as the
 previewer's autolinker, which also links `_@x.example`, `+@x.example`, `.@x.example`
-and `a@x_y.example`. The guard compares counts, not the addresses: an address
-that the source has and the mask leaves alone (`a@x_y.example` is one, the mask does
-not take `_` in a domain) is a credit, so an engine that keeps it is accepted, and one
-that swaps it for another would be too. A unit that fails is
+and `a@x_y.example` (the mask takes `_` in a domain label as well). The patterns (`](`, `][`,
+a tag, `://`) are counted; the addresses are compared themselves: an address that the source
+has and the mask leaves alone (`http://x` is too short, `xhttps://a.example` follows a word
+character) may be kept, with other punctuation around it or in front of CJK text, but not
+swapped for another one or repeated. An address is the ASCII run cut out of the text, so text
+of a CJK target that follows it without a blank is not part of it (an address with non-ASCII
+characters is compared up to the first one). A unit that fails is
 retried once (a batch with an unattributable line count is retried unit by
 unit); if it fails again, **the original unit stays**: the preview shows German
 for that paragraph and is never empty or half. Three failed requests in a row

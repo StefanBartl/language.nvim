@@ -481,7 +481,7 @@ local function bare_ranges(text)
       while a > init and at - a <= 256 and text:sub(a - 1, a - 1):match("[%w%._%%%+%-]") do
         a = a - 1
       end
-      local dom = text:match("^[%w%-]+%.[%w%.%-]*%w", at + 1)
+      local dom = text:match("^[%w_%-]+%.[%w%.%-]*%w", at + 1)
       if a < at and dom then
         local b = at + #dom
         if a == 1 or not text:sub(a - 1, a - 1):match("[%w_]") then

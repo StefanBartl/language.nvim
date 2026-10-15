@@ -1123,6 +1123,58 @@ return function(H)
     H.eq(r5.res[1], src, "an address swapped for a foreign one is refused, the unit stays")
     H.eq(r5.info.failed, 1)
     H.falsy(r5.res[1]:find("evil", 1, true))
+
+    -- The guard compares the addresses, not their number. `http://x` is too short for the mask
+    -- (8 bytes), so it stays in the masked source: a credit that the count could not tell apart
+    -- from the engine swapping it for another address.
+    local swap = {
+      { "Siehe http://x jetzt.", "See http://y now.", "an unmasked scheme address swapped" },
+      {
+        "Siehe xhttps://a.example jetzt.",
+        "See xhttps://b.example now.",
+        "an address behind a word character swapped",
+      },
+    }
+    for _, c in ipairs(swap) do
+      cache._reset()
+      local rr = run({ c[1] }, {
+        provider = fake(function()
+          return c[2]
+        end, { sync = true }),
+        cache = true,
+      })
+      H.eq(rr.res[1], c[1], "refused: " .. c[3])
+      H.eq(rr.info.failed, 1, c[3])
+    end
+    -- ... and kept: with other punctuation around it, or in front of CJK text without a blank
+    for _, c in ipairs({
+      { "Siehe http://x jetzt.", "See http://x, now!", "other punctuation" },
+      { "Siehe http://x jetzt.", "参见http://x现在。", "CJK text right behind the address" },
+      { "Siehe http://x jetzt.", "See (http://x) now.", "in parentheses" },
+    }) do
+      cache._reset()
+      local rr = run({ c[1] }, {
+        provider = fake(function()
+          return c[2]
+        end, { sync = true }),
+        cache = true,
+      })
+      H.eq(rr.res[1], c[2], "accepted: " .. c[3])
+      H.eq(rr.info.failed, 0, c[3])
+    end
+    -- the same address twice is one too many
+    cache._reset()
+    local twice = run({ "Siehe http://x jetzt." }, {
+      provider = fake(function()
+        return "See http://x and http://x now."
+      end, { sync = true }),
+      cache = true,
+    })
+    H.eq(
+      twice.res[1],
+      "Siehe http://x jetzt.",
+      "an address the source has once may not appear twice"
+    )
   end
 
   -- Independent review: a unit whose masking ran out of budget is left alone ---------------------

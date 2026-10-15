@@ -116,10 +116,60 @@ local NEW_SYNTAX = {
 }
 
 ---@internal
+---Trailing punctuation that belongs to the sentence, not to an address.
+---@param s string
+---@return string
+local function trim_address(s)
+  return (s:gsub("[%.,;:!?%)%]}'\"*_~]+$", ""))
+end
+
+---@internal
+---Cut the addresses (with a scheme, `www.` form or e-mail form) out of `s` and count them.
+---An address is an ASCII run: text of a CJK target that follows it without a blank is not
+---part of it, so a translation that moves the sentence around does not look like a new address.
+---Nothing runs for a text without `://`, `www.` or `@`.
+---@param s string
+---@return table<string, integer>|nil counts
+local function addresses(s)
+  local has_scheme = s:find("://", 1, true)
+  local has_www = s:find("www.", 1, true)
+  local has_at = s:find("@", 1, true)
+  if not (has_scheme or has_www or has_at) then
+    return nil
+  end
+  local counts = {}
+  local function add(a)
+    a = trim_address(a)
+    if a ~= "" then
+      counts[a] = (counts[a] or 0) + 1
+    end
+  end
+  if has_scheme then
+    for word in s:gmatch("%a[%w%+%.%-]*://[%w%-%._~:/%?#%[%]@!$&'()*+,;=%%]+") do
+      add(word)
+    end
+  end
+  if has_www then
+    for word in s:gmatch("www%.[%w%-]+%.[%w%-%._~:/%?#%[%]@!$&'()*+,;=%%]*") do
+      add(word)
+    end
+  end
+  if has_at then
+    for word in s:gmatch("[%w%._%+%-]+@[%w_%-]+%.[%w%.%-]*%w") do
+      add(word)
+    end
+  end
+  return counts
+end
+
+---@internal
 ---Does `text` carry link or HTML syntax that the masked source `orig` does not? The
 ---destinations of the source are placeholders, so anything of this kind left over is
 ---new: an engine (a language model, with a document that argues with it) must not be
 ---able to add a link, a tracking image or a tag to the output.
+---
+---The patterns are counted; the addresses are compared themselves: one the mask leaves
+---alone is in the source, so an engine may keep it but not swap it for another.
 ---@param orig string
 ---@param text string
 ---@return boolean
@@ -129,6 +179,15 @@ local function adds_syntax(orig, text)
     local _, b = text:gsub(pat, "")
     if b > a then
       return true
+    end
+  end
+  local mine = addresses(text)
+  if mine then
+    local known = addresses(orig) or {}
+    for address, n in pairs(mine) do
+      if n > (known[address] or 0) then
+        return true
+      end
     end
   end
   return false

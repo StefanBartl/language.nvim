@@ -160,6 +160,10 @@ return function(H)
     H.eq(mask.unmask(masked, mk), "[x@y.de](mailto:x@y.de) und `a@b.cc` und Hallo@Welt")
     masked = mask.mask("info@example.com")
     H.eq(masked, "{1}", "an address alone is a unit with nothing to translate")
+    masked, mk = mask.mask("Mail an a@x_y.com und b@a_b.x.example, Ende")
+    H.eq(masked, "Mail an {1} und {2}, Ende", "`_` in a domain label is part of the address")
+    H.eq(mk.toks[1], "a@x_y.com")
+    H.eq(mk.toks[2], "b@a_b.x.example")
   end
 
   -- look-ahead is bounded: a line of unclosed brackets or parentheses is linear -----
