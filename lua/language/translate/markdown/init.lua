@@ -422,6 +422,7 @@ function M.translate_markdown(lines, opts, cb)
       requests = 0,
       retries = 0,
       anchors_changed = 0,
+      anchor_collisions = 0,
       errors = {},
       ms = 0,
     }
@@ -496,7 +497,14 @@ function M.translate_markdown(lines, opts, cb)
         local s = ust[id]
         new[i] = s.tr and mask.unmask(s.tr, s.mk) or units[id].text
       end
-      map = anchors.build_map(old, new)
+      local built, _, collisions = anchors.build_map(old, new)
+      map = built
+      info.anchor_collisions = #collisions
+      for _, message in ipairs(collisions) do
+        if #info.errors < MAX_ERRORS then
+          info.errors[#info.errors + 1] = message
+        end
+      end
     end
 
     -- Content of a unit / a block -----------------------------------------------

@@ -1177,6 +1177,51 @@ return function(H)
     )
   end
 
+  -- Two headings that were different become the same: counted and named, the numbering stays ------
+  do
+    cache._reset()
+    local lines = {
+      "# Einrichtung",
+      "",
+      "## Installation",
+      "",
+      "Siehe [Installation](#installation) und [oben](#einrichtung).",
+    }
+    local r = run(lines, {
+      provider = fake(function(t)
+        return (
+          t:gsub("Einrichtung", "Setup")
+            :gsub("Installation", "Setup")
+            :gsub("Siehe", "See")
+            :gsub("und", "and")
+            :gsub("oben", "above")
+        )
+      end, { sync = true }),
+      cache = false,
+    })
+    H.ok(r.ok)
+    H.eq(r.info.anchor_collisions, 1, "one collision is counted")
+    H.eq(#r.info.errors, 1, "and named")
+    H.contains(r.info.errors[1], "'#setup'", "the shared anchor")
+    H.contains(r.info.errors[1], "'#setup-1'", "and what the later heading became")
+    H.eq(
+      r.res[5],
+      "See [Setup](#setup-1) and [above](#setup).",
+      "the links follow their headings, the second one numbered like GitHub numbers it"
+    )
+
+    -- no collision when the originals shared the slug as well (that is the numbering's own case)
+    cache._reset()
+    local same = run({ "# Gleich", "", "## Gleich" }, {
+      provider = fake(function(t)
+        return (t:gsub("Gleich", "Same"))
+      end, { sync = true }),
+      cache = false,
+    })
+    H.eq(same.info.anchor_collisions, 0, "repeated headings of the original are not a collision")
+    H.eq(#same.info.errors, 0)
+  end
+
   -- Independent review: a unit whose masking ran out of budget is left alone ---------------------
   do
     cache._reset()

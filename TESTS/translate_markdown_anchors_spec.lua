@@ -109,6 +109,23 @@ return function(H)
 
     map = anchors.build_map({ "???" }, { "!!!" })
     H.eq(next(map), nil, "a heading with an empty slug maps nothing")
+
+    -- collisions: different before, the same after
+    local _, _, collisions = anchors.build_map(
+      { "Einrichtung", "Installation" },
+      { "Setup", "Setup" }
+    )
+    H.eq(#collisions, 1)
+    H.ok(
+      collisions[1]:find("'#setup'", 1, true) and collisions[1]:find("'#setup-1'", 1, true),
+      collisions[1]
+    )
+    _, _, collisions = anchors.build_map({ "Gleich", "Gleich" }, { "Same", "Same" })
+    H.eq(#collisions, 0, "the same slug before is the numbering's own case")
+    _, _, collisions = anchors.build_map({ "A", "B", "C" }, { "X", "X", "X" })
+    H.eq(#collisions, 2, "every later heading with the shared anchor is one")
+    _, _, collisions = anchors.build_map({ "A", "B" }, { "X", "Y" })
+    H.eq(#collisions, 0)
   end
 
   -- rewrite_dest ---------------------------------------------------------------------------------
