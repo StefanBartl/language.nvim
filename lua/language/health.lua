@@ -58,6 +58,24 @@ local function check_lib()
 end
 
 ---@internal
+---Reports whether ui.nvim is there. Not a hard dependency (nothing in `setup()` needs it,
+---and the checks themselves run without it), but the default output of `:Translate` (the
+---popup), the spell panel and item menu, and the pickers and history windows all open
+---through `ui.kit`: without it the first `:'<,'>Translate DE` raises a Lua error.
+---@return nil
+local function check_ui()
+  start_s("ui.nvim (popup, panel and pickers)")
+  if pcall(require, "ui.kit") then
+    ok_s("ui.nvim available (translate popup, spell panel and item menu, pickers, history window)")
+  else
+    warn_s(
+      "ui.nvim not found — the default :Translate popup, the spell panel and the pickers cannot open",
+      { "Install StefanBartl/ui.nvim" }
+    )
+  end
+end
+
+---@internal
 ---Reports which optional external spell tools (typos/cspell/codespell) are on PATH.
 ---@return nil
 local function check_spell_tools()
@@ -314,6 +332,7 @@ end
 function M.check()
   check_neovim()
   check_lib()
+  check_ui()
   check_spell_tools()
   check_grammar()
   check_translate()
@@ -322,9 +341,13 @@ function M.check()
   check_hover()
   check_lib_deps()
 
-  require("lib.nvim.bindings.usercmd.composer").checkhealth("Spellcheck")
-  require("lib.nvim.bindings.usercmd.composer").checkhealth("Translate")
-  require("lib.nvim.bindings.usercmd.composer").checkhealth("TranslateReplace")
+  -- check_lib() already said so when the composer is missing (an old lib.nvim): no second message
+  local has_composer, composer = pcall(require, "lib.nvim.bindings.usercmd.composer")
+  if has_composer then
+    composer.checkhealth("Spellcheck")
+    composer.checkhealth("Translate")
+    composer.checkhealth("TranslateReplace")
+  end
 end
 
 return M
