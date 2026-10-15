@@ -6,8 +6,8 @@
 -- vim.health.* call with no computed value to assert on" -- true of maybe
 -- half its sections, but check_hover()'s four-state detection, check_grammar
 -- ()'s attached-client list, and check_translate()'s deepl-key resolution
--- are all real computed values, and M.check()'s own tail turns out to have a
--- real bug (see the BUG block at the end). This closes that gap.
+-- are all real computed values, and M.check()'s own tail used to crash on an old
+-- lib.nvim (block G, fixed). This closes that gap.
 --
 -- health.lua binds vim.health.ok/warn/error/info/start into its own
 -- module-level locals ONCE, at require time -- so `capture()` (which
@@ -342,18 +342,10 @@ return function(H)
     package.loaded["hover.registry"] = nil
   end
 
-  -- G: BUG -- check_lib() already detects a missing composer and warns about
-  -- it, but M.check()'s own tail requires the same module a few lines later
-  -- with no guard at all, so the warning is not the end of the story: it is
-  -- immediately followed by an uncaught error. A lib.nvim checkout old
-  -- enough to lack `lib.nvim.bindings.usercmd.composer` -- exactly the case
-  -- check_lib()'s own advice text names ("Update StefanBartl/lib.nvim") --
-  -- does not just get a warning, it crashes `:checkhealth language` outright,
-  -- and every section after "lib.nvim (required dependency)" that would have
-  -- run this call (translate/config/which-key/hover/deps) never renders.
-  -- Not fixed here: the fix (guard the three tail calls the same way
-  -- check_lib() itself already guards its own probe, e.g. with pcall) is a
-  -- real source change, not a test one.
+  -- G: an old lib.nvim without `lib.nvim.bindings.usercmd.composer` (the case check_lib()'s own
+  -- advice names, "Update StefanBartl/lib.nvim"). check_lib() warns, and the three composer
+  -- sections at the end of M.check() are skipped without a second message instead of crashing
+  -- `:checkhealth language` with a traceback below the report. Everything before them is there.
   package.loaded["lib.nvim.bindings.usercmd.composer"] = nil
   package.preload["lib.nvim.bindings.usercmd.composer"] = function()
     error("simulated: this lib.nvim checkout has no composer module", 0)
@@ -361,19 +353,42 @@ return function(H)
 
   capture()
   health = reload_health()
-  local ok_g = pcall(health.check)
-  H.falsy(
+  local ok_g, err_g = pcall(health.check)
+  H.ok(
     ok_g,
-    "BUG: an old lib.nvim without the composer module crashes check(), instead of degrading past the warning check_lib() already gave"
+    "an old lib.nvim without the composer module does not crash check(): " .. tostring(err_g)
   )
-  H.contains(
-    text(),
-    "usercmd.composer not found",
-    "check_lib() did warn, correctly, before the crash"
-  )
+  H.contains(text(), "usercmd.composer not found", "check_lib() warns, once")
+  local _, count = text():gsub("usercmd%.composer not found", "")
+  H.eq(count, 1, "and no second message from the skipped tail")
+  H.contains(text(), "Spell providers", "the sections before the tail are there")
+  H.contains(text(), "hover.nvim integration", "... and the ones after check_lib()")
 
   package.preload["lib.nvim.bindings.usercmd.composer"] = nil
   package.loaded["lib.nvim.bindings.usercmd.composer"] = nil
+
+  -- H: ui.nvim is reported, not required: the popup, panel and pickers open through ui.kit
+  package.loaded["ui.kit"] = nil
+  package.preload["ui.kit"] = function()
+    error("simulated: ui.nvim is not installed", 0)
+  end
+  capture()
+  health = reload_health()
+  H.ok(pcall(health.check), "check() runs without ui.nvim")
+  H.contains(text(), "warn: ui.nvim not found", "a warning, not an error")
+  H.excludes(text(), "error: ui.nvim", "never an error: the checks themselves run without it")
+
+  package.preload["ui.kit"] = function()
+    return {}
+  end
+  package.loaded["ui.kit"] = nil
+  capture()
+  health = reload_health()
+  H.ok(pcall(health.check), "check() runs with ui.nvim")
+  H.contains(text(), "ok: ui.nvim available", "reported as available")
+  H.excludes(text(), "ui.nvim not found", "and no warning")
+  package.preload["ui.kit"] = nil
+  package.loaded["ui.kit"] = nil
 
   -- Teardown ------------------------------------------------------------------
   vim.fn.executable = orig_executable

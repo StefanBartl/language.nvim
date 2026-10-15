@@ -73,7 +73,7 @@ misleading failures.
 | `spell_init_spec.lua` | the top-level `language.spell` facade — starting/closing a session, `:Spellcheck`'s scope dispatch, panel stubbed (see "Deliberately left untested") |
 | `config_spec.lua` | the merge, and that `DEFAULTS` survives it unmutated |
 | `hover_spec.lua` | the word under the cursor as a hover.nvim float — the word finder, the target language, decline-vs-fail, the rate-limit failure path, and `on_request` registration (translate provider and hover.nvim both stubbed) |
-| `health_spec.lua` | `:checkhealth language` (`M.check()`) branch by branch: version/native-provider detection, every optional-tool present/absent pair (including the cspell-without-node middle case), the attached-grammar-client list, deepl-key resolution, the effective-config echo, and `check_hover()`'s four states — with every collaborator (tools, LSP clients, hover.nvim, which-key, `lib.nvim.deps.health`) stubbed or monkeypatched; also pins a real crash (see "Known bugs" below) |
+| `health_spec.lua` | `:checkhealth language` (`M.check()`) branch by branch: version/native-provider detection, every optional-tool present/absent pair (including the cspell-without-node middle case), the attached-grammar-client list, deepl-key resolution, the effective-config echo, and `check_hover()`'s four states — with every collaborator (tools, LSP clients, hover.nvim, which-key, `lib.nvim.deps.health`) stubbed or monkeypatched; also the old-lib.nvim case (no composer module: one warning, the tail skipped, no crash) and the ui.nvim line (warn without, ok with) |
 
 Adding one: write `TESTS/<name>_spec.lua` returning `function(H) ... end`, then
 run `scripts/test.sh` (it is discovered by its `_spec.lua` suffix). `H` is the harness — `eq`, `ok`, `falsy`, `contains`,
@@ -108,13 +108,6 @@ inline. As of this audit:
 - **`spell_init_spec.lua`** — `spell.clear()` does not actually restore a
   buffer's previous `'spelllang'` when the quickfix view (not the panel) is
   in use; it restores the wrong window's option.
-- **`health_spec.lua`** — `check_lib()` correctly detects and warns about a
-  `lib.nvim` checkout missing `bindings.usercmd.composer`, but `M.check()`'s
-  own tail calls straight into that same module a few lines later with no
-  guard at all — so instead of degrading past the warning already given, an
-  old `lib.nvim` crashes `:checkhealth language` outright, and everything
-  after the "lib.nvim (required dependency)" section (translate/config/
-  which-key/hover/deps) never renders.
 
 ### Deliberately left untested
 

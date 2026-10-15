@@ -12,6 +12,7 @@ to choose from, never a broken install.
 |---|---|
 | Neovim | `>= 0.9` required (`error` below it); `vim.spell.check` (the native spell provider) |
 | `lib.nvim` (required dependency) | The plugin itself, plus `lib.nvim.bindings.usercmd.composer` (the `:Spellcheck`/`:Translate`/`:TranslateReplace` command layer) |
+| ui.nvim (popup, panel and pickers) | `ui.kit` loadable? `warn` (never `error`: nothing in `setup()` needs it) when not — the default `:Translate` popup, the spell panel and item menu, the pickers and the history window open through it, so the first use would raise a Lua error. The composer sections at the end are skipped without a second message when an old `lib.nvim` lacks the composer (the `lib.nvim` section has said so already) |
 | Spell providers (optional external tools) | `typos`, `cspell`, `codespell` — each independently `info` if missing; separately, `node` for the persistent `cspell` sidecar (`spell.providers.buffer = "cspell_server"`) |
 | Grammar providers (optional LSP) | Whether `harper_ls` or `ltex` is attached to the current buffer |
 | Translate engines | `curl` (needed by the default `google` and the `deepl` engine — `error` if missing), a configured DeepL API key, `trans` (translate-shell, the optional `shell` engine), the `ai` engine (ai.nvim loadable, provider/model, policy allow-list and bulk grants; `error` when it is the configured engine but unusable), and where the `translate_markdown` unit cache lives and how big it is (`info`) |
