@@ -123,11 +123,15 @@ local function trim_address(s)
   return (s:gsub("[%.,;:!?%)%]}'\"*_~]+$", ""))
 end
 
+local ADDRESS_CHARS = "[%w%-%._~:/%?#%[%]@!$&'()*+,;=%%]"
+
 ---@internal
 ---Cut the addresses (with a scheme, `www.` form or e-mail form) out of `s` and count them.
 ---An address is an ASCII run: text of a CJK target that follows it without a blank is not
 ---part of it, so a translation that moves the sentence around does not look like a new address.
----Nothing runs for a text without `://`, `www.` or `@`.
+---Nothing runs for a text without `://`, `www.` or `@`. Every scan starts at a marker found with a
+---plain `find` and runs outwards from there with an anchored match: an unanchored pattern would
+---retry from every byte of a long run of letters (30000 of them took 8 s).
 ---@param s string
 ---@return table<string, integer>|nil counts
 local function addresses(s)
@@ -144,19 +148,68 @@ local function addresses(s)
       counts[a] = (counts[a] or 0) + 1
     end
   end
+
   if has_scheme then
-    for word in s:gmatch("%a[%w%+%.%-]*://[%w%-%._~:/%?#%[%]@!$&'()*+,;=%%]+") do
-      add(word)
+    local init = 1
+    while true do
+      local at = s:find("://", init, true)
+      if not at then
+        break
+      end
+      -- the scheme: letters, digits and `+.-` back from the marker (at most 32 bytes), starting with a letter
+      local a = at
+      while a > init and at - a < 32 and s:sub(a - 1, a - 1):match("[%w%+%.%-]") do
+        a = a - 1
+      end
+      while a < at and not s:sub(a, a):match("%a") do
+        a = a + 1
+      end
+      local tail = s:match("^" .. ADDRESS_CHARS .. "+", at + 3)
+      if a < at and tail then
+        add(s:sub(a, at + 2) .. tail)
+        init = at + 3 + #tail
+      else
+        init = at + 3
+      end
     end
   end
+
   if has_www then
-    for word in s:gmatch("www%.[%w%-]+%.[%w%-%._~:/%?#%[%]@!$&'()*+,;=%%]*") do
-      add(word)
+    local init = 1
+    while true do
+      local at = s:find("www.", init, true)
+      if not at then
+        break
+      end
+      local word = s:match("^www%.[%w%-]+%." .. ADDRESS_CHARS .. "*", at)
+      if word then
+        add(word)
+        init = at + #word
+      else
+        init = at + 4
+      end
     end
   end
+
   if has_at then
-    for word in s:gmatch("[%w%._%+%-]+@[%w_%-]+%.[%w%.%-]*%w") do
-      add(word)
+    local init = 1
+    while true do
+      local at = s:find("@", init, true)
+      if not at then
+        break
+      end
+      -- the local part back from the `@` (at most 256 bytes), the domain forward
+      local a = at
+      while a > init and at - a <= 256 and s:sub(a - 1, a - 1):match("[%w%._%+%-]") do
+        a = a - 1
+      end
+      local domain = s:match("^[%w_%-]+%.[%w%.%-]*%w", at + 1)
+      if a < at and domain then
+        add(s:sub(a, at) .. domain)
+        init = at + 1 + #domain
+      else
+        init = at + 1
+      end
     end
   end
   return counts
@@ -500,9 +553,11 @@ function M.translate_markdown(lines, opts, cb)
       local built, _, collisions = anchors.build_map(old, new)
       map = built
       info.anchor_collisions = #collisions
-      for _, message in ipairs(collisions) do
+      -- two messages at most: a document full of collisions must not push the real failures out of `errors`
+      -- (`info.anchor_collisions` has the count)
+      for i = 1, math.min(#collisions, 2) do
         if #info.errors < MAX_ERRORS then
-          info.errors[#info.errors + 1] = message
+          info.errors[#info.errors + 1] = collisions[i]
         end
       end
     end

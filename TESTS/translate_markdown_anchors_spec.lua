@@ -124,6 +124,8 @@ return function(H)
     H.eq(#collisions, 0, "the same slug before is the numbering's own case")
     _, _, collisions = anchors.build_map({ "A", "B", "C" }, { "X", "X", "X" })
     H.eq(#collisions, 2, "every later heading with the shared anchor is one")
+    _, _, collisions = anchors.build_map({ "Alpha", "Beta", "Alpha" }, { "X", "X", "X" })
+    H.eq(#collisions, 2, "a repeated original after a collision shares the anchor too")
     _, _, collisions = anchors.build_map({ "A", "B" }, { "X", "Y" })
     H.eq(#collisions, 0)
   end

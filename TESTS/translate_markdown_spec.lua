@@ -1222,6 +1222,70 @@ return function(H)
     H.eq(#same.info.errors, 0)
   end
 
+  -- review of b37f374: the address guard is linear (a run of letters before a marker was retried from every byte)
+  do
+    local run_of_letters = ("a"):rep(30000)
+    for _, tail in ipairs({
+      " see ftp://host/x",
+      " mail me@x.example",
+      " " .. ("a."):rep(2000) .. "@",
+    }) do
+      cache._reset()
+      local started = vim.uv.hrtime()
+      local r = run({ run_of_letters .. tail }, {
+        provider = fake(function(t)
+          return t
+        end, { sync = true }),
+        cache = false,
+      })
+      local ms = (vim.uv.hrtime() - started) / 1e6
+      H.ok(r.ok, "the run finishes")
+      H.ok(ms < 3000, ("30000 letters before %q took %.0f ms"):format(tail:sub(1, 12), ms))
+    end
+    -- and it still tells a kept address from a swapped one
+    cache._reset()
+    local kept = run({ "Siehe ftp://host/x jetzt." }, {
+      provider = fake(function(t)
+        return (t:gsub("Siehe", "See"):gsub("jetzt", "now"))
+      end, { sync = true }),
+      cache = false,
+    })
+    H.eq(kept.res[1], "See ftp://host/x now.", "a kept ftp address is accepted")
+    cache._reset()
+    local swapped = run({ "Siehe ftp://host/x jetzt." }, {
+      provider = fake(function()
+        return "See ftp://host/y now."
+      end, { sync = true }),
+      cache = false,
+    })
+    H.eq(swapped.res[1], "Siehe ftp://host/x jetzt.", "a swapped ftp address is refused")
+  end
+
+  -- review of 4c99e96: collision messages do not push the real failures out of `info.errors`
+  do
+    cache._reset()
+    local lines = {}
+    for i = 1, 7 do
+      lines[#lines + 1] = "# Titel" .. i
+      lines[#lines + 1] = ""
+    end
+    lines[#lines + 1] = "Ein Absatz."
+    local r = run(lines, {
+      provider = fake(function(t)
+        if t:find("Absatz", 1, true) then
+          return "<b>evil</b>"
+        end
+        return "Same"
+      end, { sync = true }),
+      cache = false,
+    })
+    H.eq(r.info.anchor_collisions, 6, "all collisions are counted")
+    local texts = table.concat(r.info.errors, "\n")
+    H.contains(texts, "adds link or HTML syntax", "the real failure is still named")
+    local n = select(2, texts:gsub("translate to the anchor", ""))
+    H.ok(n <= 2, "at most two collision messages: " .. n)
+  end
+
   -- Independent review: a unit whose masking ran out of budget is left alone ---------------------
   do
     cache._reset()
