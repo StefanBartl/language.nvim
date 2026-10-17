@@ -34,12 +34,16 @@ local cache = require("language.translate.markdown.cache")
 local mask = require("language.translate.markdown.mask")
 local reflow = require("language.translate.markdown.reflow")
 local segment = require("language.translate.markdown.segment")
+local slice = require("language.translate.markdown.slice")
 
 local M = {}
 
 M.cache = cache
 
 local DEFAULT_MAX_UNITS = 40
+---A document with fewer lines is translated in one go: 2 000 lines are about 25 ms of work, less
+---than a slice is worth, and the callback of such a document arrives in the first turn of the loop.
+local SLICE_MIN_LINES = 2000
 local MAX_ERRORS = 5
 local ABORT_AFTER = 3
 
@@ -435,6 +439,33 @@ function M.translate_markdown(lines, opts, cb)
     return false
   end
 
+  ---A slicer for the CPU-bound phases (segment, mask, cache pass, finalisation): a document of
+  ---100 000 lines would keep the event loop busy for seconds. `stop` is asked between two slices:
+  ---a cancelled or stale call is not continued (and a stale one is reported once).
+  local sl = slice.new({
+    budget_ms = type(opts.slice_ms) == "number" and opts.slice_ms
+      or (#lines < SLICE_MIN_LINES and math.huge or nil),
+    stop = function()
+      if finished then
+        return true
+      end
+      if stale() then
+        finish(false, "stale")
+        return true
+      end
+      return false
+    end,
+    on_error = function(err)
+      if finished then
+        -- Nothing left to report it to but the user: this is `cb` (or `on_unit`'s caller) throwing.
+        vim.notify("translate_markdown: " .. tostring(err), vim.log.levels.ERROR)
+        return
+      end
+      finish(false, "translate_markdown: " .. tostring(err))
+    end,
+  })
+  local tick = sl.tick
+
   local function run()
     local t0 = vim.uv.hrtime()
     if stale() then
@@ -479,7 +510,7 @@ function M.translate_markdown(lines, opts, cb)
       cache.configure({ disk = st.disk, max_kb = st.cache_max_kb, dir = st.cache_dir })
     end
 
-    local seg = segment.segment(lines)
+    local seg = segment.segment(lines, tick)
     local units = seg.units
 
     ---@class LanguageMdUnitState
@@ -507,6 +538,7 @@ function M.translate_markdown(lines, opts, cb)
       anchor_collisions = 0,
       errors = {},
       ms = 0,
+      slices = 0,
     }
 
     ---@type table<string, table>
@@ -518,10 +550,12 @@ function M.translate_markdown(lines, opts, cb)
       for _, id in ipairs(blk.units) do
         unit_block[id] = bi
       end
+      tick()
     end
     local bstate = {}
     for bi = 1, #seg.blocks do
       bstate[bi] = { pending = 0, changed = false, partial = false, cached_only = true }
+      tick()
     end
     local total_blocks, done_blocks = 0, 0
     local is_heading = {}
@@ -530,6 +564,7 @@ function M.translate_markdown(lines, opts, cb)
     end
 
     for id, u in ipairs(units) do
+      tick()
       local masked, mk = mask.mask(u.text, { defs = seg.defs, keep = st.keep })
       local s = { masked = masked, mk = mk, anchor = false }
       for _, t in ipairs(mk.toks) do
@@ -561,6 +596,7 @@ function M.translate_markdown(lines, opts, cb)
       if bs.pending > 0 then
         total_blocks = total_blocks + 1
       end
+      tick()
     end
 
     -- Anchors ------------------------------------------------------------------
@@ -570,6 +606,7 @@ function M.translate_markdown(lines, opts, cb)
       if ust[id].entry then
         heading_pending = heading_pending + 1
       end
+      tick()
     end
 
     local function build_map()
@@ -578,8 +615,9 @@ function M.translate_markdown(lines, opts, cb)
         old[i] = units[id].text
         local s = ust[id]
         new[i] = s.tr and mask.unmask(s.tr, s.mk) or units[id].text
+        tick()
       end
-      local built, _, collisions = anchors.build_map(old, new)
+      local built, _, collisions = anchors.build_map(old, new, tick)
       map = built
       info.anchor_collisions = #collisions
       -- two messages at most: a document full of collisions must not push the real failures out of `errors`
@@ -589,6 +627,34 @@ function M.translate_markdown(lines, opts, cb)
           info.errors[#info.errors + 1] = collisions[i]
         end
       end
+    end
+
+    ---The map is built in slices, and it can be asked for while a slice of it is waiting for the
+    ---next turn of the loop: `then_fn` runs as soon as the map exists (at once when it does).
+    local building = false
+    ---@type fun()[]
+    local waiting = {}
+
+    ---@param then_fn fun()
+    local function with_map(then_fn)
+      if map then
+        then_fn()
+        return
+      end
+      waiting[#waiting + 1] = then_fn
+      if building then
+        return
+      end
+      building = true
+      sl.run(function()
+        build_map()
+        building = false
+        local list = waiting
+        waiting = {}
+        for _, fn in ipairs(list) do
+          fn()
+        end
+      end)
     end
 
     -- Content of a unit / a block -----------------------------------------------
@@ -707,12 +773,13 @@ function M.translate_markdown(lines, opts, cb)
       if is_heading[id] then
         heading_pending = heading_pending - 1
         if heading_pending == 0 then
-          build_map()
-          local list = deferred
-          deferred = {}
-          for _, d in ipairs(list) do
-            emit(d)
-          end
+          with_map(function()
+            local list = deferred
+            deferred = {}
+            for _, d in ipairs(list) do
+              emit(d)
+            end
+          end)
         end
       end
       if bs.pending == 0 then
@@ -740,6 +807,11 @@ function M.translate_markdown(lines, opts, cb)
       end
       for _, id in ipairs(entry.units) do
         unit_done(id, true, from_cache)
+        -- Only the cache pass (it runs in the slicer's coroutine, nothing of the engine is on the
+        -- stack): one entry can stand for thousands of identical units.
+        if from_cache then
+          tick()
+        end
       end
     end
 
@@ -793,6 +865,7 @@ function M.translate_markdown(lines, opts, cb)
     local misses = {}
     local read_model = use_cache and cache_model() or nil
     for _, e in ipairs(todo) do
+      tick()
       e.key = use_cache and cache.key(engine, read_model, target, source, e.masked) or nil
       local hit = e.key and cache.get(e.key)
       local value = hit and validate(e, hit)
@@ -803,36 +876,29 @@ function M.translate_markdown(lines, opts, cb)
       end
     end
 
-    -- Headings first, so the anchor map is known early; document order inside
-    -- both groups (table.sort is not stable, hence the explicit index).
+    -- Headings first, so the anchor map is known early; document order inside both groups.
+    -- A partition of the (already ordered) list, not a `table.sort`: a comparator is a C boundary
+    -- the slicer cannot yield across, and 20 000 entries are a long time in one.
     do
-      local order = {}
-      for i, e in ipairs(todo) do
-        order[e] = i
+      local heads, rest = {}, {}
+      for _, e in ipairs(misses) do
+        local into = e.heading and heads or rest
+        into[#into + 1] = e
+        tick()
       end
-      table.sort(misses, function(a, b)
-        if a.heading ~= b.heading then
-          return a.heading
-        end
-        return order[a] < order[b]
-      end)
+      misses = heads
+      table.move(rest, 1, #rest, #heads + 1, heads)
     end
 
     for _, e in ipairs(misses) do
       info.pending = info.pending + #e.units
+      tick()
     end
 
     -- Finalisation ---------------------------------------------------------------
-    local function finalize()
+    local function finalize_rest()
       if finished then
         return
-      end
-      if stale() then
-        finish(false, "stale")
-        return
-      end
-      if not map then
-        build_map()
       end
       local content = {}
       for id = 1, #units do
@@ -841,8 +907,9 @@ function M.translate_markdown(lines, opts, cb)
           ust[id].counted = true
           info.reflow_failed = info.reflow_failed + 1
         end
+        tick()
       end
-      local out = segment.render(seg, content)
+      local out = segment.render(seg, content, nil, nil, tick)
       local amap = map or {}
       for _, L in ipairs(seg.refdefs) do
         local new, changed = anchors.rewrite_refdef(out[L], amap)
@@ -850,6 +917,7 @@ function M.translate_markdown(lines, opts, cb)
           out[L] = new
           info.anchors_changed = info.anchors_changed + 1
         end
+        tick()
       end
       for id = 1, #units do
         if ust[id].anchor then
@@ -860,6 +928,7 @@ function M.translate_markdown(lines, opts, cb)
             end
           end
         end
+        tick()
       end
       if #out ~= #lines then
         -- Cannot happen by construction; the invariant is hard, so the original wins.
@@ -867,7 +936,23 @@ function M.translate_markdown(lines, opts, cb)
         out = vim.list_slice(lines)
       end
       info.ms = (vim.uv.hrtime() - t0) / 1e6
+      info.slices = sl.yields()
       finish(true, out, info)
+    end
+
+    ---Reflow and render in slices (see `slice.lua`). Nothing is left to do after the callback of
+    ---the last answer but this: the engine part is over, so no answer can interleave.
+    local function finalize()
+      sl.run(function()
+        if finished then
+          return
+        end
+        if stale() then
+          finish(false, "stale")
+          return
+        end
+        with_map(finalize_rest)
+      end)
     end
 
     if opts.cache_only or #misses == 0 then
@@ -886,6 +971,7 @@ function M.translate_markdown(lines, opts, cb)
     do
       local cur, cost = {}, 0
       for _, e in ipairs(misses) do
+        tick()
         local c = #e.masked + 8
         if #cur > 0 and (cost + c > st.max_chars or #cur >= st.max_units) then
           pending[#pending + 1] = { entries = cur, attempt = 1 }
@@ -1036,6 +1122,8 @@ function M.translate_markdown(lines, opts, cb)
       end
       pumping = true
       while not finished and active < st.concurrency and #pending > 0 do
+        -- An engine that answers inside `translate` makes this loop the whole engine phase.
+        tick()
         if stale() then
           pumping = false
           finish(false, "stale")
@@ -1054,10 +1142,7 @@ function M.translate_markdown(lines, opts, cb)
     if finished then
       return
     end
-    local ok, err = pcall(run)
-    if not ok then
-      finish(false, "translate_markdown: " .. tostring(err))
-    end
+    sl.run(run)
   end)
 
   return handle

@@ -190,8 +190,9 @@ end
 ---markdown.nvim resolve right; a previewer that does not know the numbering finds the first.
 ---@param old string[]  -- original heading texts (Markdown)
 ---@param new string[]  -- translated heading texts, same order
+---@param tick? fun()  -- called after each heading: may give the control away (a document with thousands of them)
 ---@return table<string, string> map, integer changed, string[] collisions  -- one message per collision
-function M.build_map(old, new)
+function M.build_map(old, new, tick)
   local map, changed = {}, 0
   local collisions = {}
   local seen_old, seen_new = {}, {}
@@ -227,6 +228,9 @@ function M.build_map(old, new)
       end
     elseif a ~= "" then
       numbered(seen_old, a)
+    end
+    if tick then
+      tick()
     end
   end
   return map, changed, collisions

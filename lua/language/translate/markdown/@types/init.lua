@@ -20,6 +20,7 @@
 ---@field cache? boolean                 -- false: bypass the cache (read and write)
 ---@field cache_only? boolean            -- never ask the engine: a cached unit is translated, the rest stays original (`info.pending`)
 ---@field on_unit? fun(ev: LanguageMdUnitEvent) -- progress, once per finished block
+---@field slice_ms? number             -- length of one slice of CPU work before the event loop gets a turn (default 8; documents under 2 000 lines are not sliced); `0`: at every interruption point (tests)
 ---@field provider? LanguageTranslateProvider -- test seam: use this engine instead of the registry
 ---@field cfg? table                     -- test seam: use this translate config instead of the live one
 
@@ -44,6 +45,7 @@
 ---@field anchors_changed integer        -- in-page link targets that were rewritten
 ---@field errors string[]                -- the first few engine/validation messages
 ---@field ms number
+---@field slices integer                 -- how often the CPU work gave the control back to the event loop (0 for a small document)
 
 ---@alias LanguageMdTranslateCb fun(ok: boolean, result: string[]|string, info?: LanguageMdTranslateInfo)
 

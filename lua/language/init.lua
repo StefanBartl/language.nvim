@@ -116,7 +116,7 @@ end
 ---headings, and a unit seen before comes from the cache. Asynchronous and cancellable;
 ---`cb(ok, lines_or_err, info)` runs exactly once. See docs/FEATURES/TRANSLATE.md.
 ---@param lines string[]
----@param opts LanguageMdTranslateOpts  { target, source?, engine?, model?, token?, max_chars?, concurrency?, keep?, cache?, cache_only?, on_unit? }
+---@param opts LanguageMdTranslateOpts  { target, source?, engine?, model?, token?, max_chars?, concurrency?, keep?, cache?, cache_only?, on_unit?, slice_ms? }
 ---@param cb LanguageMdTranslateCb
 ---@return { cancel: fun() } handle
 function M.translate_markdown(lines, opts, cb)
