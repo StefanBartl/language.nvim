@@ -56,6 +56,11 @@ function M.new(opts)
     end
   end
 
+  -- An unlimited budget (a small document) never yields: not even the clock is read.
+  if budget == math.huge then
+    tick = function() end
+  end
+
   local function run(body)
     local co = coroutine.create(body)
     live[co] = true
