@@ -342,9 +342,13 @@ local function code_span_ends(plines)
 end
 
 ---Segment a document.
+---`tick` (optional) is called after each line, once the state of the scan is complete: it may
+---give the control away (`translate_markdown` slices big documents that way) and returns when the
+---scan goes on. It must not touch the arguments.
 ---@param lines string[]
+---@param tick? fun()
 ---@return LanguageMdSegmentation
-function M.segment(lines)
+function M.segment(lines, tick)
   local n = #lines
   ---@type LanguageMdSegmentation
   local seg = { tpl = {}, units = {}, blocks = {}, headings = {}, defs = {}, refdefs = {} }
@@ -993,12 +997,18 @@ function M.segment(lines)
       open_para(L, kind, qpfx .. lead, text, qdepth)
     until true
     L = L + 1
+    if tick then
+      tick()
+    end
   end
   close_para()
 
   for i = 1, n do
     if tpl[i] == nil then
       tpl[i] = lines[i]
+    end
+    if tick and i % 256 == 0 then
+      tick()
     end
   end
   return seg
@@ -1011,8 +1021,9 @@ end
 ---@param content table<integer, string[]>
 ---@param first? integer
 ---@param last? integer
+---@param tick? fun()  -- called after each line (see `M.segment`)
 ---@return string[]
-function M.render(seg, content, first, last)
+function M.render(seg, content, first, last, tick)
   local out, n = {}, 0
   for L = first or 1, last or #seg.tpl do
     local t = seg.tpl[L]
@@ -1038,6 +1049,9 @@ function M.render(seg, content, first, last)
         end
       end
       out[n] = table.concat(buf)
+    end
+    if tick then
+      tick()
     end
   end
   return out

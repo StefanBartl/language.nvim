@@ -130,6 +130,7 @@ Not a command: there is no `:Translate` flag for it. It is for Lua callers
 | `concurrency` | Requests in flight (default `translate.markdown.concurrency`, 3). |
 | `keep` | Words that are never translated (proper names), added to `translate.markdown.keep`. |
 | `cache` | `false` bypasses the cache (read and write). |
+| `slice_ms` | Length of one slice of CPU work before the event loop gets a turn (default 8). A document under 2 000 lines is not sliced at all. `0` hands the control back at every interruption point (what the specs use to prove that the result does not depend on where the work is cut). |
 | `cache_only` | Never asks the engine: a cached unit is translated, every other stays original, `info.pending` counts them. The building block for stale-while-revalidate: show this at once, then run again without it. |
 | `on_unit` | `fun(ev)`: called once per finished block with `{ first, last, lines, status, done, total }`. `lines` replaces source lines `first..last` (same count). Progressive filling: patch the view as events arrive, finish with the `result` of `cb`. `status` is `"translated"`, `"cached"` or `"partial"`. A reference definition is no block, so its rewritten anchor target only appears in the final result. |
 
@@ -137,10 +138,21 @@ Every callback runs on the main loop and never before `translate_markdown` has
 returned. `cb` runs **exactly once**, also after `cancel()`, a stale token or an
 internal error.
 
+**Big documents.** Segmenting, masking, the cache pass, the anchor map and the final reflow and
+render are CPU work in plain Lua (about 0.5 s for 20 000 lines). Past 2 000 lines they run in
+slices of about 8 ms (`slice_ms`): the work is a coroutine that gives the control back at line,
+unit and heading boundaries, and a zero-delay timer continues it, so redraws, keys and timers keep
+running in between (40 000 lines: the loop is never blocked for more than a frame or two). The
+result does not depend on the cuts. The callback contract holds across the gaps: `cb` once, never
+before the call returned, and a cancel or a stale token is noticed between two slices, after
+which nothing is continued and no engine is asked. A single unit (one paragraph of 50 000 lines)
+is not cut: it is one piece of work.
+
 `info` is the report: `units`, `translated`, `cached`, `failed` (stayed
 original after validation and retry), `skipped` (nothing to translate),
 `pending` (`cache_only`), `reflow_failed`, `requests`, `retries`,
-`anchors_changed`, `anchor_collisions`, `errors` (the first few messages) and `ms`.
+`anchors_changed`, `anchor_collisions`, `errors` (the first few messages), `ms` and `slices` (how
+often the CPU work handed the control back; 0 for a small document).
 
 **Anchor collisions.** Links to a heading (`](#setup)`) follow the translated heading. When two
 headings that had different anchors translate to the *same* one (`Setup` and `Installation` both
