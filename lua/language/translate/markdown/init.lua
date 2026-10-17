@@ -18,7 +18,7 @@
 ---             never breaking in front of a block-start token
 ---   anchors   `](#old-slug)` is rewritten to the slug of the translated heading
 ---
---- All of that is CPU work in plain Lua. Past a size (see SLICE_MIN_LINES / SLICE_MIN_BYTES) it
+--- All of that is CPU work in plain Lua. Past a size (see SLICE_MIN_LINES / SLICE_MIN_BYTES / SLICE_COST_LIMIT) it
 --- runs in slices (`slice.lua`): the work is a coroutine that hands the control back to the event
 --- loop at the interruption points, so a big document never blocks the editor for long. Only the
 --- timing changes, not the result.
@@ -51,16 +51,24 @@ local M = {}
 M.cache = cache
 
 local DEFAULT_MAX_UNITS = 40
----A document with fewer lines AND fewer bytes than these is translated in one go: that is up to
----about 30 ms of work (measured: 2 000 lines of ordinary text, 80 kB, took 34 ms; the cost follows
----the bytes, 0.1 to 0.5 ms per kB, plus a few microseconds per line), below what a keystroke can
----notice, and the callback of such a document arrives in the first turn of the loop. The lines alone
----do not tell: 1 999 lines of 2.5 kB are 1.9 s.
+---A document is translated in one go when its estimated work stays under these three limits: fewer
+---lines, fewer bytes and a smaller estimated cost than these. Neither lines nor bytes tell the
+---work: it follows the units. A table cell is a unit of its own, and a table of 65 kB can hold
+---9 000 of them (about 100 ms, where 63 kB of ordinary text in long paragraphs are 5 to 15 ms); a
+---list item costs 20 to 30 microseconds, and 1 999 lines of 2.5 kB are 1.9 s. So the estimate
+---weighs all three: per line, per byte and per pipe (each one can be a cell: an upper bound that is
+---cheap to take, a plain `find`). The weights are fitted to measurements on a development machine
+---(list items with code and a link 30 us a line, plain items 21, a table cell 6, a byte 0.1 to
+---0.4) and meant to be too high rather than too low; what stays under the limit is about 30 ms of
+---work, under what a keystroke can notice, and the callback of such a document arrives in the first
+---turn of the loop.
 local SLICE_MIN_LINES = 2000
 local SLICE_MIN_BYTES = 64 * 1024
----An answer for a text that occurs this often in the document is booked in slices, too (the loop
----over its units reports each of them).
-local SLICE_ENTRY_UNITS = 256
+local SLICE_COST_LIMIT = 30000
+local SLICE_COST_LINE, SLICE_COST_BYTE, SLICE_COST_PIPE = 12, 0.375, 3
+---An answer for texts that occur this often in the document (all its entries together) is booked
+---in slices, too (the loop over its units reports each of them).
+local SLICE_ANSWER_UNITS = 256
 local MAX_ERRORS = 5
 local ABORT_AFTER = 3
 
@@ -389,17 +397,28 @@ local function flatten(text)
 end
 
 ---@internal
----Is the work on `lines` too small to be worth slicing (see SLICE_MIN_LINES / SLICE_MIN_BYTES)?
+---Is the work on `lines` too small to be worth slicing (see SLICE_MIN_LINES / SLICE_MIN_BYTES /
+---SLICE_COST_LIMIT)? One pass, ending at the first limit that is reached.
 ---@param lines string[]
 ---@return boolean
 local function is_small(lines)
   if #lines >= SLICE_MIN_LINES then
     return false
   end
-  local bytes = 0
+  local bytes, pipes = 0, 0
   for i = 1, #lines do
-    bytes = bytes + #lines[i]
-    if bytes >= SLICE_MIN_BYTES then
+    local line = lines[i]
+    bytes = bytes + #line
+    local at = line:find("|", 1, true)
+    while at do
+      pipes = pipes + 1
+      at = line:find("|", at + 1, true)
+    end
+    if
+      bytes >= SLICE_MIN_BYTES
+      or i * SLICE_COST_LINE + bytes * SLICE_COST_BYTE + pipes * SLICE_COST_PIPE
+        >= SLICE_COST_LIMIT
+    then
       return false
     end
   end
@@ -474,6 +493,18 @@ function M.translate_markdown(lines, opts, cb)
     return false
   end
 
+  ---Something threw, in a coroutine of the slicer or in the callback of an answer: the call ends
+  ---with `cb(false, "translate_markdown: ...")`, once. When `cb` has run already, there is nothing
+  ---left to report it to but the user: this is `cb` (or `on_unit`'s caller) throwing.
+  ---@param err any
+  local function crashed(err)
+    if finished then
+      vim.notify("translate_markdown: " .. tostring(err), vim.log.levels.ERROR)
+      return
+    end
+    finish(false, "translate_markdown: " .. tostring(err))
+  end
+
   ---A slicer for the CPU-bound phases (segment, mask, cache pass, finalisation): a document of
   ---100 000 lines would keep the event loop busy for seconds. `stop` is asked before each slice
   ---(also the first one): a cancelled or stale call is not continued (and a stale one is reported
@@ -491,14 +522,7 @@ function M.translate_markdown(lines, opts, cb)
       end
       return false
     end,
-    on_error = function(err)
-      if finished then
-        -- Nothing left to report it to but the user: this is `cb` (or `on_unit`'s caller) throwing.
-        vim.notify("translate_markdown: " .. tostring(err), vim.log.levels.ERROR)
-        return
-      end
-      finish(false, "translate_markdown: " .. tostring(err))
-    end,
+    on_error = crashed,
   })
   local tick = sl.tick
 
@@ -869,30 +893,50 @@ function M.translate_markdown(lines, opts, cb)
           info.translated = info.translated + 1
         end
       end
-      if from_cache then
-        -- The cache pass runs in the slicer's coroutine, nothing of the engine is on the stack: one
-        -- entry can stand for thousands of identical units.
-        for _, id in ipairs(ids) do
-          unit_done(id, true, true)
-          tick()
+    end
+
+    ---The cache pass: the units of the entry are booked one by one. It runs in the slicer's
+    ---coroutine, nothing of the engine is on the stack: one entry can stand for thousands of
+    ---identical units.
+    ---@param entry table
+    ---@param value string
+    local function resolve_cached(entry, value)
+      resolve_entry(entry, value, true)
+      for _, id in ipairs(entry.units) do
+        unit_done(id, true, true)
+        tick()
+      end
+    end
+
+    ---The valid entries of ONE answer of the engine are booked. An answer arrives in a plain
+    ---callback: the units of all its entries together (each one may render a block for `on_unit`)
+    ---are bounded as a whole, not per entry. Up to SLICE_ANSWER_UNITS they are booked on the spot;
+    ---more than that is a coroutine of its own, and the call is not over before it is (see
+    ---`release`). Other answers may be booked in the gaps.
+    ---@param answered table[]  -- the resolved entries (`resolve_entry` has run for each)
+    local function book_answer(answered)
+      local count = 0
+      for _, e in ipairs(answered) do
+        count = count + #e.units
+      end
+      if count <= SLICE_ANSWER_UNITS then
+        for _, e in ipairs(answered) do
+          for _, id in ipairs(e.units) do
+            unit_done(id, true, false)
+          end
         end
-      elseif #ids <= SLICE_ENTRY_UNITS then
-        for _, id in ipairs(ids) do
-          unit_done(id, true, false)
-        end
-      else
-        -- An answer arrives in a plain callback: booking thousands of identical units (each one may
-        -- render a block for `on_unit`) is a coroutine of its own, and the call is not over before
-        -- it is (see `release`). Other answers may be booked in the gaps.
-        resolving = resolving + 1
-        sl.run(function()
-          for _, id in ipairs(ids) do
+        return
+      end
+      resolving = resolving + 1
+      sl.run(function()
+        for _, e in ipairs(answered) do
+          for _, id in ipairs(e.units) do
             unit_done(id, true, false)
             tick()
           end
-          release()
-        end)
-      end
+        end
+        release()
+      end)
     end
 
     local remaining = 0
@@ -950,7 +994,7 @@ function M.translate_markdown(lines, opts, cb)
       local hit = e.key and cache.get(e.key)
       local value = hit and validate(e, hit)
       if value then
-        resolve_entry(e, value, true)
+        resolve_cached(e, value)
       else
         misses[#misses + 1] = e
       end
@@ -1135,6 +1179,7 @@ function M.translate_markdown(lines, opts, cb)
       end
 
       local invalid, first_err = {}, nil
+      local answered = {}
       local write_model = use_cache and cache_model() or nil
       for i, e in ipairs(req.entries) do
         local value, err = validate(e, res[i])
@@ -1146,11 +1191,13 @@ function M.translate_markdown(lines, opts, cb)
             cache.set(e.key, value)
           end
           resolve_entry(e, value, false)
+          answered[#answered + 1] = e
         else
           invalid[#invalid + 1] = e
           first_err = first_err or err
         end
       end
+      book_answer(answered)
       if #invalid > 0 then
         if req.attempt == 1 then
           info.retries = info.retries + #invalid
@@ -1189,8 +1236,16 @@ function M.translate_markdown(lines, opts, cb)
           finish(false, "stale")
           return
         end
-        handle_result(req, ok, res)
-        pump()
+        -- An answer arrives outside of the slicer's coroutines (a timer, a job callback, or inside
+        -- `translate` itself, where `pcall` below would swallow the error): a throw in the inline
+        -- booking (unmask, render, reflow, anchors) must end the call, not leave it hanging.
+        local booked, err = pcall(function()
+          handle_result(req, ok, res)
+          pump()
+        end)
+        if not booked then
+          crashed(err)
+        end
       end
       local started, j = pcall(provider.translate, texts, target, source, tr, on_result)
       if not started then

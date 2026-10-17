@@ -20,7 +20,7 @@
 ---@field cache? boolean                 -- false: bypass the cache (read and write)
 ---@field cache_only? boolean            -- never ask the engine: a cached unit is translated, the rest stays original (`info.pending`)
 ---@field on_unit? fun(ev: LanguageMdUnitEvent) -- progress, once per finished block
----@field slice_ms? number             -- length of one slice of CPU work before the event loop gets a turn (default 8; without this option a document under 2 000 lines and 64 kB is not sliced, with it every document is); `0`: at every interruption point (tests)
+---@field slice_ms? number             -- length of one slice of CPU work before the event loop gets a turn (default 8; without this option a small document (under 2 000 lines, 64 kB and an estimated 30 ms of work) is not sliced, with it every document is); `0`: at every interruption point (tests)
 ---@field provider? LanguageTranslateProvider -- test seam: use this engine instead of the registry
 ---@field cfg? table                     -- test seam: use this translate config instead of the live one
 
