@@ -322,8 +322,8 @@ cached (memory, and `stdpath("cache")/language.nvim/translate_markdown.json`
 unless `translate.markdown.disk_cache = false`) and sent in batches of at most
 `max_chars` / `max_units`, `concurrency` at a time. `cb` runs exactly once;
 `token = { generation = n, current = fn }` makes a superseded run end with
-`(false, "stale")`; a document of 2 000 lines or more is worked on in slices
-of about 8 ms (`slice_ms`) so the editor stays responsive; `on_unit(ev)`
+`(false, "stale")`; a document of 2 000 lines or 64 kB or more is worked on in
+slices of about 8 ms (`slice_ms`) so the editor stays responsive; `on_unit(ev)`
 reports every finished block (`first`, `last`, `lines`, `status`);
 `cache_only = true` never asks the engine.
 Config: `translate.markdown = { concurrency, max_chars, disk_cache,
