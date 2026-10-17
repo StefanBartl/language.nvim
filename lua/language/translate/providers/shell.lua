@@ -3,8 +3,13 @@
 ---@description
 --- Wraps the `trans` CLI (translate-shell) for users who want its extra
 --- engines/dictionaries. Brief mode (`-b`) returns just the translation. The
---- whole block is sent as one argv argument (no shell interpolation) and the
---- result is split back into lines.
+--- block goes to `trans` on stdin, never into argv: on Windows `trans` is often
+--- a `.cmd`/`.bat` shim that `util/job` must start through `cmd.exe /c`, whose
+--- parser would interpret `" % & | < > ^` in an argument (and `util/job`
+--- therefore refuses such an argument). With no text argument translate-shell
+--- reads its input line by line, translates every non-empty line as a request
+--- of its own and echoes empty lines in brief mode, so the output has one line
+--- per input line and is split back into lines.
 
 require("language.translate.@types")
 
@@ -15,10 +20,11 @@ local M = {}
 M.name = "shell"
 
 ---@internal
----The block is a single argv element. On Windows keep it far below the
----command-line limit (~32 700) and the 8 191 of a `cmd.exe /c` shim; elsewhere
----one argument may be 128 KiB (Linux MAX_ARG_STRLEN), so the budget is looser.
----A line above it is cut at sentence or word boundaries by `translate/chunk.lua`.
+---The block travels on stdin, so no command-line limit applies any more; the
+---budget (kept from the argv era: 6000 on Windows, 20 000 elsewhere) bounds the
+---lines per `trans` process and, since `trans` sends every line as its own
+---request, the size of one request. A line above it is cut at sentence or word
+---boundaries by `translate/chunk.lua`.
 ---@type LanguageTranslateLimits
 M.limits = { max_bytes = vim.fn.has("win32") == 1 and 6000 or 20000 }
 
@@ -44,10 +50,21 @@ function M.translate(lines, target, source, cfg, cb)
   end
 
   local spec = ((source and source ~= "") and source or "") .. ":" .. target
-  local argv = { "trans", "-b", "-no-warn", spec, text }
+  -- No text in argv: `trans` reads it from stdin (see the module description).
+  local argv = { "trans", "-b", "-no-warn", spec }
+
+  -- `translate.timeout_ms` is a budget per request, and `trans` sends one per
+  -- non-empty line, so the process gets that budget for each of them.
+  local requests = 0
+  for _, line in ipairs(lines) do
+    if line ~= "" then
+      requests = requests + 1
+    end
+  end
 
   return job.run(argv, {
-    timeout_ms = cfg.timeout_ms or 8000,
+    stdin = text .. "\n",
+    timeout_ms = (cfg.timeout_ms or 8000) * requests,
     on_done = function(ok, out, err)
       if not ok then
         cb(false, err ~= "" and err or "trans request failed")

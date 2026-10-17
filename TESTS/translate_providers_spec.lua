@@ -271,10 +271,50 @@ return function(H)
   H.eq(#blank_s, 2, "blank lines come back as the same number of lines")
   H.eq(#calls, blank_calls, "without starting trans")
 
+  -- The block goes to trans on stdin, never into argv: on Windows a trans.cmd
+  -- shim runs through `cmd.exe /c`, and util/job refuses an argument holding a
+  -- character cmd.exe would interpret. The fake job applies the real argv
+  -- resolution for such a shim, so text in argv would be refused here.
+  package.loaded["language.util.job"] = nil
+  local resolve_argv = require("language.util.job")._resolve_argv
+  local shim_env = {
+    win32 = true,
+    exepath = function()
+      return "C:/tools/trans.cmd"
+    end,
+  }
+  calls = {}
+  package.loaded["language.util.job"] = {
+    run = function(argv, opts)
+      calls[#calls + 1] = { argv = argv, opts = opts }
+      local resolved, refused = resolve_argv(argv, shim_env)
+      if not resolved then
+        opts.on_done(false, "", refused)
+      else
+        opts.on_done(true, 'Er sagte "ja" & ging\n\nZeile 3\n', "")
+      end
+      return { cancel = function() end }
+    end,
+  }
+  shell = reload("language.translate.providers.shell")
+  local shim_block = { 'He said "yes" & left', "", "100% <done> | ^" }
+  local shim_ok, shim_result
+  shell.translate(shim_block, "DE", "EN", { timeout_ms = 1000 }, function(ok11, result)
+    shim_ok, shim_result = ok11, result
+  end)
+  H.ok(shim_ok, "a block with quotes, & and other cmd.exe syntax runs through a .cmd shim")
+  H.eq(#shim_result, 3, "one output line per input line")
+  H.eq(shim_result[1], 'Er sagte "ja" & ging', "the answer is passed through untouched")
+  H.eq(calls[1].opts.stdin, table.concat(shim_block, "\n") .. "\n", "the block is trans's stdin")
+  for i, arg in ipairs(calls[1].argv) do
+    H.falsy(arg:find("yes", 1, true), ("argv[%d] carries no text"):format(i))
+  end
+  H.eq(calls[1].opts.timeout_ms, 2000, "the timeout covers one request per non-empty line")
+
   H.eq(
     shell.limits.max_bytes,
     vim.fn.has("win32") == 1 and 6000 or 20000,
-    "the argv budget follows the platform (Windows: shim limit, elsewhere: 128 KiB per argument)"
+    "the block budget follows the platform (kept from the argv era)"
   )
 
   -- custom.lua (translate) ---------------------------------------------------

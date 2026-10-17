@@ -57,7 +57,7 @@ the JSON quoting of each text. This is the unit of `translate.max_chars`.
 | Engine | Block budget (cost units) | Payload |
 | --- | --- | --- |
 | google | 15 000 | POST body on stdin (`--data-urlencode q@-`): neither in the URL nor in argv |
-| shell | 6000 on Windows, 20 000 elsewhere | argv (one element) |
+| shell | 6000 on Windows, 20 000 elsewhere | stdin, never argv (a `trans.cmd` shim runs through `cmd.exe /c`); `trans` translates it line by line, one request per non-empty line, and `translate.timeout_ms` is granted per such line |
 | custom | same as shell; `translate.custom.max_bytes` replaces it | whatever `cmd` builds |
 | deepl | 50 lines, 60 000 | key **and** JSON body on stdin (`curl -K -`), never argv |
 
@@ -223,8 +223,8 @@ spike (2026-10-06) the Unicode pair U+27E6/U+27E7 came back as `?1?` for 25 % of
 the units on the Windows curl path. It reproduces on a current machine too: with
 the text as one argv element, `curl` hands a loopback server `?1?` for the
 Unicode pair and `{1}` for the ASCII one (and even `ü` arrives as the single
-byte `%FC`, not UTF-8, which is why the argv-based `custom`/`shell` engines are
-the weak spot on Windows, while `google` and `deepl` send stdin).
+byte `%FC`, not UTF-8, which is why an argv-based `custom` engine is the weak
+spot on Windows, while `google`, `deepl` and `shell` send stdin).
 `TESTS/translate_markdown_curl_spec.lua` runs the whole pipeline through a real
 curl and a loopback server to keep it that way.
 
