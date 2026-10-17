@@ -1116,14 +1116,25 @@ function M.translate_markdown(lines, opts, cb)
       end
     end
 
+    ---Is there a request to send and a free slot? (asked before and after every yield of `pump`)
+    ---@return boolean
+    local function can_send()
+      return not finished and active < st.concurrency and #pending > 0
+    end
+
     pump = function()
       if pumping then
         return
       end
       pumping = true
-      while not finished and active < st.concurrency and #pending > 0 do
+      while can_send() do
         -- An engine that answers inside `translate` makes this loop the whole engine phase.
         tick()
+        -- The yield is a gap in which answers arrive: one may have aborted the rest (`pending` is
+        -- empty now), ended the call, or filled the slots. The condition is asked again.
+        if not can_send() then
+          break
+        end
         if stale() then
           pumping = false
           finish(false, "stale")
