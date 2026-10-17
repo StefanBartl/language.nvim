@@ -18,13 +18,23 @@
 ---             never breaking in front of a block-start token
 ---   anchors   `](#old-slug)` is rewritten to the slug of the translated heading
 ---
+--- All of that is CPU work in plain Lua. Past a size (see SLICE_MIN_LINES / SLICE_MIN_BYTES) it
+--- runs in slices (`slice.lua`): the work is a coroutine that hands the control back to the event
+--- loop at the interruption points, so a big document never blocks the editor for long. Only the
+--- timing changes, not the result.
+---
 --- A unit that could not be translated is never an error of the call: it stays
 --- German (original) and is counted in `info.failed`. The call itself fails only
 --- when it cannot start (no engine, bad arguments), when it is cancelled, or
 --- when its token went stale.
 ---
 --- Every callback runs on the main loop, never before `translate_markdown`
---- has returned. `cb` runs exactly once.
+--- has returned. `cb` runs exactly once. `on_unit` is called once per changed block, `done` counts
+--- 1..total in the order of the calls, a block that points at a heading is reported after the
+--- anchor map exists, and the blocks that waited for the map come before the block of the heading
+--- that completed it; the order of the other blocks is the order in which their work finished,
+--- which can differ between a sliced and an unsliced run (the gaps of a slice let answers of the
+--- engine arrive in between), and so can the order of `info.errors`.
 
 require("language.translate.@types")
 require("language.translate.markdown.@types")
@@ -41,9 +51,16 @@ local M = {}
 M.cache = cache
 
 local DEFAULT_MAX_UNITS = 40
----A document with fewer lines is translated in one go: 2 000 lines are about 25 ms of work, less
----than a slice is worth, and the callback of such a document arrives in the first turn of the loop.
+---A document with fewer lines AND fewer bytes than these is translated in one go: that is up to
+---about 30 ms of work (measured: 2 000 lines of ordinary text, 80 kB, took 34 ms; the cost follows
+---the bytes, 0.1 to 0.5 ms per kB, plus a few microseconds per line), below what a keystroke can
+---notice, and the callback of such a document arrives in the first turn of the loop. The lines alone
+---do not tell: 1 999 lines of 2.5 kB are 1.9 s.
 local SLICE_MIN_LINES = 2000
+local SLICE_MIN_BYTES = 64 * 1024
+---An answer for a text that occurs this often in the document is booked in slices, too (the loop
+---over its units reports each of them).
+local SLICE_ENTRY_UNITS = 256
 local MAX_ERRORS = 5
 local ABORT_AFTER = 3
 
@@ -371,6 +388,24 @@ local function flatten(text)
   return text:sub(a, z)
 end
 
+---@internal
+---Is the work on `lines` too small to be worth slicing (see SLICE_MIN_LINES / SLICE_MIN_BYTES)?
+---@param lines string[]
+---@return boolean
+local function is_small(lines)
+  if #lines >= SLICE_MIN_LINES then
+    return false
+  end
+  local bytes = 0
+  for i = 1, #lines do
+    bytes = bytes + #lines[i]
+    if bytes >= SLICE_MIN_BYTES then
+      return false
+    end
+  end
+  return true
+end
+
 ---Translate a Markdown document.
 ---@param lines string[]
 ---@param opts LanguageMdTranslateOpts
@@ -440,11 +475,12 @@ function M.translate_markdown(lines, opts, cb)
   end
 
   ---A slicer for the CPU-bound phases (segment, mask, cache pass, finalisation): a document of
-  ---100 000 lines would keep the event loop busy for seconds. `stop` is asked between two slices:
-  ---a cancelled or stale call is not continued (and a stale one is reported once).
+  ---100 000 lines would keep the event loop busy for seconds. `stop` is asked before each slice
+  ---(also the first one): a cancelled or stale call is not continued (and a stale one is reported
+  ---once). An explicit `slice_ms` wins over the size of the document.
   local sl = slice.new({
     budget_ms = type(opts.slice_ms) == "number" and opts.slice_ms
-      or (#lines < SLICE_MIN_LINES and math.huge or nil),
+      or (is_small(lines) and math.huge or nil),
     stop = function()
       if finished then
         return true
@@ -754,6 +790,21 @@ function M.translate_markdown(lines, opts, cb)
       end
     end
 
+    -- Bookings that go on in slices (the reports of an answer for thousands of identical units, the
+    -- blocks that waited for the anchor map): the finalisation waits for them. A gap in the middle
+    -- of one would otherwise let it end the call, and the rest of the reports would be lost.
+    local resolving = 0
+    local finalize_wanted = false
+    local finalize ---@type fun()
+
+    local function release()
+      resolving = resolving - 1
+      if resolving == 0 and finalize_wanted then
+        finalize_wanted = false
+        finalize()
+      end
+    end
+
     ---A unit got its final state (translated, cached or failed).
     ---@param id integer
     ---@param ok boolean
@@ -770,19 +821,31 @@ function M.translate_markdown(lines, opts, cb)
         bs.partial = true
       end
       bs.pending = bs.pending - 1
+      local ready = bs.pending == 0
       if is_heading[id] then
         heading_pending = heading_pending - 1
         if heading_pending == 0 then
+          -- The last heading: once the map exists, the blocks that waited for it are reported, then
+          -- this one (the order of an unsliced run, where the map is there when with_map returns;
+          -- a sliced one returns before that).
+          resolving = resolving + 1
           with_map(function()
             local list = deferred
             deferred = {}
             for _, d in ipairs(list) do
               emit(d)
+              -- (a map that is already there calls this from an answer: no coroutine, no yield)
+              tick()
             end
+            if ready then
+              block_ready(bi)
+            end
+            release()
           end)
+          return
         end
       end
-      if bs.pending == 0 then
+      if ready then
         block_ready(bi)
       end
     end
@@ -796,7 +859,8 @@ function M.translate_markdown(lines, opts, cb)
     ---@param from_cache boolean
     local function resolve_entry(entry, value, from_cache)
       entry.done = true
-      for _, id in ipairs(entry.units) do
+      local ids = entry.units
+      for _, id in ipairs(ids) do
         ust[id].tr = value
         ust[id].status = from_cache and "cached" or "translated"
         if from_cache then
@@ -805,13 +869,29 @@ function M.translate_markdown(lines, opts, cb)
           info.translated = info.translated + 1
         end
       end
-      for _, id in ipairs(entry.units) do
-        unit_done(id, true, from_cache)
-        -- Only the cache pass (it runs in the slicer's coroutine, nothing of the engine is on the
-        -- stack): one entry can stand for thousands of identical units.
-        if from_cache then
+      if from_cache then
+        -- The cache pass runs in the slicer's coroutine, nothing of the engine is on the stack: one
+        -- entry can stand for thousands of identical units.
+        for _, id in ipairs(ids) do
+          unit_done(id, true, true)
           tick()
         end
+      elseif #ids <= SLICE_ENTRY_UNITS then
+        for _, id in ipairs(ids) do
+          unit_done(id, true, false)
+        end
+      else
+        -- An answer arrives in a plain callback: booking thousands of identical units (each one may
+        -- render a block for `on_unit`) is a coroutine of its own, and the call is not over before
+        -- it is (see `release`). Other answers may be booked in the gaps.
+        resolving = resolving + 1
+        sl.run(function()
+          for _, id in ipairs(ids) do
+            unit_done(id, true, false)
+            tick()
+          end
+          release()
+        end)
       end
     end
 
@@ -942,7 +1022,12 @@ function M.translate_markdown(lines, opts, cb)
 
     ---Reflow and render in slices (see `slice.lua`). Nothing is left to do after the callback of
     ---the last answer but this: the engine part is over, so no answer can interleave.
-    local function finalize()
+    finalize = function()
+      if resolving > 0 then
+        -- (asked again by `release` when the last booking is through)
+        finalize_wanted = true
+        return
+      end
       sl.run(function()
         if finished then
           return

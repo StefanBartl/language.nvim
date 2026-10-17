@@ -12,8 +12,9 @@
 --- The contract of a slicer:
 ---   * Nothing changes while the work finishes inside its first slice: no timer, no extra turn of
 ---     the event loop, `run(body)` returns after `body` did.
----   * Before every slice after the first, `stop()` is asked. A `true` abandons the computation: it
----     is never resumed (the caller reported "stale" or "cancelled" from `stop`).
+---   * Before every slice, the first one included, `stop()` is asked. A `true` abandons the
+---     computation: it is never started or resumed (the caller reported "stale" or "cancelled" from
+---     `stop`).
 ---   * An error of `body` goes to `on_error`, whichever slice it came from.
 ---   * `tick` outside of a coroutine of this slicer is a no-op, so code shared with the
 ---     asynchronous paths (an answer of the engine arrives in a plain callback) can call it freely.
@@ -29,7 +30,7 @@ local uv = vim.uv or vim.loop
 M.BUDGET_MS = 8
 
 ---@class LanguageMdSlicerOpts
----@field budget_ms? number              -- length of a slice (default `M.BUDGET_MS`); `0` yields at every tick
+---@field budget_ms? number              -- length of a slice (default `M.BUDGET_MS`); `0` yields at every tick; `math.huge` never yields and never reads the clock
 ---@field stop fun(): boolean            -- asked before each resume; `true` abandons the computation
 ---@field on_error fun(err: any)         -- `body` threw
 
@@ -56,8 +57,10 @@ function M.new(opts)
     end
   end
 
-  -- An unlimited budget (a small document) never yields: not even the clock is read.
-  if budget == math.huge then
+  -- An unlimited budget (a small document) never yields: the clock is not read at all, neither at
+  -- an interruption point nor when a slice starts.
+  local unlimited = budget == math.huge
+  if unlimited then
     tick = function() end
   end
 
@@ -69,7 +72,7 @@ function M.new(opts)
         live[co] = nil
         return
       end
-      if depth == 0 then
+      if depth == 0 and not unlimited then
         deadline = uv.hrtime() + budget
       end
       depth = depth + 1

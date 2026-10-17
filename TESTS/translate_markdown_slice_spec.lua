@@ -417,17 +417,21 @@ return function(H)
     return r, w
   end
 
-  local BIG = build(40000)
-  H.ok(#BIG >= 40000)
+  local BIG = build(20000)
+  H.ok(#BIG >= 20000)
+  local N_UNITS = #require("language.translate.markdown.segment").segment(BIG).units
 
-  -- 20 000 headings (the anchor map has to look at each of them) and one text 40 000 times
-  -- (one cache entry stands for 40 000 units)
+  -- 10 000 headings (the anchor map has to look at each of them) and one text 20 000 times
+  -- (one cache entry stands for 20 000 units). Half the size of the first version of this spec on
+  -- purpose: it ran 21 to 29 s, nearly half of the 60 s a spec file may take, and the unsliced
+  -- work is still 8 times the limit below (400 ms for the mixed document). What a smaller document
+  -- can no longer show in time is pinned by counting the ticks (translate_markdown_slice_sites_spec).
   local HEADINGS, SAME = {}, {}
-  for i = 1, 20000 do
+  for i = 1, 10000 do
     HEADINGS[#HEADINGS + 1] = "## Abschnitt " .. i
     HEADINGS[#HEADINGS + 1] = ""
   end
-  for i = 1, 40000 do
+  for i = 1, 20000 do
     SAME[i] = "- the same list item text with more words"
   end
 
@@ -487,13 +491,23 @@ return function(H)
   end
 
   stall_free("mixed", BIG, { "sync engine", "async engine", "cache pass", "cache_only" })
-  stall_free("20 000 headings", HEADINGS, { "async engine", "cache_only" })
+  stall_free("10 000 headings", HEADINGS, { "async engine", "cache_only" })
   -- (with a progress callback: every finished block is rendered for it)
-  stall_free("one text 40 000 times", SAME, { "cache pass" }, { on_unit = function() end })
+  stall_free(
+    "one text 20 000 times",
+    SAME,
+    { "async engine", "cache pass" },
+    { on_unit = function() end }
+  )
 
   -- a small document is not sliced ------------------------------------------------------------------
   do
-    local small = build(1900)
+    local small = build(1000)
+    local bytes = 0
+    for _, l in ipairs(small) do
+      bytes = bytes + #l
+    end
+    H.ok(bytes < 64 * 1024, "the document is small by bytes, too: " .. bytes)
     local calls_sync = false
     local returned = false
     local got
@@ -519,7 +533,7 @@ return function(H)
       return got ~= nil and got_at_probe ~= nil
     end, 1)
     H.ok(got and got.ok, "a small document is translated")
-    H.eq(got.info.slices, 0, "under 2 000 lines the work is not sliced")
+    H.eq(got.info.slices, 0, "under 2 000 lines and 64 kB the work is not sliced")
     H.eq(
       got_at_probe,
       true,
@@ -530,7 +544,7 @@ return function(H)
   -- cancel and stale between two slices: the work really stops -----------------------------------------
 
   ---Count the calls of `mask.mask`, the one step that runs once per unit of the document (a phase
-  ---that ends with the call being reported: 40 000 of them are seconds of CPU).
+  ---that ends with the call being reported: tens of thousands of them are seconds of CPU).
   ---@return fun(): integer count, fun() restore
   local function count_mask()
     local mask = require("language.translate.markdown.mask")
@@ -560,12 +574,12 @@ return function(H)
       r.calls = r.calls + 1
       r.ok, r.res, r.info = ok, res, info
     end)
-    -- (in the middle of the mask phase: 40 000 units are far more than a few slices)
+    -- (in the middle of the mask phase: the units of a big document are far more than a few slices)
     vim.wait(20000, function()
       return masked() >= 50
     end, 1)
     H.ok(masked() >= 50, "the mask phase is under way")
-    H.ok(masked() < 20000, "and far from done: " .. masked())
+    H.ok(masked() < N_UNITS / 2, "and far from done: " .. masked())
     H.eq(r.calls, 0, "the document is still being worked on")
     handle.cancel()
     local at_cancel = masked()
@@ -619,7 +633,7 @@ return function(H)
     H.eq(r.calls, 1, "a stale token ends the work between two slices, reported once")
     H.eq(r.ok, false)
     H.eq(r.res, "stale")
-    H.ok(at_stale < 20000, "stopped in the middle of the mask phase: " .. at_stale)
+    H.ok(at_stale < N_UNITS / 2, "stopped in the middle of the mask phase: " .. at_stale)
     H.eq(masked(), at_stale, "the abandoned work did not go on: not a single unit more was masked")
     H.eq(#p.calls, 0, "without asking the engine")
   end
