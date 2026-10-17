@@ -508,21 +508,46 @@ return function(H)
     end)
     returned = true
     H.falsy(got, "never before translate_markdown has returned")
-    -- one turn of the main loop: no timer in between
-    local turned = false
+    -- One turn of the main loop: this probe is queued behind the one that starts the work, so a
+    -- document that is worked on in the first slice has called back by the time it runs. A work
+    -- that waits for a timer in between (a slice that was given away) would not have.
+    local got_at_probe
     vim.schedule(function()
-      turned = true
+      got_at_probe = got ~= nil
     end)
     vim.wait(2000, function()
-      return got ~= nil
+      return got ~= nil and got_at_probe ~= nil
     end, 1)
     H.ok(got and got.ok, "a small document is translated")
     H.eq(got.info.slices, 0, "under 2 000 lines the work is not sliced")
-    H.ok(turned or got ~= nil)
+    H.eq(
+      got_at_probe,
+      true,
+      "a small document calls back in the same turn of the loop, no timer in between"
+    )
   end
 
-  -- cancel and stale between two slices ---------------------------------------------------------------
+  -- cancel and stale between two slices: the work really stops -----------------------------------------
+
+  ---Count the calls of `mask.mask`, the one step that runs once per unit of the document (a phase
+  ---that ends with the call being reported: 40 000 of them are seconds of CPU).
+  ---@return fun(): integer count, fun() restore
+  local function count_mask()
+    local mask = require("language.translate.markdown.mask")
+    local orig, n = mask.mask, 0
+    mask.mask = function(...)
+      n = n + 1
+      return orig(...)
+    end
+    return function()
+      return n
+    end, function()
+      mask.mask = orig
+    end
+  end
+
   do
+    local masked, restore = count_mask()
     local p = fake(scramble, { delay_ms = 0 })
     local r = { calls = 0 }
     local handle = md.translate_markdown(BIG, {
@@ -535,22 +560,29 @@ return function(H)
       r.calls = r.calls + 1
       r.ok, r.res, r.info = ok, res, info
     end)
-    vim.wait(25, function()
-      return r.calls > 0
+    -- (in the middle of the mask phase: 40 000 units are far more than a few slices)
+    vim.wait(20000, function()
+      return masked() >= 50
     end, 1)
+    H.ok(masked() >= 50, "the mask phase is under way")
+    H.ok(masked() < 20000, "and far from done: " .. masked())
     H.eq(r.calls, 0, "the document is still being worked on")
     handle.cancel()
+    local at_cancel = masked()
     H.eq(r.calls, 1, "cancel() reports at once")
     H.eq(r.ok, false)
     H.eq(r.res, "cancelled")
-    vim.wait(1500, function()
+    vim.wait(400, function()
       return false
     end, 10)
+    restore()
     H.eq(r.calls, 1, "and never again")
-    H.eq(#p.calls, 0, "the abandoned work did not go on to ask the engine")
+    H.eq(masked(), at_cancel, "the abandoned work did not go on: not a single unit more was masked")
+    H.eq(#p.calls, 0, "and did not go on to ask the engine")
   end
 
   do
+    local masked, restore = count_mask()
     local p = fake(scramble, { delay_ms = 0 })
     local gen = 1
     local r = { calls = 0 }
@@ -570,21 +602,59 @@ return function(H)
       r.calls = r.calls + 1
       r.ok, r.res, r.info = ok, res, info
     end)
-    vim.wait(25, function()
-      return r.calls > 0
+    vim.wait(20000, function()
+      return masked() >= 50
     end, 1)
+    H.ok(masked() >= 50, "the mask phase is under way")
     H.eq(r.calls, 0, "still working")
     gen = 2
     vim.wait(1500, function()
       return r.calls > 0
     end, 5)
-    vim.wait(100, function()
+    local at_stale = masked()
+    vim.wait(400, function()
       return false
     end, 10)
+    restore()
     H.eq(r.calls, 1, "a stale token ends the work between two slices, reported once")
     H.eq(r.ok, false)
     H.eq(r.res, "stale")
+    H.ok(at_stale < 20000, "stopped in the middle of the mask phase: " .. at_stale)
+    H.eq(masked(), at_stale, "the abandoned work did not go on: not a single unit more was masked")
     H.eq(#p.calls, 0, "without asking the engine")
+  end
+
+  -- an engine that fails for good, answered while pump() is given away -------------------------------
+  -- (3 failures in a row end the rest of the requests: `pending` is emptied in the middle of a
+  -- yield of the pump. A unit that could not be translated is never an error of the call.)
+  for _, concurrency in ipairs({ 2, 3 }) do
+    local doc = {}
+    for i = 1, 40 do
+      doc[#doc + 1] = "Paragraph number " .. i .. " has some words in it"
+      doc[#doc + 1] = ""
+    end
+    local sent = 0
+    local failing = fake(scramble, {
+      on_request = function(_, cb)
+        sent = sent + 1
+        vim.schedule(function()
+          cb(false, "HTTP 401")
+        end)
+        return { cancel = function() end }
+      end,
+    })
+    local r = run(doc, {
+      provider = failing,
+      max_units = 1,
+      concurrency = concurrency,
+      slice_ms = 0,
+    })
+    local what = "a failing engine, concurrency " .. concurrency
+    H.eq(r.calls, 1, what .. ": cb exactly once")
+    H.ok(r.ok, what .. ": the call does not fail: " .. tostring(r.ok or r.res))
+    deq(r.res, doc, what .. ": every unit stays the original")
+    H.eq(r.info.failed, 40, what .. ": all units are counted as failed")
+    H.ok(sent >= 3 and sent < 40, what .. ": the rest was given up after repeated failures")
   end
 
   -- errors ---------------------------------------------------------------------------------------------
