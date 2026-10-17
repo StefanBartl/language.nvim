@@ -256,7 +256,9 @@ line count unchanged, so a whole README no longer overruns the Windows
 command-line limit (~32 700 characters). Budget per block, in bytes (DeepL:
 bytes + 8 per line for the JSON quoting): google 15 000 (the text is a POST
 body on stdin), shell and custom 6000 on Windows / 20 000 elsewhere, deepl
-50 lines / 60 000. DeepL sends key and body on stdin (never argv).
+50 lines / 60 000. DeepL sends key and body on stdin (never argv); shell
+hands the block to `trans` on stdin too, which translates it line by line
+(one request and one `timeout_ms` per non-empty line).
 `translate.max_chars` (default 0 = engine default) can only lower the budget;
 `translate.custom.max_bytes` replaces the custom engine's budget (for a `cmd`
 that does not put the text into argv).
