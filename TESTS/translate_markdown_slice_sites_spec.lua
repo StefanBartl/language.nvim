@@ -152,6 +152,61 @@ return function(H)
     )
   end
 
+  -- the cost follows the units: a table under both old limits is not small ---------------------------------
+  do
+    ---@param rows integer
+    ---@param cols integer
+    ---@return string[]
+    local function table_doc(rows, cols)
+      local out = { "# Tabelle", "" }
+      local head, rule = {}, {}
+      for c = 1, cols do
+        head[c], rule[c] = "K" .. c, "---"
+      end
+      out[#out + 1] = "| " .. table.concat(head, " | ") .. " |"
+      out[#out + 1] = "| " .. table.concat(rule, " | ") .. " |"
+      for r = 1, rows do
+        local cells = {}
+        for c = 1, cols do
+          cells[c] = "z" .. ((r * 7 + c) % 100)
+        end
+        out[#out + 1] = "| " .. table.concat(cells, " | ") .. " |"
+      end
+      return out
+    end
+
+    local big = table_doc(1100, 8)
+    local bytes = 0
+    for _, l in ipairs(big) do
+      bytes = bytes + #l
+    end
+    H.ok(#big < 2000 and bytes < 64 * 1024, "the table is under both old limits: " .. bytes)
+    local n_units = #segment.segment(big).units
+    H.ok(n_units >= 8000, "and holds a unit for every cell: " .. n_units)
+    H.eq(budget_of(big), "default", "8 800 cells are sliced, whatever the lines and bytes say")
+    local r = run(big, { provider = fake(scramble, { sync = true }) })
+    H.ok(r.ok and r.info.slices > 0, "and the work is really handed back")
+    -- a small table is still one piece of work
+    H.eq(budget_of(table_doc(100, 4)), math.huge, "a table of 400 cells is not sliced")
+    -- the pipes count wherever they stand: the estimate is an upper bound, cheap to take
+    local piped = {}
+    for i = 1, 400 do
+      piped[i] = "a | b | c | d | e | f | g | h | i | j | k | l | m | n | o | p"
+    end
+    H.eq(budget_of(piped), "default", "6 400 pipes in 400 lines are sliced")
+    -- a line is a unit, too: 1 500 list items (under 2 000 lines and 64 kB) cost about 40 ms
+    local items = {}
+    for i = 1, 1500 do
+      items[i] = ("- Punkt %04d mit Text daran"):format(i)
+    end
+    H.eq(budget_of(items), "default", "1 500 list items are sliced")
+    H.eq(
+      budget_of(vim.list_slice(items, 1, 800)),
+      math.huge,
+      "800 list items are one piece of work"
+    )
+  end
+
   -- the ticks of the pipeline, counted between markers ------------------------------------------------
 
   local DOC = {
@@ -459,6 +514,148 @@ return function(H)
     )
     H.eq(r.res[1], scramble(doc[1]), "and the result is the translation")
     H.eq(r.res[N], scramble(doc[N]))
+  end
+
+  -- the bound of an answer is the answer, not its entries: 40 entries of 30 units are 1 200 -----------
+
+  ---Translate `lines` and say how many calls of `on_unit` came in one turn of the event loop at
+  ---most (each call burns 0.3 ms; a slice is 0.2 ms, so a booking that gives way yields after each).
+  ---@param lines string[]
+  ---@param opts table
+  ---@return table r, integer longest
+  local function longest_turn(lines, opts)
+    local turn, longest, in_turn, seen = 0, 0, 0, -1
+    local check = assert(uv.new_check())
+    check:start(function()
+      turn = turn + 1
+    end)
+    local r = run(
+      lines,
+      vim.tbl_extend("force", {
+        slice_ms = 0.2,
+        on_unit = function()
+          spin(0.3)
+          if turn ~= seen then
+            seen, in_turn = turn, 0
+          end
+          in_turn = in_turn + 1
+          longest = math.max(longest, in_turn)
+        end,
+      }, opts)
+    )
+    check:stop()
+    check:close()
+    return r, longest
+  end
+
+  do
+    local KINDS, REPEAT = 40, 30
+    local doc = {}
+    for _ = 1, REPEAT do
+      for k = 1, KINDS do
+        doc[#doc + 1] = ("- entry number %d with a few words behind it"):format(k)
+      end
+    end
+    local r, longest = longest_turn(doc, {
+      provider = fake(scramble, { delay_ms = 0 }),
+      max_units = KINDS,
+    })
+    H.ok(r.ok, "40 texts 30 times each: " .. tostring(r.res))
+    H.eq(r.calls, 1, "cb exactly once")
+    H.eq(r.info.requests, 1, "one answer holds all 40 entries")
+    H.eq(#r.units, KINDS * REPEAT, "every item was reported before the call ended")
+    H.ok(
+      longest <= 256,
+      ("one answer of 1 200 units (40 entries of 30, each under the per-entry bound) is booked in slices: %d reports in one turn"):format(
+        longest
+      )
+    )
+    local plain = run(doc, {
+      provider = fake(scramble, { sync = true }),
+      max_units = KINDS,
+      slice_ms = 1e9,
+    })
+    H.ok(vim.deep_equal(r.res, plain.res), "and the result is the one of the unsliced run")
+  end
+
+  -- an error in the booking of an answer ends the call -------------------------------------------------
+
+  do
+    local doc = { "Ein Absatz mit Worten.", "", "- Punkt eins" }
+    for _, slice_ms in ipairs({ 1e9, 0 }) do
+      for _, async in ipairs({ false, true }) do
+        local what = ("slice_ms %s, %s engine"):format(
+          tostring(slice_ms),
+          async and "async" or "sync"
+        )
+        local armed = false
+        -- (arms itself with the answer: the first thing that unmasks after it is the booking)
+        local provider = {
+          name = "chaos",
+          available = function()
+            return true
+          end,
+          translate = function(lines, _, _, _, cb)
+            local out = {}
+            for i, l in ipairs(lines) do
+              out[i] = scramble(l)
+            end
+            local function reply()
+              armed = true
+              cb(true, out)
+            end
+            if async then
+              vim.defer_fn(reply, 0)
+            else
+              reply()
+            end
+            return { cancel = function() end }
+          end,
+        }
+        local real_unmask = mask.unmask
+        local calls, ok, res = 0, nil, nil
+        patched(mask, {
+          unmask = function(...)
+            if armed then
+              -- once: the other entry of the answer is not booked then, and a call that goes on as
+              -- if nothing had happened would be a hang or a silent loss
+              armed = false
+              error("boom in the booking", 0)
+            end
+            return real_unmask(...)
+          end,
+        }, function()
+          md.translate_markdown(doc, {
+            target = "EN",
+            cache = false,
+            cfg = { markdown = { disk_cache = false } },
+            provider = provider,
+            slice_ms = slice_ms,
+            on_unit = function() end,
+          }, function(o, r)
+            calls = calls + 1
+            ok, res = o, r
+          end)
+          vim.wait(1500, function()
+            return calls > 0
+          end, 1)
+          -- a second call would arrive within a few turns
+          vim.wait(30, function()
+            return calls > 1
+          end, 1)
+        end)
+        H.eq(
+          calls,
+          1,
+          what .. ": cb exactly once (a throw in the booking must not leave the call hanging)"
+        )
+        H.eq(ok, false, what .. ": the call failed")
+        H.ok(
+          type(res) == "string" and res:find("^translate_markdown: ") and res:find("boom", 1, true),
+          what .. ": with the error contract of translate_markdown: " .. tostring(res)
+        )
+      end
+    end
   end
 
   -- the blocks that waited for the anchor map are reported in slices, too

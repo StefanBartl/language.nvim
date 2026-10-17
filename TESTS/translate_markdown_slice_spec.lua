@@ -500,6 +500,46 @@ return function(H)
     { on_unit = function() end }
   )
 
+  -- a table under 2 000 lines and 64 kB is not a small document: a cell is a unit (8 800 of them) -------
+  do
+    local TABLE = { "| " .. ("K | "):rep(7) .. "K |", "| " .. ("--- | "):rep(7) .. "--- |" }
+    for r = 1, 1100 do
+      local cells = {}
+      for c = 1, 8 do
+        cells[c] = "z" .. ((r * 7 + c) % 100)
+      end
+      TABLE[#TABLE + 1] = "| " .. table.concat(cells, " | ") .. " |"
+    end
+    local bytes = 0
+    for _, l in ipairs(TABLE) do
+      bytes = bytes + #l
+    end
+    H.ok(#TABLE < 2000 and bytes < 64 * 1024, "under both limits of the lines and the bytes")
+    local base = summary(TABLE, { provider = fake(scramble, { sync = true }), slice_ms = 1e9 })
+    H.ok(base.ok, "the unsliced reference run")
+    for _, mode in ipairs({ "sync engine", "async engine" }) do
+      local label = "a table of 8 800 cells, " .. mode
+      local r, worst = best_of_two(TABLE, function()
+        return {
+          target = "EN",
+          cache = false,
+          cfg = cfg,
+          provider = mode == "sync engine" and fake(scramble, { sync = true })
+            or fake(scramble, { delay_ms = 0 }),
+        }
+      end)
+      H.ok(r.ok, label .. ": " .. tostring(r.res))
+      H.falsy(r.sync, label .. ": cb never runs before translate_markdown has returned")
+      H.eq(r.calls, 1, label .. ": cb exactly once")
+      H.ok(r.info.slices > 0, label .. ": the work was handed back " .. r.info.slices .. " times")
+      H.ok(
+        worst < LIMIT_MS,
+        ("%s: the event loop was blocked for %.1f ms at a time"):format(label, worst)
+      )
+      deq(r.res, base.res, label .. ": the unsliced result")
+    end
+  end
+
   -- a small document is not sliced ------------------------------------------------------------------
   do
     local small = build(1000)
