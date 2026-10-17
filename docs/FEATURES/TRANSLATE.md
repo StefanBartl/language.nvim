@@ -144,11 +144,17 @@ From 2 000 lines or 64 kB on, or as soon as an estimate of the work reaches abou
 slices of about 8 ms (`slice_ms`). The estimate counts lines, bytes and pipes (each one can be a
 table cell, and a cell is a unit of its own): a table of 65 kB with 9 000 cells is about 100 ms, a
 list of 1 999 items about 45 ms, 63 kB of long paragraphs 5 ms (measured; the weights err on the
-high side). What stays below is a few tens of milliseconds and is translated in one go. The work is
+high side). Measured on a development machine: a list item with code and a link costs about 30
+microseconds, a plain item 21, a table cell 6, a byte 0.1 to 0.4; 1 999 lines of 2.5 kB are 1.9 s.
+The three limits are `SLICE_MIN_LINES`, `SLICE_MIN_BYTES` and `SLICE_COST_LIMIT` in
+`lua/language/translate/markdown/init.lua`; the estimate stays under about 30 ms of work, below what
+a keystroke can notice. What stays below is a few tens of milliseconds and is translated in one go. The work is
 a coroutine that gives the control back at line, unit and heading boundaries, and a zero-delay timer continues it,
 so redraws, keys and timers keep running in between (40 000 lines: the loop is never blocked for
 more than a frame or two). The same goes for booking an answer of the engine that stands for
-more than 256 units (all its entries together; many identical units are many reports). The result does not depend on the cuts. The callback contract holds across the
+more than 256 units (all its entries together; many identical units are many reports), and for
+booking the units of entries that failed (an error, an invalid answer, the rest given up after
+repeated failures). The result does not depend on the cuts. The callback contract holds across the
 gaps: `cb` once, never before the call returned, and a cancel or a stale token is noticed before
 every slice, after which nothing is continued and no engine is asked. A single unit (one
 paragraph of 50 000 lines) is not cut: it is one piece of work.
@@ -158,7 +164,10 @@ and the gaps of a slice let answers of the engine arrive in between: a sliced ru
 same blocks in another order than an unsliced one (the content of every event and the result are
 the same). Guaranteed: one event per changed block, `done` counts 1..`total` in the order of the
 calls, a block with a link to a heading is reported after the anchor map exists, and the blocks
-that waited for the map come before the block of the heading that completed it.
+that waited for the map come before the block of the heading that completed it. One exception,
+`cache_only`: a block that links to a heading whose translation is not in the cache is returned
+translated (it counts as `cached`, the heading as `pending`), but it gets no event, because the
+anchor map is never completed.
 
 `info` is the report: `units`, `translated`, `cached`, `failed` (stayed
 original after validation and retry), `skipped` (nothing to translate),
@@ -346,7 +355,13 @@ translate = {
 - **Modules:** `translate/markdown/{init,segment,mask,reflow,anchors,unicode,cache}.lua`
 - **Specs:** `translate_markdown_*_spec.lua` (golden documents in
   `TESTS/fixtures/markdown/`, a property test of the reflow, a fuzz run of the
-  whole pipeline, the real-curl placeholder spec)
+  whole pipeline, the real-curl placeholder spec). The stall spec of the slicer
+  (`translate_markdown_slice_spec.lua`) is half the size of its first version on purpose: that
+  ran 21 to 29 s, nearly half of the 60 s a spec file may take, and the unsliced work of the
+  halved document is still 8 times the limit the spec checks (400 ms for the mixed document).
+  What a smaller document can no longer show in time is pinned by counting the ticks
+  (`translate_markdown_slice_sites_spec.lua`, which also pins that a failed entry is booked in
+  slices like an answer).
 - **Oracle:** `scripts/markdown_oracle.lua` + `scripts/markdown_oracle.mjs`
   translate real Markdown files with a fake engine and compare source and
   result with the previewer's own renderer (comrak, from a sibling

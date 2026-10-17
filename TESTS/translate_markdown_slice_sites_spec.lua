@@ -578,6 +578,138 @@ return function(H)
     H.ok(vim.deep_equal(r.res, plain.res), "and the result is the one of the unsliced run")
   end
 
+  -- the one exception of "one event per changed block": cache_only with an uncached target heading ------------
+  do
+    local doc = { "Siehe [Link](#fazit) hier im Text.", "", "## Fazit" }
+    local cfg = { markdown = { disk_cache = false } }
+    md.cache._reset()
+    local warm = run(
+      { doc[1] },
+      { provider = fake(scramble, { sync = true }), cache = true, cfg = cfg }
+    )
+    H.ok(warm.ok, "warming the cache with the paragraph only")
+    local r = run(doc, {
+      provider = fake(function()
+        error("cache_only asks no engine")
+      end, { sync = true }),
+      cache = true,
+      cache_only = true,
+      cfg = cfg,
+    })
+    H.ok(
+      r.ok and r.info.cached == 1 and r.info.pending == 1,
+      "the paragraph is cached, the heading pending"
+    )
+    H.eq(r.res[1], warm.res[1], "the paragraph is returned as the cache has it")
+    H.eq(#r.units, 0, "but it gets no event: the anchor map is never completed (documented)")
+    md.cache._reset()
+  end
+
+  -- a failure books its units like an answer does: as a whole, in slices ------------------------------------
+
+  ---Translate `lines` with an engine that always fails, `tick` counted (nothing yields: the numbers are
+  ---the same on every machine). Say how many ticks came between the last request and the start of
+  ---the final render: the booking of the failed units plus the content loop of the finalisation.
+  ---@param lines string[]
+  ---@param opts table
+  ---@return table r, integer between
+  local function failing_between(lines, opts)
+    local t, last_request, render_in = 0, 0, nil
+    local real_new, real_render = slice.new, segment.render
+    local failing = fake(scramble, {
+      on_request = function(_, cb)
+        last_request = t
+        cb(false, "the engine is down")
+        return { cancel = function() end }
+      end,
+    })
+    local r
+    md.cache._reset()
+    patched(slice, {
+      new = function(o)
+        local sl = real_new(o)
+        local inner = sl.tick
+        sl.tick = function()
+          t = t + 1
+          return inner()
+        end
+        return sl
+      end,
+    }, function()
+      patched(segment, {
+        render = function(seg, content, first, last, tick)
+          if tick and not render_in then
+            render_in = t
+          end
+          return real_render(seg, content, first, last, tick)
+        end,
+      }, function()
+        md.translate_markdown(
+          lines,
+          vim.tbl_extend("force", {
+            target = "EN",
+            provider = failing,
+            cache = false,
+            cfg = { markdown = { disk_cache = false } },
+            slice_ms = 1e9,
+          }, opts),
+          function(ok, res, info)
+            r = { ok = ok, res = res, info = info }
+          end
+        )
+        vim.wait(10000, function()
+          return r ~= nil
+        end, 1)
+      end)
+    end)
+    H.ok(r and r.ok, "the call does not fail: " .. tostring(r and r.res))
+    return r, (render_in or 0) - last_request
+  end
+
+  do
+    -- one text, 600 times, no engine: the entry fails in one piece (after its retry)
+    local N = 600
+    local doc = {}
+    for i = 1, N do
+      doc[i] = "- the same list item text with more words"
+    end
+    local r, between = failing_between(doc, {})
+    H.eq(r.info.failed, N, "every unit of the failed entry is counted")
+    H.ok(
+      between >= 2 * N,
+      ("the failed units of ONE entry are booked with a tick each (and the finalisation has its own): %d ticks for %d units"):format(
+        between,
+        N
+      )
+    )
+    -- a small failure stays inline: no coroutine of its own for a handful of units
+    local rs, small_between = failing_between({ "- one", "- one", "- one" }, {})
+    H.eq(rs.info.failed, 3)
+    H.ok(
+      small_between < 2 * 3 + 6,
+      ("three failed units cost no booking ticks: %d"):format(small_between)
+    )
+  end
+
+  do
+    -- three failures in a row give up the rest: 30 texts of 30 units, one per request. The units of
+    -- all skipped entries are one booking (and every request is under the bound by itself).
+    local KINDS, REPEAT = 30, 30
+    local doc = {}
+    for _ = 1, REPEAT do
+      for k = 1, KINDS do
+        doc[#doc + 1] = ("- entry number %d with a few words behind it"):format(k)
+      end
+    end
+    local r, between = failing_between(doc, { max_units = 1, concurrency = 1 })
+    H.eq(r.info.failed, KINDS * REPEAT, "every unit is counted as failed")
+    -- (the finalisation ticks once per unit; the 26 entries given up are 780 units on top of that)
+    H.ok(
+      between >= KINDS * REPEAT + 26 * REPEAT,
+      ("the units of the entries given up are booked in slices: %d ticks"):format(between)
+    )
+  end
+
   -- an error in the booking of an answer ends the call -------------------------------------------------
 
   do

@@ -75,6 +75,26 @@ return function(H)
     H.eq(table.concat(log, ","), "x", "stop() = true abandons the computation")
     stop = false
 
+    -- ... and before the FIRST slice, too: a token that tipped before run() never starts the body
+    log = {}
+    local asked = 0
+    local early = slice.new({
+      budget_ms = 0,
+      stop = function()
+        asked = asked + 1
+        return true
+      end,
+      on_error = function(err)
+        log[#log + 1] = "error:" .. tostring(err)
+      end,
+    })
+    early.run(function()
+      log[#log + 1] = "started"
+    end)
+    H.eq(asked, 1, "stop() is asked before the first slice")
+    H.eq(table.concat(log, ","), "", "a stop before the first slice never starts the body")
+    H.eq(early.yields(), 0)
+
     -- an error comes out through on_error, from the first and from a later slice
     log = {}
     sl.run(function()
@@ -423,9 +443,9 @@ return function(H)
 
   -- 10 000 headings (the anchor map has to look at each of them) and one text 20 000 times
   -- (one cache entry stands for 20 000 units). Half the size of the first version of this spec on
-  -- purpose: it ran 21 to 29 s, nearly half of the 60 s a spec file may take, and the unsliced
-  -- work is still 8 times the limit below (400 ms for the mixed document). What a smaller document
-  -- can no longer show in time is pinned by counting the ticks (translate_markdown_slice_sites_spec).
+  -- purpose, so the file stays well inside the time a spec file may take (figures: docs/FEATURES/
+  -- TRANSLATE.md, "Specs"). What a smaller document can no longer show in time is pinned by
+  -- counting the ticks (translate_markdown_slice_sites_spec).
   local HEADINGS, SAME = {}, {}
   for i = 1, 10000 do
     HEADINGS[#HEADINGS + 1] = "## Abschnitt " .. i

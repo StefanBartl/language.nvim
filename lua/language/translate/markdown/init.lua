@@ -31,8 +31,9 @@
 --- Every callback runs on the main loop, never before `translate_markdown`
 --- has returned. `cb` runs exactly once. `on_unit` is called once per changed block, `done` counts
 --- 1..total in the order of the calls, a block that points at a heading is reported after the
---- anchor map exists, and the blocks that waited for the map come before the block of the heading
---- that completed it; the order of the other blocks is the order in which their work finished,
+--- anchor map exists (not with `cache_only`: a block that links to a heading that is not in the
+--- cache is returned translated, but gets no event), and the blocks that waited for the map come
+--- before the block of the heading that completed it; the order of the other blocks is the order in which their work finished,
 --- which can differ between a sliced and an unsliced run (the gaps of a slice let answers of the
 --- engine arrive in between), and so can the order of `info.errors`.
 
@@ -53,15 +54,11 @@ M.cache = cache
 local DEFAULT_MAX_UNITS = 40
 ---A document is translated in one go when its estimated work stays under these three limits: fewer
 ---lines, fewer bytes and a smaller estimated cost than these. Neither lines nor bytes tell the
----work: it follows the units. A table cell is a unit of its own, and a table of 65 kB can hold
----9 000 of them (about 100 ms, where 63 kB of ordinary text in long paragraphs are 5 to 15 ms); a
----list item costs 20 to 30 microseconds, and 1 999 lines of 2.5 kB are 1.9 s. So the estimate
----weighs all three: per line, per byte and per pipe (each one can be a cell: an upper bound that is
----cheap to take, a plain `find`). The weights are fitted to measurements on a development machine
----(list items with code and a link 30 us a line, plain items 21, a table cell 6, a byte 0.1 to
----0.4) and meant to be too high rather than too low; what stays under the limit is about 30 ms of
----work, under what a keystroke can notice, and the callback of such a document arrives in the first
----turn of the loop.
+---work: it follows the units (a table cell is a unit of its own), so the estimate weighs lines,
+---bytes and pipes (each one can be a cell: an upper bound that is cheap to take, a plain `find`).
+---The weights err on the high side; what stays under the limit is about 30 ms of work, and the
+---callback of such a document arrives in the first turn of the loop. The measurements the weights
+---are fitted to are in docs/FEATURES/TRANSLATE.md ("Big documents").
 local SLICE_MIN_LINES = 2000
 local SLICE_MIN_BYTES = 64 * 1024
 local SLICE_COST_LIMIT = 30000
@@ -858,7 +855,10 @@ function M.translate_markdown(lines, opts, cb)
             deferred = {}
             for _, d in ipairs(list) do
               emit(d)
-              -- (a map that is already there calls this from an answer: no coroutine, no yield)
+              -- (`with_map` runs this inside the slicer's coroutine, where `tick` may yield. If it
+              -- ever ran from the callback of an answer instead, the engine's `translate` could
+              -- still be on the stack: a synchronous engine answers inside the run coroutine, and
+              -- a yield there would suspend the pump in the middle of `pcall(provider.translate)`.)
               tick()
             end
             if ready then
@@ -908,30 +908,33 @@ function M.translate_markdown(lines, opts, cb)
       end
     end
 
-    ---The valid entries of ONE answer of the engine are booked. An answer arrives in a plain
-    ---callback: the units of all its entries together (each one may render a block for `on_unit`)
-    ---are bounded as a whole, not per entry. Up to SLICE_ANSWER_UNITS they are booked on the spot;
-    ---more than that is a coroutine of its own, and the call is not over before it is (see
-    ---`release`). Other answers may be booked in the gaps.
-    ---@param answered table[]  -- the resolved entries (`resolve_entry` has run for each)
-    local function book_answer(answered)
+    ---The entries of ONE event of the engine are booked: the valid entries of an answer, or the
+    ---entries that failed (an error, an invalid or short answer, the rest given up after repeated
+    ---failures). It arrives in a plain callback: the units of all its entries together (each one
+    ---may render a block for `on_unit`) are bounded as a whole, not per entry. Up to
+    ---SLICE_ANSWER_UNITS they are booked on the spot; more than that is a coroutine of its own,
+    ---and the call is not over before it is (see `release`). Other answers may be booked in the
+    ---gaps.
+    ---@param settled table[]  -- the settled entries (`resolve_entry` / `fail_entries` has run for each)
+    ---@param ok boolean       -- translated, or failed
+    local function book_units(settled, ok)
       local count = 0
-      for _, e in ipairs(answered) do
+      for _, e in ipairs(settled) do
         count = count + #e.units
       end
       if count <= SLICE_ANSWER_UNITS then
-        for _, e in ipairs(answered) do
+        for _, e in ipairs(settled) do
           for _, id in ipairs(e.units) do
-            unit_done(id, true, false)
+            unit_done(id, ok, false)
           end
         end
         return
       end
       resolving = resolving + 1
       sl.run(function()
-        for _, e in ipairs(answered) do
+        for _, e in ipairs(settled) do
           for _, id in ipairs(e.units) do
-            unit_done(id, true, false)
+            unit_done(id, ok, false)
             tick()
           end
         end
@@ -941,20 +944,20 @@ function M.translate_markdown(lines, opts, cb)
 
     local remaining = 0
 
-    ---@param entry table
+    ---The entries could not be translated: they are counted, the error is kept and their units
+    ---are booked (as a whole, see `book_units`).
+    ---@param settled table[]
     ---@param err string
-    local function fail_entry(entry, err)
-      entry.done = true
-      remaining = remaining - 1
-      if #info.errors < MAX_ERRORS then
-        info.errors[#info.errors + 1] = err
+    local function fail_entries(settled, err)
+      for _, entry in ipairs(settled) do
+        entry.done = true
+        remaining = remaining - 1
+        if #info.errors < MAX_ERRORS then
+          info.errors[#info.errors + 1] = err
+        end
+        info.failed = info.failed + #entry.units
       end
-      for _ = 1, #entry.units do
-        info.failed = info.failed + 1
-      end
-      for _, id in ipairs(entry.units) do
-        unit_done(id, false, false)
-      end
+      book_units(settled, false)
     end
 
     ---Validate an answer for `entry`.
@@ -1123,11 +1126,13 @@ function M.translate_markdown(lines, opts, cb)
     local function abort_rest(err)
       local list = pending
       pending = {}
+      local skipped = {}
       for _, req in ipairs(list) do
         for _, e in ipairs(req.entries) do
-          fail_entry(e, "skipped after repeated failures: " .. err)
+          skipped[#skipped + 1] = e
         end
       end
+      fail_entries(skipped, "skipped after repeated failures: " .. err)
     end
 
     ---@param req table
@@ -1145,9 +1150,7 @@ function M.translate_markdown(lines, opts, cb)
           info.retries = info.retries + n
           table.insert(pending, 1, { entries = req.entries, attempt = 2 })
         else
-          for _, e in ipairs(req.entries) do
-            fail_entry(e, err)
-          end
+          fail_entries(req.entries, err)
           if consec_fail >= ABORT_AFTER then
             abort_rest(err)
           end
@@ -1171,9 +1174,7 @@ function M.translate_markdown(lines, opts, cb)
           end
           return
         else
-          for _, e in ipairs(req.entries) do
-            fail_entry(e, ("the engine returned %d lines for %d units"):format(m, n))
-          end
+          fail_entries(req.entries, ("the engine returned %d lines for %d units"):format(m, n))
           return
         end
       end
@@ -1197,15 +1198,13 @@ function M.translate_markdown(lines, opts, cb)
           first_err = first_err or err
         end
       end
-      book_answer(answered)
+      book_units(answered, true)
       if #invalid > 0 then
         if req.attempt == 1 then
           info.retries = info.retries + #invalid
           table.insert(pending, 1, { entries = invalid, attempt = 2 })
         else
-          for _, e in ipairs(invalid) do
-            fail_entry(e, first_err or "invalid translation")
-          end
+          fail_entries(invalid, first_err or "invalid translation")
         end
       end
     end
