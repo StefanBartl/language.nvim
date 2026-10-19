@@ -300,6 +300,31 @@ return function(H)
     H.ok(literal(seg, 4), "an empty item has no content for an indented line to continue")
   end
 
+  -- found with scripts/markdown_fuzz.lua against the previewer's renderer ---------------------------
+  do
+    local seg = seg_of({ "1.     code" })
+    H.ok(
+      literal(seg, 1),
+      "five columns behind the marker: the item starts with an indented code block"
+    )
+    H.falsy(
+      literal(seg_of({ "1.    text" }), 1),
+      "four columns behind it are still the item's text"
+    )
+    H.ok(literal(seg_of({ "-     code" }), 1), "the same for a bullet")
+    seg = seg_of({ "- item", ">     code" })
+    H.ok(
+      literal(seg, 2),
+      "a quote that starts behind a list item judges its first line on its own: indented code"
+    )
+    H.eq(
+      #seg_of({ "> 1. <div>", string.char(9) .. "2) two" }).units,
+      0,
+      "an HTML block behind an item marker is literal, and so is the tab-indented line after it"
+    )
+    H.eq(#seg_of({ "- <div>", "  two words here" }).units, 0, "its next lines too")
+  end
+
   -- a hard break inside a code span is part of the code ------------------------------------------
   do
     local seg = seg_of({ "Text `a\\", "b` mehr" })

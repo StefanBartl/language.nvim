@@ -934,6 +934,22 @@ function M.segment(lines, tick)
       if ind and item_fits(iw) then
         close_para()
         open_item(iw, iw + #marker + (#sp > 4 and 1 or #sp))
+        -- Five columns or more behind the marker: the item starts with an indented code block, one column of the
+        -- white space is the item's, the rest is the code (`1.     code`).
+        do
+          local col = iw + #marker
+          local start = col
+          for ch in sp:gmatch(".") do
+            col = ch == "\t" and col + 4 - col % 4 or col + 1
+          end
+          if col - start >= 5 then
+            literal(L)
+            item_cind = iw + #marker + 1
+            in_list = true
+            list_q = qdepth
+            break
+          end
+        end
         local task
         task, body = body:match("^(%[[ xX]%][ \t]+)(.*)$")
         if not task then
@@ -952,6 +968,18 @@ function M.segment(lines, tick)
           literal(L)
           break
         end
+        -- An HTML block that opens right behind the marker (`- <div>`) is literal, and so are its next lines.
+        local item_html = task == "" and html_start(body, false) or nil
+        if item_html then
+          literal(L)
+          in_list = true
+          list_q = qdepth
+          item_cind = iw + #marker + (#sp > 4 and 1 or #sp)
+          if item_html.kind == "blank" or not html_ends(item_html, body:sub(2)) then
+            html = item_html
+          end
+          break
+        end
         in_list = true
         list_q = qdepth
         item_cind = iw + #marker + (#sp > 4 and 1 or #sp)
@@ -961,13 +989,12 @@ function M.segment(lines, tick)
 
       -- Plain text.
       local lead, text = rest:match("^([ \t]*)(.*)$")
+      if para and qdepth > para.qdepth then
+        -- a quote starts here: its first line is judged on its own (it may be indented code), not as a continuation
+        close_para()
+      end
       if para then
-        if qdepth > para.qdepth then
-          close_para()
-          open_para(L, "quote", qpfx .. lead, text, qdepth)
-        else
-          para.lines[#para.lines + 1] = make_line(L, qpfx .. lead, text)
-        end
+        para.lines[#para.lines + 1] = make_line(L, qpfx .. lead, text)
         break
       end
       local lw = indent_width(lead)
