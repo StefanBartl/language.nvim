@@ -502,4 +502,38 @@ return function(H)
     H.eq(units("<a <b>"), 1, "a `<` inside the tag")
     H.eq(units("<1>"), 1, "a tag name starts with a letter")
   end
+
+  -- An HTML block behind a list marker ends with the item ------------------------------------
+  do
+    local function units(lines)
+      return #seg_of(lines).units
+    end
+    H.eq(units({ "- <div>", "text" }), 1, "a line that is not indented to the item is a paragraph")
+    H.eq(units({ "- <div>", "- item" }), 1, "the next item is an item, not part of the block")
+    H.eq(
+      units({ "- <div>", "  inner", "text" }),
+      1,
+      "an indented line stays in the block, the next one does not"
+    )
+    H.eq(units({ "- <div>", "  inner", "", "para" }), 1, "a blank line ends the block as before")
+    H.eq(units({ "- <div>", "  inner" }), 0, "an indented line is part of the block")
+  end
+
+  -- The column of an item inside a quote counts from the start of the line -------------------
+  do
+    local tab = string.char(9)
+    local function units(line)
+      return #seg_of({ line }).units
+    end
+    H.eq(
+      units("> -" .. tab .. "  code"),
+      1,
+      "in a quote the tab stop is two columns further: 3 columns, text"
+    )
+    H.eq(
+      units("-" .. tab .. "  code"),
+      0,
+      "at the start of the line the same gap is 5 columns: code"
+    )
+  end
 end

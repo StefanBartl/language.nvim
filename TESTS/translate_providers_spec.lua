@@ -310,6 +310,17 @@ return function(H)
     H.falsy(arg:find("yes", 1, true), ("argv[%d] carries no text"):format(i))
   end
   H.eq(calls[1].opts.timeout_ms, 2000, "the timeout covers one request per non-empty line")
+  H.eq(shell._process_timeout(8000, 3), 24000, "a few requests get the budget of each")
+  H.eq(
+    shell._process_timeout(8000, 5000),
+    shell.MAX_PROCESS_MS,
+    "thousands of requests are bounded as a whole"
+  )
+  H.eq(
+    shell._process_timeout(900000, 4),
+    900000,
+    "one request keeps its own budget even above the bound"
+  )
 
   H.eq(
     shell.limits.max_bytes,

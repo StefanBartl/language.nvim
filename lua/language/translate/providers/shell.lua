@@ -35,6 +35,20 @@ function M.available(_cfg)
   return vim.fn.executable("trans") == 1
 end
 
+---@internal
+---The longest a `trans` process may run, however many requests it has: the budget of one request times their number
+---is only the honest limit for a block of a few lines, and a block of thousands of short ones would otherwise wait for
+---hours on a process that has hung. A single request keeps its own budget even above this.
+M.MAX_PROCESS_MS = 10 * 60 * 1000
+
+---@internal
+---@param per_request integer  -- `translate.timeout_ms`
+---@param requests integer
+---@return integer
+function M._process_timeout(per_request, requests)
+  return math.max(per_request, math.min(per_request * requests, M.MAX_PROCESS_MS))
+end
+
 ---@param lines string[]
 ---@param target string
 ---@param source string|nil
@@ -64,7 +78,7 @@ function M.translate(lines, target, source, cfg, cb)
 
   return job.run(argv, {
     stdin = text .. "\n",
-    timeout_ms = (cfg.timeout_ms or 8000) * requests,
+    timeout_ms = M._process_timeout(cfg.timeout_ms or 8000, requests),
     on_done = function(ok, out, err)
       if not ok then
         cb(false, err ~= "" and err or "trans request failed")

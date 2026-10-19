@@ -644,6 +644,15 @@ function M.segment(lines, tick)
         end
         break
       end
+      if
+        html
+        and html.cind
+        and html.cq == 0
+        and not is_blank(line)
+        and indent_width(line) < html.cind
+      then
+        html = nil
+      end
       if html then
         if html.kind == "blank" and is_blank(line) then
           html = nil
@@ -951,7 +960,12 @@ function M.segment(lines, tick)
         -- Five columns or more behind the marker: the item starts with an indented code block, one column of the
         -- white space is the item's, the rest is the code (`1.     code`).
         do
-          local col = iw + #marker
+          -- the column counts from the start of the LINE: the quote prefix is part of it, and a tab goes to the next
+          -- multiple of four from where it stands
+          local col = 0
+          for ch in (qpfx .. ind .. marker):gmatch(".") do
+            col = ch == "\t" and col + 4 - col % 4 or col + 1
+          end
           local start = col
           for ch in sp:gmatch(".") do
             col = ch == "\t" and col + 4 - col % 4 or col + 1
@@ -991,6 +1005,8 @@ function M.segment(lines, tick)
           item_cind = iw + #marker + (#sp > 4 and 1 or #sp)
           if item_html.kind == "blank" or not html_ends(item_html, body:sub(2)) then
             html = item_html
+            -- the block ends with the item: a line that is not indented to its content is not part of it
+            html.cind, html.cq = item_cind, qdepth
           end
           break
         end
