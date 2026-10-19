@@ -370,7 +370,7 @@ translate = {
   segmenter (`node scripts/markdown_oracle.mjs <dir>` exits 1 on a difference).
   `scripts/markdown_fuzz.lua <dir> [count] [seed]` writes random documents (fragments under random
   quote / list / tab containers) and a `list.txt` for the oracle: `markdown_oracle.lua <pairs> @<dir>/list.txt`.
-  On 1 000 such documents the segmenter differed in 180 of 2 000 runs before the fixes of 2026-10-19, in 64 after;
+  On 1 000 such documents the segmenter differed in 180 of 2 000 runs before the fixes of 2026-10-19, in 53 after the second round;
   the rest are container interactions (HTML blocks and `[ref]:` definitions inside nested quotes and items,
   a table row behind an empty quote) that need a real container stack.
 

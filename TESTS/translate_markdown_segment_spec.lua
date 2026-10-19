@@ -323,6 +323,17 @@ return function(H)
       "an HTML block behind an item marker is literal, and so is the tab-indented line after it"
     )
     H.eq(#seg_of({ "- <div>", "  two words here" }).units, 0, "its next lines too")
+    seg = seg_of({ "- [ref]: /x" })
+    H.ok(literal(seg, 1), "a link reference definition behind a list marker is a definition")
+    seg = seg_of({ "- word word word", "  ===" })
+    H.ok(literal(seg, 2), "the underline of a setext heading inside an item stays as it is")
+    H.eq(#seg.units, 1, "and the text above it is one unit")
+    seg = seg_of({ "> quote text here", "> ===" })
+    H.ok(literal(seg, 2), "the same inside a quote")
+    H.falsy(
+      literal(seg_of({ "- item", "===" }), 1),
+      "an underline that is not indented to the item is no part of it"
+    )
   end
 
   -- a hard break inside a code span is part of the code ------------------------------------------

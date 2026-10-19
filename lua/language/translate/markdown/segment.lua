@@ -755,6 +755,20 @@ function M.segment(lines, tick)
         break
       end
 
+      -- ... also the paragraph of an item (indented to its content) or of a quote: the underline stays as it is
+      -- and the text above it is one unit, so that the translation cannot turn the heading into something else.
+      if
+        para
+        and (para.kind == "item" or para.kind == "quote")
+        and para.qdepth == qdepth
+        and rest:match("^[ \t]*=+[ \t\r]*$")
+        and (para.kind == "quote" or indent_width(rest:match("^[ \t]*")) >= item_cind)
+      then
+        close_para()
+        literal(L)
+        break
+      end
+
       if is_hr(rest) then
         literal(L)
         in_list = false
@@ -979,6 +993,19 @@ function M.segment(lines, tick)
             html = item_html
           end
           break
+        end
+        -- A link reference definition behind the marker (`- [ref]: /x`) is a definition, not item text.
+        do
+          local def_caret, def_label, def_tail = body:match("^%[(%^?)([^%]]+)%]:(.*)$")
+          if task == "" and def_caret == "" and not is_blank(def_tail) then
+            literal(L)
+            in_list = true
+            list_q = qdepth
+            item_cind = iw + #marker + (#sp > 4 and 1 or #sp)
+            seg.defs[require("language.translate.markdown.mask")._norm_label(def_label)] = true
+            seg.refdefs[#seg.refdefs + 1] = L
+            break
+          end
         end
         in_list = true
         list_q = qdepth
