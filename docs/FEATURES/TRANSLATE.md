@@ -557,7 +557,8 @@ animations, masters, fields and numbering stay as they are.
 - **One paragraph is one sentence.** A paragraph cut into runs (bold in the middle of a sentence) is sent as one
   text with a numbered placeholder `{k}` where a run ends, and split at those placeholders again. If an engine
   lost, doubled or reordered one, the whole text of that paragraph goes into its first run and the other runs
-  become empty: no word is lost, the formatting of that one paragraph is.
+  become empty: no word is lost, the formatting of that one paragraph is. Placeholders in the form an engine
+  likes to write them (`{ 1 }`, the fullwidth braces of CJK) are read as `{1}`.
 - **Left alone:** paragraphs without a letter (numbers, dashes), a paragraph that contains a literal `{1}`,
   field instructions. Equal paragraphs are sent once. The engine is called in batches of 40 paragraphs, with the
   usual notice of that engine; nothing leaves the machine otherwise.
@@ -565,7 +566,10 @@ animations, masters, fields and numbering stay as they are.
   an entry leaves the folder (`../x`, `/x`, `C:x`, backslashes), is a link, the archive is ZIP64, has more than
   2 000 entries or unpacks to more than 200 MiB. Then `unzip`, `bsdtar` (`tar` on Windows and macOS; GNU tar
   cannot do ZIP and is skipped) or `7z` unpacks it into a temporary folder, `zip`, `bsdtar` or `7z` packs the
-  copy. No tool, no translation, with a message saying so. Nothing of the file is run, macros included.
+  copy. No tool, no translation, with a message saying so. Nothing of the file is run, macros included. The limits
+  go by the sizes the archive declares. The copy is written beside its name first and moved into place when it is
+  complete, so a failure or a cancel leaves no half archive; a copy of an earlier run under the same name is
+  replaced by the new one. A file name with blanks is written in quotes: `:TranslateOffice "my deck.pptx" de`.
 - **Lua:** `require("language.translate.office").translate_file(path, lang, opts, cb)`;
   `cb(ok, path_of_copy_or_reason)`, `opts.out`, `opts.on_progress(done, total)`.
 - **Not yet:** `.xlsx`, `.odt`, text in charts and SmartArt, comments; a preview in mdview.nvim.

@@ -185,6 +185,9 @@ return function(H)
   H.eq(#office_calls, 1, ":TranslateOffice reaches translate_file once")
   H.eq(office_calls[1].file, "deck.pptx", "with the file")
   H.eq(office_calls[1].lang, "de", "and the language")
+  vim.cmd('TranslateOffice "my deck.pptx" fr')
+  H.eq(office_calls[2].file, "my deck.pptx", "a quoted file name keeps its blank")
+  H.eq(office_calls[2].lang, "fr", "and the language after it is still the language")
   package.loaded["language.translate.office"] = nil
 
   package.loaded["language.spell"] = nil

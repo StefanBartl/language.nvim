@@ -60,6 +60,26 @@ return function(H)
   H.eq(xml.split(para, "A{1}B"), nil, "missing")
   H.eq(table.concat(xml.split(para, "A{1}B{2}C"), "|"), "A|B|C", "in order")
 
+  -- an engine that writes the placeholders its own way (CJK braces, blanks inside) -------
+  local fw_open, fw_close = "\239\189\155", "\239\189\157"
+  H.eq(
+    table.concat(xml.split(para, "A" .. fw_open .. "1" .. fw_close .. "B{ 2 }C"), "|"),
+    "A|B|C",
+    "fullwidth braces and blanks inside are read as placeholders"
+  )
+  local cjk = xml.apply(slide, function()
+    return "A" .. fw_open .. "2" .. fw_close .. "B"
+  end)
+  H.excludes(cjk, fw_open, "lost placeholders in fullwidth braces do not leak into the document")
+  H.contains(cjk, "<a:t>A B </a:t>", "the text is kept in the first run")
+
+  -- tags that only start like a text run are no text -----------------------------------
+  local tags =
+    '<w:p><w:r><w:tab/><w:t>Hello</w:t></w:r><w:tbl><w:tblPr/></w:tbl><w:tcW w:w="1"/></w:p>'
+  local tp = xml.collect(tags)
+  H.eq(#tp, 1, "one paragraph")
+  H.eq(#tp[1].runs, 1, "w:tab, w:tbl, w:tcW are no text runs")
+
   -- a Word run: white space needs xml:space="preserve" ---------------------------
   local doc = '<w:body><w:p><w:r><w:t>Hello</w:t></w:r><w:r><w:t xml:space="preserve"> world </w:t></w:r></w:p>'
     .. "<w:p><w:r><w:instrText>PAGE</w:instrText></w:r></w:p></w:body>"

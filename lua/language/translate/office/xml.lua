@@ -158,11 +158,24 @@ function M.collect(xml)
   return paras
 end
 
+-- Fullwidth braces: an engine translating into CJK likes to "localise" `{1}`; a space inside is common too.
+local FW_OPEN = "\239\189\155"
+local FW_CLOSE = "\239\189\157"
+
+---Bring the placeholders an engine wrote back to the form `{n}`.
+---@param translated string
+---@return string
+function M.normalize_placeholders(translated)
+  local s = translated:gsub(FW_OPEN, "{"):gsub(FW_CLOSE, "}")
+  return (s:gsub("{%s*(%d+)%s*}", "{%1}"))
+end
+
 ---Split a translated line at the run placeholders.
 ---@param para LanguageOfficePara
 ---@param translated string
 ---@return string[]|nil segments  -- one per slot, or nil when a placeholder is missing, doubled or out of order
 function M.split(para, translated)
+  translated = M.normalize_placeholders(translated)
   local want = #para.slots - 1
   local segs, pos = {}, 1
   for k = 1, want do
@@ -193,7 +206,7 @@ function M.distribute(para, translated)
   local segs = M.split(para, translated)
   if not segs then
     -- Lost placeholders: all the text into the first run that had text, no word dropped.
-    local flat = vim.trim((translated:gsub("%s*{%d+}%s*", " ")))
+    local flat = vim.trim((M.normalize_placeholders(translated):gsub("%s*{%d+}%s*", " ")))
     segs = { flat }
     for _ = 2, #para.slots do
       segs[#segs + 1] = ""

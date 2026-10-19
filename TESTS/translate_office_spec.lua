@@ -192,5 +192,39 @@ return function(H)
   H.contains(fwhy, "boom", "with its reason")
   H.eq(vim.fn.filereadable(dir .. "/deck.yy.pptx"), 0, "and writes no copy")
 
+  -- a cancel is heard once, stops what runs and leaves no copy ------------------------------
+  local cancelled_with, cancel_calls = nil, 0
+  local slow = {
+    translate = function(_, _, _, _, cb)
+      vim.defer_fn(function()
+        cb(true, { "X", "Y" })
+      end, 300)
+      return { cancel = function() end }
+    end,
+  }
+  local handle = office.translate_file(deck, "zz", { provider = slow, cfg = {} }, function(ok2, res)
+    cancel_calls = cancel_calls + 1
+    cancelled_with = { ok2, res }
+  end)
+  handle.cancel()
+  vim.wait(1500, function()
+    return false
+  end)
+  H.eq(cancel_calls, 1, "the answer comes once")
+  H.eq(cancelled_with[1], false, "a cancel is a failure")
+  H.eq(cancelled_with[2], "cancelled", "that says so")
+  H.eq(vim.fn.filereadable(dir .. "/deck.zz.pptx"), 0, "and nothing is written")
+  H.eq(vim.fn.filereadable(dir .. "/deck.zz.pptx.part.zip"), 0, "not even a half archive")
+
+  -- a name with blanks works as any other -------------------------------------------------
+  local spaced = dir .. "/my deck.pptx"
+  vim.uv.fs_copyfile(deck, spaced)
+  local sok, sout = wait(function(cb)
+    office.translate_file(spaced, "xx", { provider = engine, cfg = {} }, cb)
+  end)
+  H.ok(sok, "a file name with a blank: " .. tostring(sout))
+  H.eq(vim.fn.filereadable(dir .. "/my deck.xx.pptx"), 1, "the copy is there")
+  H.eq(vim.fn.filereadable(dir .. "/my deck.xx.pptx.part.zip"), 0, "no half archive is left behind")
+
   cleanup()
 end

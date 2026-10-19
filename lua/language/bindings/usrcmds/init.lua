@@ -282,6 +282,7 @@ function M.setup()
 
   -- A PowerPoint / Word file into a translated copy next to it (the original is never written).
   composer.verb("TranslateOffice", {
+    quotes = true, -- a file name with blanks: :TranslateOffice "my deck.pptx" de
     desc = "Translate a .pptx / .docx into a copy name.<lang>.ext next to it  <file> <lang>",
     routes = {
       {
@@ -292,7 +293,7 @@ function M.setup()
         },
         desc = "Translate an Office file",
         run = function(ctx)
-          local file = vim.fn.expand(ctx.args.file)
+          local file = vim.fs.normalize(ctx.args.file)
           local prog = require("lib.nvim.progress").create({ title = "[language]" })
           prog:update({ text = "translating " .. vim.fn.fnamemodify(file, ":t") })
           require("language.translate.office").translate_file(file, ctx.args.lang, {

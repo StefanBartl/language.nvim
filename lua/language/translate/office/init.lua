@@ -150,9 +150,11 @@ end
 ---@return { cancel: fun() }
 function M.translate_file(path, target, opts, cb)
   opts = opts or {}
-  local handle = { cancel = function() end }
   local finished = false
   local tmp
+  -- What runs right now (the unpacking, the engine, the packing) and stops it.
+  local stop_current = function() end
+  local packing_started = false
   local function finish(ok, res)
     if finished then
       return
@@ -163,6 +165,15 @@ function M.translate_file(path, target, opts, cb)
     end
     cb(ok, res)
   end
+  -- After this nothing that comes later is heard: finish() answers once.
+  local handle = {
+    cancel = function()
+      if not finished then
+        finish(false, "cancelled")
+        pcall(stop_current)
+      end
+    end,
+  }
   local function fail(msg)
     finish(false, msg)
   end
@@ -205,52 +216,79 @@ function M.translate_file(path, target, opts, cb)
   tmp = vim.fn.tempname()
   vim.fn.mkdir(tmp, "p")
   local tools = opts.tools or {}
-  zip.unpack(path, tmp, { tool = tools.unpack, limits = opts.limits }, function(ok, uerr)
-    if not ok then
-      return fail(uerr)
-    end
-    local parts, lines, seen = {}, {}, {}
-    for _, e in ipairs(entries) do
-      if not e.dir and is_text_part(e.name, ext) then
-        local file = tmp .. "/" .. e.name
-        local data = read(file)
-        if data then
-          parts[#parts + 1] = { file = file, data = data }
-          for _, para in ipairs(xml.collect(data)) do
-            if para.line and not seen[para.line] then
-              seen[para.line] = true
-              lines[#lines + 1] = para.line
+  local unpacking = zip.unpack(
+    path,
+    tmp,
+    { tool = tools.unpack, limits = opts.limits, inspected = true },
+    function(ok, uerr)
+      if finished then
+        return
+      end
+      if not ok then
+        return fail(uerr)
+      end
+      local parts, lines, seen = {}, {}, {}
+      for _, e in ipairs(entries) do
+        if not e.dir and is_text_part(e.name, ext) then
+          local file = tmp .. "/" .. e.name
+          local data = read(file)
+          if data then
+            parts[#parts + 1] = { file = file, data = data }
+            for _, para in ipairs(xml.collect(data)) do
+              if para.line and not seen[para.line] then
+                seen[para.line] = true
+                lines[#lines + 1] = para.line
+              end
             end
           end
         end
       end
-    end
-    if #lines == 0 then
-      return fail("no text to translate in the file")
-    end
-    local job = translate_lines(provider, lines, target, cfg, opts, function(tok, translated)
-      if not tok then
-        return fail(("translate failed: %s"):format(tostring(translated)))
+      if #lines == 0 then
+        return fail("no text to translate in the file")
       end
-      for _, part in ipairs(parts) do
-        local new = xml.apply(part.data, function(line)
-          return translated[line]
-        end)
-        if not write(part.file, new) then
-          return fail("cannot write " .. part.file)
+      local job = translate_lines(provider, lines, target, cfg, opts, function(tok, translated)
+        if finished then
+          return
         end
-      end
-      zip.pack(tmp, vim.fn.fnamemodify(out, ":p"), { tool = tools.pack }, function(pok, perr)
-        if not pok then
-          return fail(perr)
+        if not tok then
+          return fail(("translate failed: %s"):format(tostring(translated)))
         end
-        finish(true, out)
+        for _, part in ipairs(parts) do
+          local new = xml.apply(part.data, function(line)
+            return translated[line]
+          end)
+          if not write(part.file, new) then
+            return fail("cannot write " .. part.file)
+          end
+        end
+        local packing = zip.pack(
+          tmp,
+          vim.fn.fnamemodify(out, ":p"),
+          { tool = tools.pack },
+          function(pok, perr)
+            if finished then
+              return
+            end
+            if not pok then
+              return fail(perr)
+            end
+            finish(true, out)
+          end
+        )
+        if packing then
+          stop_current = packing.cancel
+          packing_started = true
+        end
       end)
-    end)
-    handle.cancel = function()
-      job.cancel()
+      -- (an answer that came before this line has moved on to the packing, which then is what stops)
+      if not packing_started then
+        stop_current = job.cancel
+      end
     end
-  end)
+  )
+  if unpacking then
+    stop_current = unpacking.cancel
+  end
   return handle
 end
 

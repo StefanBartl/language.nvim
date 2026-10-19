@@ -211,18 +211,21 @@ M._pack_argv = pack_argv
 ---Unpack `file` into the empty folder `dir`, after the archive was inspected.
 ---@param file string
 ---@param dir string
----@param opts { tool?: string, limits?: table, timeout_ms?: integer }
+---@param opts { tool?: string, limits?: table, timeout_ms?: integer, inspected?: boolean }  -- inspected: the caller looked at the archive already
 ---@param cb fun(ok: boolean, err?: string)
+---@return { cancel: fun() }|nil job  -- nil when the call was answered at once
 function M.unpack(file, dir, opts, cb)
-  local _, err = M.inspect_file(file, opts.limits)
-  if err then
-    return cb(false, err)
+  if not opts.inspected then
+    local _, err = M.inspect_file(file, opts.limits)
+    if err then
+      return cb(false, err)
+    end
   end
   local tool = opts.tool or M.tools().unpack
   if not tool then
     return cb(false, "no tool to unpack a ZIP archive (install unzip, bsdtar or 7z)")
   end
-  require("language.util.job").run(unpack_argv(tool, file, dir), {
+  return require("language.util.job").run(unpack_argv(tool, file, dir), {
     timeout_ms = opts.timeout_ms or 60000,
     on_done = function(ok, _, e)
       cb(ok, ok and nil or ("unpacking failed: " .. vim.trim(e)))
@@ -230,24 +233,43 @@ function M.unpack(file, dir, opts, cb)
   })
 end
 
----Pack the content of `dir` into the new archive `out`.
+---Pack the content of `dir` into the new archive `out`. The archive is written beside it first and moved into place
+---when the tool is done, so a failed or cancelled run leaves neither a half archive nor the copy of an earlier run
+---gone.
 ---@param dir string
 ---@param out string
 ---@param opts { tool?: string, timeout_ms?: integer }
 ---@param cb fun(ok: boolean, err?: string)
+---@return { cancel: fun() }|nil job  -- nil when the call was answered at once
 function M.pack(dir, out, opts, cb)
   local tool = opts.tool or M.tools().pack
   if not tool then
     return cb(false, "no tool to write a ZIP archive (install zip, bsdtar or 7z)")
   end
-  os.remove(out)
-  require("language.util.job").run(pack_argv(tool, out), {
+  local part = out .. ".part.zip"
+  os.remove(part)
+  local running = require("language.util.job").run(pack_argv(tool, part), {
     cwd = dir,
     timeout_ms = opts.timeout_ms or 60000,
     on_done = function(ok, _, e)
-      cb(ok, ok and nil or ("packing failed: " .. vim.trim(e)))
+      if not ok then
+        os.remove(part)
+        return cb(false, "packing failed: " .. vim.trim(e))
+      end
+      local moved, why = vim.uv.fs_rename(part, out)
+      if not moved then
+        os.remove(part)
+        return cb(false, "cannot write " .. out .. ": " .. tostring(why))
+      end
+      cb(true)
     end,
   })
+  return {
+    cancel = function()
+      running.cancel()
+      os.remove(part)
+    end,
+  }
 end
 
 return M
