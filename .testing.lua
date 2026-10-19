@@ -39,7 +39,16 @@ return {
     -- wrapper; the nonexistent executable is the deliberate negative probe of the spawn-failure path.
     -- translate_markdown_curl_spec runs a real curl against a loopback server inside the spec's own
     -- editor (no external network): the placeholder must survive the argv path of a real process.
-    spawn = { "nvim", "curl", "zzqqxx-nonexistent-executable-language-nvim" },
+    -- translate_office_spec packs and unpacks a small fixture deck with the machine's zip tools.
+    spawn = {
+      "nvim",
+      "curl",
+      "zzqqxx-nonexistent-executable-language-nvim",
+      "tar",
+      "zip",
+      "unzip",
+      "7z",
+    },
   },
   -- The runner counts which commands, keymaps and autocommands the specs exercise (docs/SURFACE.md of testing.nvim);
   -- `scripts/test.sh surface` compares that with surface.baseline.json (a regression gate, not a percentage).

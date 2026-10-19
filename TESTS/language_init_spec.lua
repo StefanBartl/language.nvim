@@ -11,7 +11,7 @@ return function(H)
   -- A clean slate regardless of what other specs registered first: this spec
   -- asserts on presence/absence of the three commands, so it cannot rely on
   -- run.lua's ordering to guarantee none of them exist yet.
-  for _, name in ipairs({ "Spellcheck", "Translate", "TranslateReplace" }) do
+  for _, name in ipairs({ "Spellcheck", "Translate", "TranslateReplace", "TranslateOffice" }) do
     pcall(vim.api.nvim_del_user_command, name)
   end
 

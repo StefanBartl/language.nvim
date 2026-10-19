@@ -280,6 +280,42 @@ function M.setup()
     },
   })
 
+  -- A PowerPoint / Word file into a translated copy next to it (the original is never written).
+  composer.verb("TranslateOffice", {
+    desc = "Translate a .pptx / .docx into a copy name.<lang>.ext next to it  <file> <lang>",
+    routes = {
+      {
+        path = {},
+        args = {
+          { name = "file", type = "STRING", desc = "The .pptx or .docx file" },
+          { name = "lang", type = "TRANSLATE_LANG" },
+        },
+        desc = "Translate an Office file",
+        run = function(ctx)
+          local file = vim.fn.expand(ctx.args.file)
+          local prog = require("lib.nvim.progress").create({ title = "[language]" })
+          prog:update({ text = "translating " .. vim.fn.fnamemodify(file, ":t") })
+          require("language.translate.office").translate_file(file, ctx.args.lang, {
+            on_progress = function(done, total)
+              prog:update({
+                text = "translating " .. vim.fn.fnamemodify(file, ":t"),
+                current = done,
+                total = total,
+              })
+            end,
+          }, function(ok, res)
+            if ok then
+              prog:finish("written " .. res)
+            else
+              prog:finish("failed")
+              notify.error(res)
+            end
+          end)
+        end,
+      },
+    },
+  })
+
   -- Always mutates: replaces the source range/file(s) in place (the old
   -- `:TranslateReplace` behavior). No `--output=`/`--files=` — its whole
   -- purpose is to replace.

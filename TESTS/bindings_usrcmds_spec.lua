@@ -173,6 +173,20 @@ return function(H)
   pcall(vim.cmd, "TranslateReplace DE selction")
   H.eq(#translate_calls, before_typo, "an unrecognized 2nd token aborts before run/run_files")
 
+  -- :TranslateOffice <file> <lang> --------------------------------------------
+  local office_calls = {}
+  package.loaded["language.translate.office"] = {
+    translate_file = function(file, lang, _, cb)
+      office_calls[#office_calls + 1] = { file = file, lang = lang }
+      cb(true, file .. ".out")
+    end,
+  }
+  vim.cmd("TranslateOffice deck.pptx de")
+  H.eq(#office_calls, 1, ":TranslateOffice reaches translate_file once")
+  H.eq(office_calls[1].file, "deck.pptx", "with the file")
+  H.eq(office_calls[1].lang, "de", "and the language")
+  package.loaded["language.translate.office"] = nil
+
   package.loaded["language.spell"] = nil
   package.loaded["language.translate"] = nil
   package.loaded["language.translate.window"] = nil
