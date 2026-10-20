@@ -215,6 +215,10 @@ return function(H)
         error(("%s: line %d differs: %q vs %q"):format(what, i, a.res[i], tostring(b.res[i])))
       end
     end
+    -- the order of `info.errors` is the order in which the work finished: it may differ (see the header of
+    -- translate/markdown/init.lua), the set of messages may not
+    table.sort(a.info.errors or {})
+    table.sort(b.info.errors or {})
     deq(b.info, a.info, what .. ": info")
     deq(b.events, a.events, what .. ": the blocks reported")
   end

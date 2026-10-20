@@ -14,18 +14,20 @@
 --- source exactly -- that is the fallback for a unit whose translation failed
 --- validation.
 ---
---- Markdown is parsed here line by line, not completely (no inline parsing,
---- no lazy-continuation corner cases): the parser errs on the side of
---- skipping. It does follow CommonMark where a wrong guess would make code
---- text: a fence ends with its quote or list item, a block in the first column
---- ends a list, a list item is indented at most three columns beyond the item
---- it sits in (more is indented code), an ordered list that does not start at
---- 1 cannot interrupt a paragraph, a table ends at a quote or a list item, and
---- a CR before the line end counts as white space. (Checked against the
---- previewer's renderer on random documents and a corpus of real ones.) A line taken for code that was prose stays German, a line taken
---- for prose that was code is caught by the placeholder and plausibility
---- checks. Hard line breaks (two trailing spaces or a backslash) end a unit,
---- since the reflow would otherwise move them.
+--- Only the block structure is parsed (no inline parsing), but that one the way
+--- CommonMark does it, with a stack of open containers (block quote, list item,
+--- footnote): which containers continue on a line, then the open fence / HTML
+--- block / table, then the blocks that start here, then what is left of the
+--- line (see `M.segment`). Where a wrong guess would make code text it is
+--- therefore the previewer's guess. (Checked against the previewer's renderer
+--- on 20 000 random documents and on the Markdown files of the repos: see
+--- `scripts/markdown_oracle.*`, `scripts/markdown_fuzz.lua`.) Two things are no
+--- blocks of their own, as in the previewer: `$$` math and `[label]:`
+--- definitions are lines inside a paragraph that stay as they are. A line taken
+--- for code that was prose stays German, a line taken for prose that was code
+--- is caught by the placeholder and plausibility checks. Hard line breaks (two
+--- trailing spaces or a backslash) end a unit, since the reflow would otherwise
+--- move them.
 
 local M = {}
 
@@ -90,81 +92,6 @@ end
 ---@return boolean
 local function is_blank(line)
   return line:match("^[ \t\r\f\v]*$") ~= nil
-end
-
----@internal
----Strip leading block-quote markers (at most `max` of them, when given).
----@param line string
----@param max? integer
----@return string prefix, integer depth, string rest
-local function strip_quotes(line, max)
-  local pfx, depth, rest = "", 0, line
-  while not max or depth < max do
-    local a, b, tail = rest:match("^( ? ? ?>)( ?)(.*)$")
-    if not a then
-      break
-    end
-    pfx = pfx .. a .. b
-    depth = depth + 1
-    rest = tail
-  end
-  return pfx, depth, rest
-end
-
----@internal
----Width of the leading white space (a tab counts four).
----@param s string
----@return integer
-local function indent_width(s)
-  local w = 0
-  for c in s:match("^[ \t]*"):gmatch(".") do
-    w = w + (c == "\t" and 4 or 1)
-  end
-  return w
-end
-
----@internal
----@param rest string
----@return string|nil ch, integer|nil len
-local function fence_open(rest)
-  local f = rest:match("^[ \t]*(```+)([^`]*)$")
-  if f then
-    return "`", #f
-  end
-  local t = rest:match("^[ \t]*(~~~+)")
-  if t then
-    return "~", #t
-  end
-  return nil
-end
-
----@internal
----@param rest string
----@param ch string
----@param len integer
----@param cindent? integer  -- content indent of the container the fence sits in
----@return boolean
-local function fence_close(rest, ch, len, cindent)
-  local f
-  if ch == "`" then
-    f = rest:match("^[ \t]*(```+)[ \t\r]*$")
-  else
-    f = rest:match("^[ \t]*(~~~+)[ \t\r]*$")
-  end
-  -- A closing fence is indented at most three columns beyond its container.
-  return f ~= nil and #f >= len and indent_width(rest) - (cindent or 0) <= 3
-end
-
----@internal
----@param rest string
----@return boolean
-local function is_hr(rest)
-  local indent = #rest:match("^ *")
-  if indent > 3 then
-    return false
-  end
-  local s = rest:gsub("[ \t\r]", "")
-  return #s >= 3 and (s:match("^%-+$") ~= nil or s:match("^%*+$") ~= nil or s:match("^_+$") ~= nil)
 end
 
 ---@internal
@@ -247,33 +174,6 @@ local function pipes(s)
 end
 
 ---@internal
----Is `line` the delimiter row of a table (`|---|:--:|`)?
----@param line string
----@return boolean
-local function is_delimiter(line)
-  if not line:find("|", 1, true) or not line:find("-", 1, true) then
-    return false
-  end
-  local s = line:gsub("^ ? ? ?>? ?", ""):gsub("^%s+", "")
-  -- Trailing white space by hand: `%s+$` is quadratic on a long run.
-  local e = #s
-  while e > 0 and s:find("^%s", e) do
-    e = e - 1
-  end
-  s = s:sub(1, e)
-  s = s:gsub("^|", ""):gsub("|$", "")
-  if s == "" then
-    return false
-  end
-  for cell in (s .. "|"):gmatch("([^|]*)|") do
-    if not cell:match("^%s*:?%-+:?%s*$") then
-      return false
-    end
-  end
-  return true
-end
-
----@internal
 ---Which lines of a paragraph end inside a code span? A span may run over several
 ---lines, and then a hard break at the end of one of them (a backslash, two spaces)
 ---belongs to the code, not to the paragraph. The spans are paired the way
@@ -341,10 +241,120 @@ local function code_span_ends(plines)
   return inside
 end
 
+---@internal
+---Is the thematic break (`***`, `---`, `___`, spaces between allowed) at byte `i` of `s`? Early exit on
+---the first foreign byte: linear, no copy of the rest of the line. When it is none, the second result is
+---the index of the byte that said so (a caller that asks again further right on the same line, as the
+---nesting `- - - x` does, can skip every position up to it).
+---@param s string
+---@param i integer
+---@return boolean, integer|nil
+local function is_hr_at(s, i)
+  local ch = s:byte(i)
+  if ch ~= 45 and ch ~= 42 and ch ~= 95 then
+    return false
+  end
+  local count = 0
+  while true do
+    local c = s:byte(i)
+    if c == nil then
+      break
+    end
+    if c == ch then
+      count = count + 1
+    elseif c ~= 32 and c ~= 9 and c ~= 13 then
+      return false, i
+    end
+    i = i + 1
+  end
+  return count >= 3
+end
+
+---@internal
+---Cells of a table row: leading and trailing pipe are optional, `\|` is text. 0 for a row without any cell.
+---@param text string
+---@return integer
+local function row_cells(text)
+  local s, e = 1, #text
+  while e >= s and (text:byte(e) == 32 or text:byte(e) == 9 or text:byte(e) == 13) do
+    e = e - 1
+  end
+  while s <= e and (text:byte(s) == 32 or text:byte(s) == 9) do
+    s = s + 1
+  end
+  if s > e then
+    return 0
+  end
+  if text:byte(s) == 124 then
+    s = s + 1
+  end
+  -- a trailing pipe closes the last cell, unless a backslash escapes it
+  if e >= s and text:byte(e) == 124 then
+    local k = 0
+    while e - 1 - k >= s and text:byte(e - 1 - k) == 92 do
+      k = k + 1
+    end
+    if k % 2 == 0 then
+      e = e - 1
+    end
+  end
+  if s > e then
+    return 0
+  end
+  local n, i = 1, s
+  while i <= e do
+    local c = text:byte(i)
+    if c == 92 then
+      i = i + 1
+    elseif c == 124 then
+      n = n + 1
+    end
+    i = i + 1
+  end
+  return n
+end
+
+---@internal
+---Cells of a delimiter row (`|---|:-:|`) at byte `np` of `line`, or nil when it is none.
+---@param line string
+---@param np integer
+---@return integer|nil
+local function delimiter_cells(line, np)
+  if not line:find("|", np, true) or not line:find("-", np, true) then
+    return nil
+  end
+  local s = line:sub(np)
+  local e = #s
+  while e > 0 and s:find("^[ \t\r]", e) do
+    e = e - 1
+  end
+  s = s:sub(1, e)
+  s = s:gsub("^|", ""):gsub("|$", "")
+  if s == "" then
+    return nil
+  end
+  local n = 0
+  for cell in (s .. "|"):gmatch("([^|]*)|") do
+    if not cell:match("^[ \t]*:?%-+:?[ \t]*$") then
+      return nil
+    end
+    n = n + 1
+  end
+  return n
+end
+
 ---Segment a document.
 ---`tick` (optional) is called after each line, once the state of the scan is complete: it may
 ---give the control away (`translate_markdown` slices big documents that way) and returns when the
 ---scan goes on. It must not touch the arguments.
+---
+---The scan follows the CommonMark container algorithm: a stack of open containers (block quote, list
+---item, footnote), and per line (1) the containers that continue, (2) an open fence / HTML block,
+---(3) the blocks that start here (inside the containers that matched), (4) what is left of the line:
+---a blank, a lazy or ordinary continuation of the paragraph, a table row, or a new paragraph. A math
+---block (`$$`) and a reference definition are no blocks: their lines stay as they are inside the
+---paragraph, which a block start ends (the previewer's reading). Columns are counted with tab stops of four, so the content column of an item and
+---the "at most three columns of indent" rule mean what the previewer's renderer means by them.
 ---@param lines string[]
 ---@param tick? fun()
 ---@return LanguageMdSegmentation
@@ -354,66 +364,54 @@ function M.segment(lines, tick)
   local seg = { tpl = {}, units = {}, blocks = {}, headings = {}, defs = {}, refdefs = {} }
   local tpl, units, blocks = seg.tpl, seg.units, seg.blocks
 
-  local para ---@type table|nil
-  local fence, html, math_open, in_table
-  local in_list = false
-  local prev_qdepth = 0
-  local items = {} ---@type integer[] -- content indents of the open list items, innermost last
-
-  ---Does a list item with `iw` columns of indent belong to the container it is in? Up to
-  ---three columns beyond the content of the item it would be nested in (the root has
-  ---none): four make it indented code (outside of an item) or plain text.
-  ---@param iw integer
-  ---@return boolean
-  local function item_fits(iw)
-    local c = 0
-    if in_list then
-      for _, v in ipairs(items) do
-        if v <= iw then
-          c = v
-        end
-      end
-    end
-    return iw - c <= 3
-  end
-
-  ---An item opens: the ones at its level or deeper end, it becomes the innermost.
-  ---@param iw integer
-  ---@param cind integer  -- the content indent of the new item
-  local function open_item(iw, cind)
-    if not in_list then
-      items = {}
-    end
-    while #items > 0 and items[#items] > iw do
-      items[#items] = nil
-    end
-    items[#items + 1] = cind
-  end
-  local item_cind = 0 -- content indent of the latest list item
-  local list_q = 0 -- quote depth of the list that `in_list` stands for
+  -- Open containers, outermost first: { t = "quote" } | { t = "item"|"footnote", w = content column, has = bool }.
+  -- `has`: the item holds a block already (an empty item does not survive a blank line).
+  local stack = {}
+  local nquote, nitem = 0, 0 -- quotes / items+footnotes in the stack
+  -- The open leaf, if any: a paragraph (`t = "para"`), a fence, an HTML block or a table.
+  local leaf
   local no_close_after ---@type integer|nil -- no `$$` below this line: a `$$` opens no block
 
-  ---Content indent of the innermost open list item that a line indented `iw` columns (at
-  ---quote depth `qd`) is inside of, or 0 at the top level. The indent of a block is
-  ---counted from there: four columns beyond it make indented code, not a fence or a table.
-  ---@param iw integer
-  ---@param qd integer
-  ---@return integer
-  local function container_indent(iw, qd)
-    if not in_list or list_q ~= qd then
-      return 0
+  -- cursor in the current line: byte `pos` starts at column `col`; `eoff` columns of a tab there are consumed
+  local line, pos, col, eoff = "", 1, 0, 0
+
+  ---First byte that is no space or tab at or behind the cursor, and its column.
+  ---@return integer np, integer nc
+  local function scan()
+    local p, c = pos, col
+    while true do
+      local b = line:byte(p)
+      if b == 32 then
+        c = c + 1
+      elseif b == 9 then
+        c = c + 4 - c % 4
+      else
+        break
+      end
+      p = p + 1
     end
-    local c = 0
-    for _, v in ipairs(items) do
-      if v <= iw and v > c then
-        c = v
+    return p, c
+  end
+
+  ---Move the cursor to column `target` over white space (a tab may be consumed in part).
+  ---@param target integer
+  local function advance_to(target)
+    while col + eoff < target do
+      local b = line:byte(pos)
+      if b == 32 then
+        col, pos, eoff = col + 1, pos + 1, 0
+      elseif b == 9 then
+        local width = 4 - col % 4
+        if col + width <= target then
+          col, pos, eoff = col + width, pos + 1, 0
+        else
+          eoff = target - col
+          return
+        end
+      else
+        return
       end
     end
-    local top = math.max(item_cind, 2)
-    if top <= iw and top > c then
-      c = top
-    end
-    return c
   end
 
   ---@param u table
@@ -425,11 +423,11 @@ function M.segment(lines, tick)
   end
 
   local function close_para()
-    local p = para
-    if not p then
+    local p = leaf
+    if not p or p.t ~= "para" then
       return
     end
-    para = nil
+    leaf = nil
     local inside = code_span_ends(p.lines)
     local runs, cur = {}, {}
     for i, ln in ipairs(p.lines) do
@@ -441,14 +439,30 @@ function M.segment(lines, tick)
           ln.suffix = ln.suffix:sub(2)
         end
       end
-      cur[#cur + 1] = ln
-      if ln.hard and i < #p.lines then
-        runs[#runs + 1] = cur
-        cur = {}
+      if ln.lit then
+        -- a math line: stays as it is and ends the run of text before it
+        if #cur > 0 then
+          runs[#runs + 1] = cur
+          cur = {}
+        end
+        tpl[ln.L] = lines[ln.L]
+      else
+        cur[#cur + 1] = ln
+        if ln.hard and i < #p.lines then
+          runs[#runs + 1] = cur
+          cur = {}
+        end
       end
     end
-    runs[#runs + 1] = cur
-    local blk = { first = p.lines[1].L, last = p.lines[#p.lines].L, units = {} }
+    if #cur > 0 then
+      runs[#runs + 1] = cur
+    end
+    if #runs == 0 then
+      return
+    end
+    -- a surplus line of the last run may be blank only when the paragraph really ends there
+    local tail_lit = p.lines[#p.lines].lit == true
+    local blk = { first = runs[1][1].L, last = runs[#runs][#runs[#runs]].L, units = {} }
     for ri, run in ipairs(runs) do
       local u = add_unit({
         block = p.kind,
@@ -463,6 +477,7 @@ function M.segment(lines, tick)
           and not p.listctx
           and p.qdepth == 0
           and ri == #runs
+          and not tail_lit
           and not run[#run].hard
         )
             and "blank"
@@ -503,22 +518,34 @@ function M.segment(lines, tick)
     return { L = L, prefix = prefix, content = content, suffix = suffix, hard = hard }
   end
 
-  ---@param L integer
-  ---@param kind string
-  ---@param prefix string
-  ---@param body string
-  ---@param qdepth integer
-  local function open_para(L, kind, prefix, body, qdepth)
-    para =
-      { kind = kind, lines = { make_line(L, prefix, body) }, qdepth = qdepth, listctx = in_list }
+  ---The leaf ends (a paragraph becomes its units).
+  local function close_leaf()
+    if leaf then
+      close_para()
+      leaf = nil
+    end
   end
 
-  ---Literal line, ends whatever paragraph or table was open.
-  ---@param L integer
-  local function literal(L)
-    close_para()
-    in_table = nil
-    tpl[L] = lines[L]
+  ---Close the containers that did not continue (`m` stay) and the leaf inside of them.
+  ---@param m integer
+  local function pop_to(m)
+    while #stack > m do
+      local c = stack[#stack]
+      if c.t == "quote" then
+        nquote = nquote - 1
+      else
+        nitem = nitem - 1
+      end
+      stack[#stack] = nil
+    end
+  end
+
+  ---The innermost container holds a block now.
+  local function mark_content()
+    local c = stack[#stack]
+    if c then
+      c.has = true
+    end
   end
 
   ---A heading of a single line.
@@ -577,6 +604,525 @@ function M.segment(lines, tick)
     end
   end
 
+  ---Is the line a line of a math block (`$$` ... `$$`)? comrak knows no math block: the dollars are inline
+  ---math in the text of a paragraph, which any block start ends. So a math block here is a run of lines
+  ---inside a paragraph that stay as they are (the mask does not protect formulas). A `$$` that nothing
+  ---closes is text, and so is one indented four columns.
+  ---@param L integer
+  ---@param np integer
+  ---@param p table|nil  -- the paragraph the line is added to; nil: it starts one
+  ---@param indent integer
+  ---@return boolean lit, boolean opens
+  local function math_line(L, np, p, indent)
+    if p and p.math_open then
+      if line:find("$$", 1, true) then
+        p.math_open = false
+      end
+      return true, false
+    end
+    if indent > 3 or not line:find("^%$%$", np) then
+      return false, false
+    end
+    if line:find("$$", np + 2, true) then
+      return true, false
+    end
+    if no_close_after and L >= no_close_after then
+      return false, false
+    end
+    for j = L + 1, n do
+      if lines[j]:find("$$", 1, true) then
+        return true, true
+      end
+    end
+    no_close_after = L
+    return false, false
+  end
+
+  ---The line record of a math line (it keeps its place in the paragraph, but is no text).
+  ---@param L integer
+  ---@return table
+  local function lit_line(L)
+    return {
+      L = L,
+      prefix = "",
+      content = "",
+      suffix = "",
+      hard = false,
+      lit = true,
+      qlen = pos - 1,
+    }
+  end
+
+  ---The line is a reference definition: it stays as it is, together with the destination / title line
+  ---below it (a lookahead on the raw lines). The lines join paragraph `p` as literal lines.
+  ---@param L integer
+  ---@param np integer
+  ---@param p table
+  ---@return integer took  -- the lines after `L` that were taken along
+  local function ref_lines(L, np, p)
+    local label, tail = line:match("^%[([^%]^][^%]]*)%]:(.*)$", np)
+    p.lines[#p.lines + 1] = lit_line(L)
+    seg.defs[require("language.translate.markdown.mask")._norm_label(label)] = true
+    seg.refdefs[#seg.refdefs + 1] = L
+    local took = 0
+    local nxt = lines[L + 1]
+    -- `[label]:` alone: the destination is on the next line. That line stays as it
+    -- is: a translation that came out as one word would become the destination
+    -- and swallow the paragraph. (A line that starts a block is none.)
+    if
+      is_blank(tail)
+      and nxt
+      and nxt:match("^[ \t]*[^ \t\r#>|<`*+%-]")
+      and not nxt:match("^[ \t]*```+[^`]*$")
+      and not nxt:match("^[ \t]*~~~+")
+    then
+      p.lines[#p.lines + 1] = lit_line(L + 1)
+      took = took + 1
+      nxt = lines[L + 1 + took]
+    end
+    if nxt and nxt:match("^[ \t]+[\"'(]") then
+      p.lines[#p.lines + 1] = lit_line(L + 1 + took)
+      took = took + 1
+    end
+    return took
+  end
+
+  ---A new paragraph (or what its first line says it is).
+  ---@param L integer
+  ---@param np integer  -- byte where the text starts
+  ---@param kind string
+  ---@param indent integer
+  local function open_para(L, np, kind, indent)
+    mark_content()
+    local lit, opens = math_line(L, np, nil, indent)
+    leaf = {
+      t = "para",
+      kind = kind,
+      lines = { lit and lit_line(L) or make_line(L, line:sub(1, np - 1), line:sub(np)) },
+      qdepth = nquote,
+      listctx = nitem > 0,
+      math_open = opens or nil,
+    }
+    leaf.lines[1].qlen = pos - 1
+  end
+
+  ---Handle line `L`. Returns how many further lines it consumed (a reference definition takes its
+  ---destination and title lines along).
+  ---@param L integer
+  ---@return integer
+  local function handle(L)
+    line = lines[L]
+    pos, col, eoff = 1, 0, 0
+
+    -- (1) the containers that continue
+    local matched = 0
+    for i = 1, #stack do
+      local c = stack[i]
+      local np, nc = scan()
+      if c.t == "quote" then
+        if nc - (col + eoff) <= 3 and line:byte(np) == 62 then
+          advance_to(nc)
+          pos, col, eoff = pos + 1, col + 1, 0
+          local b = line:byte(pos)
+          if b == 32 then
+            pos, col = pos + 1, col + 1
+          elseif b == 9 then
+            advance_to(col + 1)
+          end
+          matched = i
+        else
+          break
+        end
+      elseif line:find("^[\r\f\v]*$", np) then
+        -- a blank line: an item that holds a block goes on, an empty one ends
+        if c.has then
+          matched = i
+        else
+          break
+        end
+      elseif nc >= c.w then
+        advance_to(c.w)
+        matched = i
+      else
+        break
+      end
+    end
+    local all = matched == #stack
+
+    -- (2) an open fence, HTML block, math block
+    if leaf and all then
+      local t = leaf.t
+      if t == "fence" then
+        local np, nc = scan()
+        if nc - (col + eoff) <= 3 then
+          local i = np
+          while line:byte(i) == leaf.ch do
+            i = i + 1
+          end
+          if i - np >= leaf.len and line:find("^[ \t\r]*$", i) then
+            leaf = nil
+          end
+        end
+        tpl[L] = line
+        return 0
+      elseif t == "html" then
+        if leaf.h.kind == "blank" and line:find("^[ \t\r\f\v]*$", pos) then
+          leaf = nil
+        else
+          tpl[L] = line
+          if leaf.h.kind ~= "blank" and html_ends(leaf.h, line) then
+            leaf = nil
+          end
+          return 0
+        end
+      end
+    elseif leaf and not all and leaf.t ~= "para" then
+      leaf = nil -- a fence, HTML block or table ends with its container
+    end
+
+    -- (3) the blocks that start here
+    local interrupt = all and leaf ~= nil and leaf.t == "para"
+    local maybe_lazy = leaf ~= nil and leaf.t == "para"
+    local item_first = false -- an item marker was consumed on this line: its text is the item's
+    local footnote_first = false
+    local np, nc, blank
+    local hr_ch, hr_fail = nil, 0
+
+    ---Containers that did not continue end, and so does the leaf: something new starts.
+    local function settle()
+      pop_to(matched)
+      close_leaf()
+      interrupt, maybe_lazy, all = false, false, true
+    end
+
+    while true do
+      local again = false
+      repeat
+        np, nc = scan()
+        blank = line:find("^[\r\f\v]*$", np) ~= nil
+        if blank then
+          break
+        end
+        local indent = nc - (col + eoff)
+        if indent >= 4 then
+          if not maybe_lazy then
+            -- indented code
+            settle()
+            mark_content()
+            tpl[L] = line
+            return 0
+          end
+          break
+        end
+        local b = line:byte(np)
+
+        if b == 62 then
+          -- block quote
+          settle()
+          matched = #stack
+          mark_content()
+          stack[#stack + 1] = { t = "quote" }
+          nquote = nquote + 1
+          matched = #stack
+          advance_to(nc)
+          pos, col, eoff = pos + 1, col + 1, 0
+          local nb = line:byte(pos)
+          if nb == 32 then
+            pos, col = pos + 1, col + 1
+          elseif nb == 9 then
+            advance_to(col + 1)
+          end
+          item_first, footnote_first = false, false
+          again = true
+          break
+        end
+
+        if b == 35 then
+          -- ATX heading
+          local hashes, hsp, htext = line:match("^(#+)([ \t]+)(.*)$", np)
+          if hashes and #hashes <= 6 then
+            settle()
+            mark_content()
+            -- A closing sequence (`## Title ##`): hashes behind white space at the end.
+            local body
+            do
+              local e = #htext
+              while e > 0 and (htext:byte(e) == 32 or htext:byte(e) == 9 or htext:byte(e) == 13) do
+                e = e - 1
+              end
+              local cut = e
+              while cut > 0 and htext:byte(cut) == 35 do
+                cut = cut - 1
+              end
+              if cut < e and cut > 0 and (htext:byte(cut) == 32 or htext:byte(cut) == 9) then
+                while cut > 0 and (htext:byte(cut) == 32 or htext:byte(cut) == 9) do
+                  cut = cut - 1
+                end
+                body = htext:sub(1, cut)
+              end
+            end
+            local content, suffix
+            if body then
+              content, suffix = trim_right(body)
+              suffix = suffix .. htext:sub(#body + 1)
+            else
+              content, suffix = trim_right(htext)
+            end
+            if content == "" then
+              tpl[L] = line
+            else
+              heading_unit(L, line:sub(1, np - 1) .. hashes .. hsp, content, suffix)
+            end
+            return 0
+          end
+          if line:find("^#+[ \t\r]*$", np) then
+            settle()
+            mark_content()
+            tpl[L] = line
+            return 0
+          end
+        end
+
+        if b == 96 or b == 126 then
+          -- fenced code
+          local i = np
+          while line:byte(i) == b do
+            i = i + 1
+          end
+          if i - np >= 3 and (b == 126 or not line:find("`", i, true)) then
+            settle()
+            mark_content()
+            tpl[L] = line
+            leaf = { t = "fence", ch = b, len = i - np }
+            return 0
+          end
+        end
+
+        if b == 60 then
+          -- HTML block
+          local rs = line:sub(np)
+          local h = html_start(rs, interrupt)
+          if h then
+            settle()
+            mark_content()
+            tpl[L] = line
+            if h.kind == "blank" or not html_ends(h, rs:sub(2)) then
+              leaf = { t = "html", h = h }
+            end
+            return 0
+          end
+        end
+
+        if interrupt and (b == 61 or b == 45) then
+          -- setext underline: the paragraph above ends here
+          if line:find("^=+[ \t\r]*$", np) or line:find("^%-+[ \t\r]*$", np) then
+            local p = leaf
+            if p and p.kind == "para" then
+              p.kind = "heading"
+              p.setext = true
+            end
+            close_leaf()
+            tpl[L] = line
+            return 0
+          end
+        end
+
+        if b == 45 or b == 42 or b == 95 then
+          -- a thematic break check that failed at byte `hr_fail` fails again for every start left of it
+          local is_hr = false
+          if not (hr_ch == b and np <= hr_fail) then
+            local found, failed_at = is_hr_at(line, np)
+            is_hr = found
+            if not found and failed_at then
+              hr_ch, hr_fail = b, failed_at
+            end
+          end
+          if is_hr then
+            settle()
+            mark_content()
+            tpl[L] = line
+            return 0
+          end
+        end
+
+        if b == 91 then
+          -- footnote definition: a container of its own, its text continues four columns in
+          local label, ftail = line:match("^%[%^([^%]]+)%]:(.*)$", np)
+          if label then
+            settle()
+            mark_content()
+            if is_blank(ftail) then
+              tpl[L] = line
+              return 0
+            end
+            stack[#stack + 1] = { t = "footnote", w = nc + 4, has = true }
+            nitem = nitem + 1
+            matched = #stack
+            local close = line:find("]:", np, true)
+            pos, col, eoff = close + 2, nc + (close + 2 - np), 0
+            footnote_first = true
+            again = true
+            break
+          end
+        end
+
+        if b == 45 or b == 42 or b == 43 or (b >= 48 and b <= 57) then
+          -- list item
+          local mlen, ordered, num
+          if b >= 48 and b <= 57 then
+            local digits = line:match("^(%d+)[.)]", np)
+            if digits and #digits <= 9 then
+              mlen, ordered, num = #digits + 1, true, tonumber(digits)
+            end
+          else
+            mlen = 1
+          end
+          local after = mlen and np + mlen
+          local ab = after and line:byte(after)
+          if mlen and (ab == nil or ab == 32 or ab == 9 or ab == 13) then
+            local empty = line:find("^[ \t\r]*$", after) ~= nil
+            if not (interrupt and (empty or (ordered and num ~= 1))) then
+              -- columns of white space behind the marker
+              local c2 = nc + mlen
+              local p2 = after
+              while true do
+                local sb = line:byte(p2)
+                if sb == 32 then
+                  c2 = c2 + 1
+                elseif sb == 9 then
+                  c2 = c2 + 4 - c2 % 4
+                else
+                  break
+                end
+                p2 = p2 + 1
+              end
+              local gap = c2 - (nc + mlen)
+              local w = (empty or gap >= 5) and nc + mlen + 1 or nc + mlen + gap
+              settle()
+              mark_content()
+              stack[#stack + 1] = { t = "item", w = w, has = false }
+              nitem = nitem + 1
+              matched = #stack
+              advance_to(nc)
+              pos, col, eoff = pos + mlen, col + mlen, 0
+              advance_to(w)
+              item_first, footnote_first = true, false
+              again = true
+              break
+            end
+          end
+        end
+
+        local para_above = leaf
+        if interrupt and para_above then
+          -- table: the delimiter row under a one-line header (the last line of the paragraph)
+          local cells = delimiter_cells(line, np)
+          if cells then
+            local hdr = para_above.lines[#para_above.lines]
+            if not hdr.lit and row_cells(lines[hdr.L]:sub(hdr.qlen + 1)) == cells then
+              para_above.lines[#para_above.lines] = nil
+              if #para_above.lines > 0 then
+                close_para()
+              else
+                leaf = nil
+              end
+              mark_content()
+              local hl = lines[hdr.L]
+              table_row(hdr.L, hl:sub(1, hdr.qlen), hl:sub(hdr.qlen + 1))
+              tpl[L] = line
+              leaf = { t = "table" }
+              return 0
+            end
+          end
+        end
+
+      until true
+      if not again then
+        break
+      end
+    end
+
+    -- (4) what is left of the line
+    if blank then
+      settle()
+      tpl[L] = line
+      return 0
+    end
+
+    if leaf and leaf.t == "para" then
+      -- an ordinary or a lazy continuation of the paragraph
+      if leaf.defs_only then
+        -- the paragraph has held nothing but reference definitions so far: one more is one more
+        if nc - (col + eoff) <= 3 and line:find("^%[[^%]^][^%]]*%]:", np) then
+          return ref_lines(L, np, leaf)
+        end
+        leaf.defs_only = nil
+      end
+      local lit, opens = math_line(L, np, leaf, nc - (col + eoff))
+      local ln = lit and lit_line(L) or make_line(L, line:sub(1, np - 1), line:sub(np))
+      ln.qlen = pos - 1
+      leaf.lines[#leaf.lines + 1] = ln
+      if opens then
+        leaf.math_open = true
+      end
+      return 0
+    end
+
+    if leaf and leaf.t == "table" and all then
+      table_row(L, line:sub(1, pos - 1), line:sub(pos))
+      return 0
+    end
+
+    settle()
+
+    -- a task box in front of the text of an item is no part of the text
+    if item_first then
+      local box = line:match("^%[[ xX]%][ \t]+", np)
+      if box then
+        np = np + #box
+        if line:find("^[\r\f\v]*$", np) then
+          mark_content()
+          tpl[L] = line
+          return 0
+        end
+        open_para(L, np, "item", nc - (col + eoff))
+        return 0
+      end
+    end
+
+    local kind
+    if footnote_first then
+      kind = "footnote"
+    elseif item_first then
+      kind = "item"
+    elseif nquote > 0 then
+      kind = "quote"
+    elseif nitem > 0 then
+      kind = "item"
+    else
+      kind = "para"
+    end
+
+    -- Reference definition: stays as it is, together with the destination / title line below it. comrak cuts
+    -- the definitions off a paragraph when it ends, so the line starts a paragraph (its text goes on below it,
+    -- a list cannot interrupt it...) whose first lines stay as they are, like the lines of a math block.
+    if not footnote_first and line:find("^%[[^%]^][^%]]*%]:", np) then
+      mark_content()
+      leaf = {
+        t = "para",
+        kind = kind,
+        lines = {},
+        qdepth = nquote,
+        listctx = nitem > 0,
+        defs_only = true,
+      }
+      return ref_lines(L, np, leaf)
+    end
+
+    open_para(L, np, kind, nc - (col + eoff))
+    return 0
+  end
+
   local L = 1
 
   -- Front matter: `---` ... `---`/`...`, or `+++` ... `+++`, at the very top.
@@ -614,464 +1160,13 @@ function M.segment(lines, tick)
   end
 
   while L <= n do
-    local line = lines[L]
-    repeat
-      if fence then
-        local _, qd = strip_quotes(line)
-        -- Inside the fence only its own quote markers are syntax: a `>` more is text
-        -- (a conflict marker, a prompt), whatever follows it.
-        local _, _, frest = strip_quotes(line, fence.qdepth)
-        -- A fence lives inside its container: a line outside of it (fewer `>`, or
-        -- less indented than the list item's content) ends the fence, as it ends
-        -- the container, and is read as a line of its own.
-        if
-          qd < fence.qdepth
-          or (fence.cindent > 0 and not is_blank(frest) and indent_width(frest) < fence.cindent)
-        then
-          fence = nil
-        else
-          tpl[L] = line
-          if fence_close(frest, fence.ch, fence.len, fence.cindent) then
-            fence = nil
-          end
-          break
-        end
-      end
-      if math_open then
-        tpl[L] = line
-        if line:find("$$", 1, true) then
-          math_open = nil
-        end
-        break
-      end
-      if
-        html
-        and html.cind
-        and html.cq == 0
-        and not is_blank(line)
-        and indent_width(line) < html.cind
-      then
-        html = nil
-      end
-      if html then
-        if html.kind == "blank" and is_blank(line) then
-          html = nil
-        elseif html.kind ~= "blank" and html_ends(html, line) then
-          html = nil
-        end
-        tpl[L] = line
-        break
-      end
-
-      local qpfx, qdepth, rest = strip_quotes(line)
-      if qdepth > 0 and prev_qdepth == 0 and #qpfx:match("^ *") < 2 then
-        in_list = false -- a quote that starts in the first columns ends the list
-      end
-      prev_qdepth = qdepth
-      -- A list inside a quote ends with the quote: at a blank line, or at a line that
-      -- starts something of its own, with fewer `>` (text is a lazy continuation).
-      if in_list and qdepth < list_q and (is_blank(rest) or not para) then
-        in_list = false
-      end
-      -- A block that starts in the first columns ends a list: what follows (an
-      -- indented code block, say) is no longer a continuation of an item.
-      local function leave_list()
-        local c = container_indent(indent_width(rest), qdepth)
-        if c < 2 then
-          in_list = false
-        elseif c < item_cind then
-          -- Back at the level of an outer item: the inner ones end.
-          item_cind = c
-          while #items > 0 and items[#items] > c do
-            items[#items] = nil
-          end
-        end
-      end
-
-      if is_blank(rest) then
-        literal(L)
-        break
-      end
-
-      -- Fenced code.
-      local fch, flen = fence_open(rest)
-      -- Four columns beyond its container make it indented code: no fence opens there.
-      local rest_iw = indent_width(rest)
-      local box = container_indent(rest_iw, qdepth)
-      if fch and rest_iw - box > 3 then
-        fch = nil
-      end
-      if fch then
-        literal(L)
-        leave_list()
-        fence = {
-          ch = fch,
-          len = flen,
-          qdepth = qdepth,
-          -- Inside a list item (indented to its content) the fence ends with the item.
-          cindent = box,
-        }
-        break
-      end
-
-      -- Math block.
-      if rest:match("^ *%$%$") and rest_iw - box <= 3 then
-        local first = rest:find("$$", 1, true)
-        local closed = rest:find("$$", first + 2, true) ~= nil
-        local later = false
-        -- A block that opens here must be closed somewhere below: a stray `$$` (a
-        -- price, say) is text and must not turn the rest of the document into math.
-        if not closed and not (no_close_after and L >= no_close_after) then
-          for j = L + 1, n do
-            if lines[j]:find("$$", 1, true) then
-              later = true
-              break
-            end
-          end
-          if not later then
-            no_close_after = L
-          end
-        end
-        if closed or later then
-          literal(L)
-          leave_list()
-          math_open = later or nil
-          break
-        end
-      end
-
-      -- HTML block.
-      local h = html_start(rest, para ~= nil)
-      if h then
-        literal(L)
-        leave_list()
-        if h.kind == "blank" or not html_ends(h, rest:sub(2)) then
-          html = h
-        end
-        break
-      end
-
-      -- Setext underline: turns the paragraph above into a heading.
-      if
-        para
-        and para.kind == "para"
-        and (rest:match("^ ? ? ?=+[ \t\r]*$") or rest:match("^ ? ? ?%-+[ \t\r]*$"))
-      then
-        para.kind = "heading"
-        para.setext = true
-        close_para()
-        tpl[L] = line
-        break
-      end
-
-      -- ... also the paragraph of an item (indented to its content) or of a quote: the underline stays as it is
-      -- and the text above it is one unit, so that the translation cannot turn the heading into something else.
-      if
-        para
-        and (para.kind == "item" or para.kind == "quote")
-        and para.qdepth == qdepth
-        and rest:match("^[ \t]*=+[ \t\r]*$")
-        and (para.kind == "quote" or indent_width(rest:match("^[ \t]*")) >= item_cind)
-      then
-        close_para()
-        literal(L)
-        break
-      end
-
-      if is_hr(rest) then
-        literal(L)
-        in_list = false
-        break
-      end
-
-      -- ATX heading.
-      local indent, hashes, hsp, htext = rest:match("^( ? ? ?)(#+)([ \t]+)(.*)$")
-      if hashes and #hashes <= 6 then
-        close_para()
-        in_table = nil
-        in_list = false
-        -- A closing sequence (`## Title ##`): hashes behind white space at the end.
-        local body
-        do
-          local e = #htext
-          while e > 0 and (htext:byte(e) == 32 or htext:byte(e) == 9 or htext:byte(e) == 13) do
-            e = e - 1
-          end
-          local cut = e
-          while cut > 0 and htext:byte(cut) == 35 do
-            cut = cut - 1
-          end
-          if cut < e and cut > 0 and (htext:byte(cut) == 32 or htext:byte(cut) == 9) then
-            while cut > 0 and (htext:byte(cut) == 32 or htext:byte(cut) == 9) do
-              cut = cut - 1
-            end
-            body = htext:sub(1, cut)
-          end
-        end
-        local content, suffix
-        if body then
-          content, suffix = trim_right(body)
-          suffix = suffix .. htext:sub(#body + 1)
-        else
-          content, suffix = trim_right(htext)
-        end
-        if content == "" then
-          tpl[L] = line
-        else
-          heading_unit(L, qpfx .. indent .. hashes .. hsp, content, suffix)
-        end
-        break
-      end
-      if rest:match("^ ? ? ?#+[ \t\r]*$") then
-        literal(L)
-        in_list = false
-        break
-      end
-
-      -- Table: a header row followed by a delimiter row, then body rows. Another
-      -- block (a quote, a list item) ends it.
-      if
-        in_table
-        and (
-          in_table.qdepth ~= qdepth
-          or (
-            in_table.seen_delim
-            and (rest:match("^ ? ? ?[-*+][ \t]") or rest:match("^ ? ? ?%d+[.)][ \t]"))
-          )
-        )
-      then
-        in_table = nil
-      end
-      -- An indented line (four columns beyond its container) is code, no row.
-      if in_table and rest_iw - box > 3 then
-        in_table = nil
-      end
-      if in_table then
-        if is_delimiter(line) and not in_table.seen_delim then
-          in_table.seen_delim = true
-          tpl[L] = line
-          break
-        end
-        table_row(L, qpfx, rest)
-        break
-      end
-      if
-        rest_iw - box <= 3
-        and rest:find("|", 1, true)
-        and lines[L + 1]
-        and is_delimiter(lines[L + 1])
-      then
-        close_para()
-        leave_list()
-        in_table = { seen_delim = false, qdepth = qdepth }
-        table_row(L, qpfx, rest)
-        break
-      end
-
-      -- Reference / footnote definition.
-      local rindent, caret, label, rtail = rest:match("^( ? ? ?)%[(%^?)([^%]]+)%]:(.*)$")
-      if rindent and (caret == "^" or not para) then
-        if caret == "^" then
-          local sp, body = rtail:match("^([ \t]*)(.*)$")
-          if not is_blank(body) then
-            close_para()
-            in_list = true
-            list_q = qdepth
-            item_cind = 4 -- a footnote continues with four spaces
-            items = {}
-            open_para(L, "footnote", qpfx .. rindent .. "[^" .. label .. "]:" .. sp, body, qdepth)
-            break
-          end
-          literal(L)
-          break
-        end
-        literal(L)
-        leave_list()
-        seg.defs[require("language.translate.markdown.mask")._norm_label(label)] = true
-        seg.refdefs[#seg.refdefs + 1] = L
-        local nxt = lines[L + 1]
-        -- `[label]:` alone: the destination is on the next line. That line stays as it
-        -- is: a translation that came out as one word would become the destination
-        -- and swallow the paragraph. (A line that starts a block is none.)
-        if
-          is_blank(rtail)
-          and nxt
-          and nxt:match("^[ \t]*[^ \t\r#>|<`*+%-]")
-          and not fence_open(nxt)
-        then
-          tpl[L + 1] = nxt
-          L = L + 1
-          nxt = lines[L + 1]
-        end
-        if nxt and nxt:match("^[ \t]+[\"'(]") then
-          tpl[L + 1] = nxt
-          L = L + 1
-        end
-        break
-      end
-
-      -- List item.
-      local ind, marker, sp, body = rest:match("^([ \t]*)([-*+])([ \t]+)(.*)$")
-      if not ind then
-        ind, marker, sp, body = rest:match("^([ \t]*)(%d%d?%d?%d?%d?%d?%d?%d?%d?[.)])([ \t]+)(.*)$")
-      end
-      -- An ordered list may interrupt a paragraph only when it starts at 1.
-      if
-        ind
-        and para
-        and para.qdepth == qdepth
-        and para.kind ~= "item"
-        and para.kind ~= "footnote"
-      then
-        local num = marker:match("^(%d+)[.)]$")
-        if num and tonumber(num) ~= 1 then
-          ind = nil
-        end
-      end
-      local iw = ind and indent_width(ind) or 0
-      if
-        not ind
-        and (rest:match("^[ \t]*[-*+][ \t\r]*$") or rest:match("^[ \t]*%d+[.)][ \t\r]*$"))
-      then
-        -- A marker alone on its line: an empty item, or a setext underline for the
-        -- paragraph above. Either way it is no text, and it stays where it is.
-        local after_para = para ~= nil and para.kind ~= "item" and para.kind ~= "footnote"
-        literal(L)
-        if not after_para then
-          -- No content indent: what follows a blank line is no part of the item.
-          in_list, list_q, item_cind = true, qdepth, 0
-        end
-        break
-      end
-      -- Four columns of indent make a list item only inside another one; outside, it
-      -- is an indented code block.
-      if ind and item_fits(iw) and is_blank(body) then
-        local after_para = para ~= nil and para.kind ~= "item" and para.kind ~= "footnote"
-        literal(L)
-        if not after_para then
-          open_item(iw, iw + #marker + 1)
-          in_list, list_q, item_cind = true, qdepth, 0
-        end
-        break
-      end
-      if ind and item_fits(iw) then
-        close_para()
-        open_item(iw, iw + #marker + (#sp > 4 and 1 or #sp))
-        -- Five columns or more behind the marker: the item starts with an indented code block, one column of the
-        -- white space is the item's, the rest is the code (`1.     code`).
-        do
-          -- the column counts from the start of the LINE: the quote prefix is part of it, and a tab goes to the next
-          -- multiple of four from where it stands
-          local col = 0
-          for ch in (qpfx .. ind .. marker):gmatch(".") do
-            col = ch == "\t" and col + 4 - col % 4 or col + 1
-          end
-          local start = col
-          for ch in sp:gmatch(".") do
-            col = ch == "\t" and col + 4 - col % 4 or col + 1
-          end
-          if col - start >= 5 then
-            literal(L)
-            item_cind = iw + #marker + 1
-            in_list = true
-            list_q = qdepth
-            break
-          end
-        end
-        local task
-        task, body = body:match("^(%[[ xX]%][ \t]+)(.*)$")
-        if not task then
-          task, body = "", rest:match("^[ \t]*[-*+%d.)]+[ \t]+(.*)$")
-        end
-        local bfch, bflen = fence_open(body)
-        if bfch then
-          literal(L)
-          item_cind = iw + #marker + (#sp > 4 and 1 or #sp)
-          fence = { ch = bfch, len = bflen, qdepth = qdepth, cindent = item_cind }
-          in_list = true
-          list_q = qdepth
-          break
-        end
-        if is_blank(body) then
-          literal(L)
-          break
-        end
-        -- An HTML block that opens right behind the marker (`- <div>`) is literal, and so are its next lines.
-        local item_html = task == "" and html_start(body, false) or nil
-        if item_html then
-          literal(L)
-          in_list = true
-          list_q = qdepth
-          item_cind = iw + #marker + (#sp > 4 and 1 or #sp)
-          if item_html.kind == "blank" or not html_ends(item_html, body:sub(2)) then
-            html = item_html
-            -- the block ends with the item: a line that is not indented to its content is not part of it
-            html.cind, html.cq = item_cind, qdepth
-          end
-          break
-        end
-        -- A link reference definition behind the marker (`- [ref]: /x`) is a definition, not item text.
-        do
-          local def_caret, def_label, def_tail = body:match("^%[(%^?)([^%]]+)%]:(.*)$")
-          if task == "" and def_caret == "" and not is_blank(def_tail) then
-            literal(L)
-            in_list = true
-            list_q = qdepth
-            item_cind = iw + #marker + (#sp > 4 and 1 or #sp)
-            seg.defs[require("language.translate.markdown.mask")._norm_label(def_label)] = true
-            seg.refdefs[#seg.refdefs + 1] = L
-            break
-          end
-        end
-        in_list = true
-        list_q = qdepth
-        item_cind = iw + #marker + (#sp > 4 and 1 or #sp)
-        open_para(L, "item", qpfx .. ind .. marker .. sp .. task, body, qdepth)
-        break
-      end
-
-      -- Plain text.
-      local lead, text = rest:match("^([ \t]*)(.*)$")
-      if para and qdepth > para.qdepth then
-        -- a quote starts here: its first line is judged on its own (it may be indented code), not as a continuation
-        close_para()
-      end
-      if para then
-        para.lines[#para.lines + 1] = make_line(L, qpfx .. lead, text)
-        break
-      end
-      local lw = indent_width(lead)
-      -- Text that is not indented to the item's content starts a paragraph of its own.
-      if in_list and lw < math.max(item_cind, 2) then
-        -- ... unless it is indented to the content of an item that holds the one above.
-        local c = container_indent(lw, qdepth)
-        if c >= 2 then
-          item_cind = c
-          while #items > 0 and items[#items] > c do
-            items[#items] = nil
-          end
-        else
-          in_list = false
-        end
-      end
-      if not in_list and lw >= 4 then
-        literal(L)
-        break
-      end
-      -- Four columns beyond the item's content: an indented code block inside it.
-      if in_list and lw >= item_cind + 4 then
-        literal(L)
-        break
-      end
-      local kind = qdepth > 0 and "quote" or (in_list and "item" or "para")
-      open_para(L, kind, qpfx .. lead, text, qdepth)
-    until true
-    L = L + 1
+    local took = handle(L)
+    L = L + 1 + took
     if tick then
       tick()
     end
   end
-  close_para()
+  close_leaf()
 
   for i = 1, n do
     if tpl[i] == nil then

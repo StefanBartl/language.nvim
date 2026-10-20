@@ -536,4 +536,123 @@ return function(H)
       "at the start of the line the same gap is 5 columns: code"
     )
   end
+
+  -- The containers are a stack (CommonMark): what continues, what is lazy, what ends -----------
+  do
+    local function units(lines)
+      return #seg_of(lines).units
+    end
+    local seg = seg_of({ "- a", "lazy" })
+    H.eq(#seg.units, 1, "a line without indent continues the paragraph of the item (lazy)")
+    H.eq(seg.units[1].lines, 2)
+    seg = seg_of({ "- a", "", "lazy" })
+    H.eq(
+      seg.units[2].block,
+      "para",
+      "after a blank line it is a paragraph of its own, outside of the item"
+    )
+    seg = seg_of({ "- a", "", "  b" })
+    H.eq(seg.units[2].block, "item", "an indented line after a blank one is part of the item")
+    seg = seg_of({ "-", "", "  b" })
+    H.eq(
+      seg.units[1].block,
+      "para",
+      "an empty item ends at a blank line: what follows is no part of it"
+    )
+    seg = seg_of({ "> - a", ">   more", "> - b" })
+    H.eq(#seg.units, 2, "a list in a quote: the second line continues the first item")
+    H.eq(seg.units[1].lines, 2)
+    seg = seg_of({ "1. a", "   2. b" })
+    H.eq(#seg.units, 1, "2. cannot interrupt a paragraph (it is text of the item)")
+    seg = seg_of({ "- a", "  - b", "    ```", "    c", "    ```", "  - d" })
+    H.eq(#seg.units, 3, "a fence in a nested item ends with the item")
+    H.ok(literal(seg, 4), "its content is code")
+    H.eq(
+      units({ "- a", "      - b" }),
+      1,
+      "a marker six columns in is text of the paragraph, not an item"
+    )
+  end
+
+  -- Tables: the header is the last line of the paragraph above, the cells must match --------------
+  do
+    local function cells(lines)
+      local n = 0
+      for _, u in ipairs(seg_of(lines).units) do
+        if u.block == "cell" then
+          n = n + 1
+        end
+      end
+      return n
+    end
+    H.eq(cells({ "a", "|-|", "x" }), 2, "a header without pipe is a header")
+    H.eq(cells({ "| a | b |", "|-|" }), 0, "another cell count: no table, a paragraph")
+    H.eq(cells({ "| a |", "|---|", "| b |" }), 2, "header and body row")
+    local seg = seg_of({ "intro", "h1|h2", "--|--", "x|y" })
+    H.eq(seg.units[1].text, "intro", "the lines above the header stay a paragraph")
+    H.eq(cells({ "intro", "h1|h2", "--|--", "x|y" }), 4)
+    seg = seg_of({ "a | b", "- | -" })
+    H.eq(seg.units[2].block, "item", "`- | -` is a list item before it is a delimiter row")
+    H.eq(cells({ "| a |", "|---|", "    code" }), 1, "an indented line ends the table")
+    H.eq(cells({ "> | a |", "> |---|", "| c |" }), 1, "a row outside of the quote is no row")
+  end
+
+  -- `$$` lives inside a paragraph (no block of its own), so a block start ends it ---------------------
+  do
+    local seg = seg_of({ "text", "$$", "x", "$$", "more" })
+    H.eq(
+      table.concat(texts(seg), "|"),
+      "text|more",
+      "math lines inside a paragraph stay as they are"
+    )
+    H.ok(literal(seg, 2) and literal(seg, 3) and literal(seg, 4))
+    seg = seg_of({ "$$", "```lua", "$$", "text" })
+    H.eq(#seg.units, 0, "a fence inside the 'math' starts a fence: everything below is code")
+    H.ok(seg.units[1] == nil and literal(seg, 4))
+    seg = seg_of({ "text", "$$", "x", "", "more", "$$" })
+    H.eq(
+      table.concat(texts(seg), "|"),
+      "text|more $$",
+      "a blank line ends the paragraph, and the math with it"
+    )
+  end
+
+  -- A reference definition starts a paragraph (comrak cuts it off when the paragraph ends) ----------
+  do
+    local seg = seg_of({ "[ref]: /x", "2) two" })
+    H.ok(literal(seg, 1), "the definition stays as it is")
+    H.eq(
+      table.concat(texts(seg), "|"),
+      "2) two",
+      "2) cannot interrupt the paragraph the definition began"
+    )
+    seg = seg_of({ "[a]: /x", "[b]: /y", "text" })
+    H.ok(literal(seg, 1) and literal(seg, 2), "definitions in a row")
+    H.eq(table.concat(texts(seg), "|"), "text")
+    seg = seg_of({ "text", "[ref]: /x" })
+    H.eq(
+      table.concat(texts(seg), "|"),
+      "text [ref]: /x",
+      "a definition cannot interrupt a paragraph"
+    )
+    seg = seg_of({ "> [ref]: /x", "lazy" })
+    H.eq(seg.units[1].block, "quote", "the text below goes on in the quote (lazy)")
+    H.eq(seg.units[1].text, "lazy")
+  end
+
+  -- Many containers on one line are linear work -------------------------------------------------------
+  do
+    local n = 40000
+    local t0 = (vim.uv or vim.loop).hrtime()
+    seg_of({ string.rep("- ", n) .. "x" })
+    seg_of({ string.rep("> ", n) .. "x" })
+    seg_of({ string.rep("1. ", n) .. "x" })
+    local ms = ((vim.uv or vim.loop).hrtime() - t0) / 1e6
+    H.ok(
+      ms < 1500,
+      ("40000 nested containers on a line take %d ms (quadratic work would take seconds)"):format(
+        ms
+      )
+    )
+  end
 end

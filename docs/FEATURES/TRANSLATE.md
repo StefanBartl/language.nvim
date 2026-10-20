@@ -197,15 +197,23 @@ cell** (the pipes stay). A hard line break (two trailing spaces or a
 backslash) ends a unit, since the reflow would move it; inside a code span that
 runs over lines it is just text and does not.
 
-The line parser follows CommonMark where it decides what is code: a fence ends
-with its container (a line left of the list item's content, or without the
-`>` of its quote), a block that starts in the first column ends a list, four
-columns of indent beyond the container (the page, or the content of the list
-item) are code, so neither a fence nor a table opens there, and a closing fence
-indented that far does not close; text indented to an outer item belongs to that
-item, an ordered list that does not start at 1 cannot interrupt a paragraph, a
-table ends at a quote, a list item or an indented line, a `>` inside a fence is
-text, CRLF endings and tab indents count like their LF/space counterparts.
+The segmenter reads the document the way CommonMark does: a stack of open
+containers (block quote, list item, footnote), and for every line (1) which
+containers continue (a `>`, or indent up to the content column of the item; a
+blank line keeps an item that holds a block), (2) whether an open fence, HTML
+block or table goes on, (3) which blocks start here, inside the containers that
+matched, and (4) what is left: a blank line, a lazy or ordinary continuation of
+the paragraph, a table row, or a new paragraph. Columns are counted with tab
+stops of four, so the content column of an item, "at most three columns of
+indent" and "four columns are code" mean what they mean for the previewer. It
+follows from the stack that a fence ends with its container, a block that
+starts in the first column ends a list, an ordered list that does not start at
+1 cannot interrupt a paragraph, a list item beats a table delimiter row, a
+table header is the last line of the paragraph above it (and needs as many
+cells as the delimiter row), and text indented to an outer item belongs to
+that item. `$$` and `[label]:` lines are no blocks of their own, as in the
+previewer: they stay as they are inside the paragraph they belong to (a block
+start ends that paragraph and the math with it). CRLF endings count like LF.
 Where it is unsure it prefers "literal" (German stays German) to "text".
 
 Every scan is linear: the look-aheads of the masking work on a budget per unit,
@@ -370,11 +378,12 @@ translate = {
   segmenter (`node scripts/markdown_oracle.mjs <dir>` exits 1 on a difference).
   `scripts/markdown_fuzz.lua <dir> [count] [seed]` writes random documents (fragments under random
   quote / list / tab containers) and a `list.txt` for the oracle: `markdown_oracle.lua <pairs> @<dir>/list.txt`.
-  On 1 000 such documents the segmenter differed in 180 of 2 000 runs before the fixes of 2026-10-19, in 53 after the second round;
-  the rest are container interactions (HTML blocks and `[ref]:` definitions inside nested quotes and items,
-  a table row behind an empty quote) that need a real container stack.
+  The container stack (2026-10-20) took the segmenter from 56 differing runs of 2 000 (1 000 documents) to none in
+  20 000 random documents (four seeds of 5 000), and none in the real files of the repos.
+  `node scripts/markdown_reduce.mjs <file.md>` shrinks a flagged file to the few lines that matter (it removes
+  lines while the oracle still flags the result): the way each remaining difference was found.
 
-Limits worth knowing: the Markdown parser is line-based and errs on the side
+Limits worth knowing: the Markdown parser reads blocks only and errs on the side
 of skipping (code mistaken for prose is caught by the placeholder and length
 checks; prose mistaken for code stays German); there is no inline parse for
 emphasis, so `*`/`_` stay in the text for the engine to keep; math in single
