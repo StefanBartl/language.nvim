@@ -655,4 +655,41 @@ return function(H)
       )
     )
   end
+
+  -- Review findings (wide fuzz, 2026-10-20) ---------------------------------------------------------
+  do
+    -- the width of an item is counted from where its container has content on THIS line: a quote prefix of
+    -- another width is another column
+    local seg = seg_of({ "> - text", "  > 0. zero" })
+    H.eq(#seg.units, 2, "`  > 0.` is a new item, not the second line of the one above")
+    H.eq(seg.units[2].text, "zero")
+
+    -- a header that does not match its delimiter row in cells is no table, but a translation could make one of
+    -- it (a dropped pipe): both lines stay as they are
+    seg = seg_of({ "a | b", "|-|", "text" })
+    H.ok(literal(seg, 1) and literal(seg, 2), "header and delimiter row of a non-table stay")
+    H.eq(table.concat(texts(seg), "|"), "text")
+    for _, u in ipairs(seg.units) do
+      H.falsy(u.block == "cell", "and are no cells")
+    end
+
+    -- a footnote goes on at an empty line or one indented like its text, not at one of one to three spaces
+    seg = seg_of({ "[^1]: note", "", "    more" })
+    H.eq(seg.units[2].text, "more", "an empty line: the footnote goes on")
+    seg = seg_of({ "[^1]: note", "  ", "     /url" })
+    H.ok(literal(seg, 3), "two spaces end it: what follows is indented code")
+    seg = seg_of({ "[^1]: note", "    ", "    more" })
+    H.eq(seg.units[2].text, "more", "four spaces keep it open")
+
+    -- the destination line of a bare `[label]:` is no list item
+    seg = seg_of({ "1. [ref]:", "1. text" })
+    H.eq(table.concat(texts(seg), "|"), "text", "an ordered item below is an item")
+    seg = seg_of({ "[ref]:", "/x", "text" })
+    H.ok(literal(seg, 2), "while a plain destination line stays")
+
+    -- the lines of a paragraph lose their indent: a definition below definitions is one at any indent
+    seg = seg_of({ "[a]: /x", "    [b]: /y", "text" })
+    H.ok(literal(seg, 1) and literal(seg, 2), "definitions in a row, whatever the indent")
+    H.ok(seg.defs["a"] and seg.defs["b"])
+  end
 end

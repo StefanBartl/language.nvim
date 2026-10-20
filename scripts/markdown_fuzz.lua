@@ -1,7 +1,7 @@
 -- scripts/markdown_fuzz.lua -- random Markdown documents for the oracle: fragments mixed under random containers
 -- (quote depth, list indent, tabs), so that fences in lists in quotes, empty items and open fences turn up.
 --
---   nvim -n -i NONE --headless -u NONE -l scripts/markdown_fuzz.lua <out_dir> [count] [seed]
+--   nvim -n -i NONE --headless -u NONE -l scripts/markdown_fuzz.lua <out_dir> [count] [seed] [wide]
 --
 -- Writes `<out_dir>/f<N>.md` and `<out_dir>/list.txt` (one path per line) for
 -- `markdown_oracle.lua <pairs_dir> @<out_dir>/list.txt`.
@@ -71,6 +71,57 @@ local prefixes = {
   "- > ",
   "> 1. ",
 }
+-- `wide`: the fragments the default set leaves out (footnotes, open HTML blocks, math in lists, table variants,
+-- definitions with titles, raw HTML, odd markers), under more containers
+if arg[4] == "wide" then
+  vim.list_extend(fragments, {
+    "[^1]: note",
+    "[^1]: note",
+    "    footnote continuation",
+    "Fussnote[^1] hier",
+    "<pre>",
+    "</pre>",
+    "<details>",
+    "</details>",
+    "<span>x</span>",
+    "<script>",
+    "</script>",
+    "<?php",
+    "?>",
+    "<!--",
+    "-->",
+    "$$ x = 1",
+    "x $$",
+    "$$x$$",
+    "| a |",
+    "|-|",
+    "a | b",
+    "--|--",
+    ":-:|-:",
+    "| a | b | c |",
+    "[ref]:",
+    "  /url",
+    '  "title"',
+    "[ref2]: /y 'title'",
+    "~~strike~~",
+    "10) ten",
+    "0. zero",
+    "1.     code",
+    "-     code",
+    "*",
+    "+",
+    "* * *",
+    "- - -",
+    "1.",
+    "= = =",
+    "word\\",
+    "[x]: <a b>",
+  })
+  vim.list_extend(
+    prefixes,
+    { "   1. ", "- - ", "> > - ", "> ", "    > ", "\t- ", "  > ", "1. > ", "- [ ] " }
+  )
+end
 
 local list = {}
 for n = 1, count do

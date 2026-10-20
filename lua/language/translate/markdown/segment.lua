@@ -353,8 +353,9 @@ end
 ---(3) the blocks that start here (inside the containers that matched), (4) what is left of the line:
 ---a blank, a lazy or ordinary continuation of the paragraph, a table row, or a new paragraph. A math
 ---block (`$$`) and a reference definition are no blocks: their lines stay as they are inside the
----paragraph, which a block start ends (the previewer's reading). Columns are counted with tab stops of four, so the content column of an item and
----the "at most three columns of indent" rule mean what the previewer's renderer means by them.
+---paragraph, which a block start ends (the previewer's reading). Columns are counted with tab stops
+---of four, so the content column of an item and the "at most three columns of indent" rule mean what
+---the previewer's renderer means by them.
 ---@param lines string[]
 ---@param tick? fun()
 ---@return LanguageMdSegmentation
@@ -364,7 +365,9 @@ function M.segment(lines, tick)
   local seg = { tpl = {}, units = {}, blocks = {}, headings = {}, defs = {}, refdefs = {} }
   local tpl, units, blocks = seg.tpl, seg.units, seg.blocks
 
-  -- Open containers, outermost first: { t = "quote" } | { t = "item"|"footnote", w = content column, has = bool }.
+  -- Open containers, outermost first: { t = "quote" } | { t = "item"|"footnote", w = width of the content, counted from where the container around it
+  -- has its content on the line, has = bool }. Relative, as CommonMark has it: two lines may reach the
+  -- same item through quote prefixes of different width (`> - a` / `  > b`).
   -- `has`: the item holds a block already (an empty item does not survive a blank line).
   local stack = {}
   local nquote, nitem = 0, 0 -- quotes / items+footnotes in the stack
@@ -675,6 +678,9 @@ function M.segment(lines, tick)
       and nxt:match("^[ \t]*[^ \t\r#>|<`*+%-]")
       and not nxt:match("^[ \t]*```+[^`]*$")
       and not nxt:match("^[ \t]*~~~+")
+      -- an ordered item starts a block of its own (`1. text`), it is no destination
+      and not nxt:match("^[ \t]*%d+[.)][ \t\r]")
+      and not nxt:match("^[ \t]*%d+[.)]$")
     then
       p.lines[#p.lines + 1] = lit_line(L + 1)
       took = took + 1
@@ -734,14 +740,15 @@ function M.segment(lines, tick)
           break
         end
       elseif line:find("^[\r\f\v]*$", np) then
-        -- a blank line: an item that holds a block goes on, an empty one ends
-        if c.has then
+        -- a blank line: an item that holds a block goes on, an empty one ends. A footnote goes on at a line
+        -- that is really empty or indented like its text (the previewer ends it at one of one to three spaces)
+        if c.has and (c.t ~= "footnote" or line:find("^\r*$", pos) or nc - (col + eoff) >= c.w) then
           matched = i
         else
           break
         end
-      elseif nc >= c.w then
-        advance_to(c.w)
+      elseif nc - (col + eoff) >= c.w then
+        advance_to(col + eoff + c.w)
         matched = i
       else
         break
@@ -749,7 +756,7 @@ function M.segment(lines, tick)
     end
     local all = matched == #stack
 
-    -- (2) an open fence, HTML block, math block
+    -- (2) an open fence or HTML block
     if leaf and all then
       local t = leaf.t
       if t == "fence" then
@@ -955,7 +962,7 @@ function M.segment(lines, tick)
               tpl[L] = line
               return 0
             end
-            stack[#stack + 1] = { t = "footnote", w = nc + 4, has = true }
+            stack[#stack + 1] = { t = "footnote", w = 4, has = true }
             nitem = nitem + 1
             matched = #stack
             local close = line:find("]:", np, true)
@@ -1000,7 +1007,7 @@ function M.segment(lines, tick)
               local w = (empty or gap >= 5) and nc + mlen + 1 or nc + mlen + gap
               settle()
               mark_content()
-              stack[#stack + 1] = { t = "item", w = w, has = false }
+              stack[#stack + 1] = { t = "item", w = w - (col + eoff), has = false }
               nitem = nitem + 1
               matched = #stack
               advance_to(nc)
@@ -1032,6 +1039,12 @@ function M.segment(lines, tick)
               tpl[L] = line
               leaf = { t = "table" }
               return 0
+            elseif not hdr.lit then
+              -- No table by the cell count. But a translation that adds or drops a pipe in the header line
+              -- would make one of it: the header and the delimiter row stay as they are.
+              hdr.lit, hdr.prefix, hdr.content, hdr.suffix, hdr.hard = true, "", "", "", false
+              para_above.lines[#para_above.lines + 1] = lit_line(L)
+              return 0
             end
           end
         end
@@ -1052,8 +1065,9 @@ function M.segment(lines, tick)
     if leaf and leaf.t == "para" then
       -- an ordinary or a lazy continuation of the paragraph
       if leaf.defs_only then
-        -- the paragraph has held nothing but reference definitions so far: one more is one more
-        if nc - (col + eoff) <= 3 and line:find("^%[[^%]^][^%]]*%]:", np) then
+        -- the paragraph has held nothing but reference definitions so far: one more is one more, whatever its
+        -- indent (the lines of a paragraph lose their indent)
+        if line:find("^%[[^%]^][^%]]*%]:", np) then
           return ref_lines(L, np, leaf)
         end
         leaf.defs_only = nil

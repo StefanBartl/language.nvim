@@ -376,10 +376,16 @@ translate = {
   `mdview.nvim` checkout): block structure, literal blocks, link / image /
   code targets. Run it over a few hundred files after every change of the
   segmenter (`node scripts/markdown_oracle.mjs <dir>` exits 1 on a difference).
-  `scripts/markdown_fuzz.lua <dir> [count] [seed]` writes random documents (fragments under random
+  `scripts/markdown_fuzz.lua <dir> [count] [seed] [wide]` writes random documents (fragments under random
   quote / list / tab containers) and a `list.txt` for the oracle: `markdown_oracle.lua <pairs> @<dir>/list.txt`.
+  `wide` adds footnotes, open HTML blocks (`<pre>`, `<details>`, `<script>`), `$$` in lists, table variants,
+  definitions with titles and odd markers. A difference in a document with a `<pre>` is usually no bug (see
+  above: the raw tag swallows the rest of the page).
   The container stack (2026-10-20) took the segmenter from 56 differing runs of 2 000 (1 000 documents) to none in
-  20 000 random documents (four seeds of 5 000), and none in the real files of the repos.
+  20 000 random documents (four seeds of 5 000), and none in the real files of the repos. The wide set found five
+  more kinds of case (container widths are relative to the container around them, a footnote ends at a line of one to
+  three spaces, a header with another cell count than its delimiter row stays literal, a destination line is no
+  list item, definitions below definitions at any indent), all fixed.
   `node scripts/markdown_reduce.mjs <file.md>` shrinks a flagged file to the few lines that matter (it removes
   lines while the oracle still flags the result): the way each remaining difference was found.
 
