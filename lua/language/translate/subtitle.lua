@@ -137,12 +137,19 @@ function M.cue_ranges(lines, kind)
           or head:match("^WEBVTT") ~= nil
       end
       if not skip then
+        -- A block normally holds one cue. A file that lost the blank line between two cues has several timing
+        -- lines in one block: it is split there, and the line before the next timing line (that cue's index or
+        -- identifier) is left out of the text. Better one untranslated line than a timing line sent to the engine.
+        local timings = {}
         for t = first, last do
           if is_timing(lines[t]) then
-            if t < last then
-              ranges[#ranges + 1] = { s = t + 1, e = last }
-            end
-            break
+            timings[#timings + 1] = t
+          end
+        end
+        for k, t in ipairs(timings) do
+          local stop = timings[k + 1] and (timings[k + 1] - 2) or last
+          if t < stop then
+            ranges[#ranges + 1] = { s = t + 1, e = stop }
           end
         end
       end
@@ -273,7 +280,11 @@ function M.translate(provider, lines, kind, target, cfg, cb, range)
       cb(false, result)
       return
     end
-    if type(result) ~= "table" or #result ~= #flat then
+    local shaped = type(result) == "table" and #result == #flat
+    for i = 1, shaped and #flat or 0 do
+      shaped = shaped and type(result[i]) == "string"
+    end
+    if not shaped then
       cb(false, "the engine changed the line structure of the subtitle text; nothing was written")
       return
     end

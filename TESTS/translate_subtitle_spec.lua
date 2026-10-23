@@ -98,6 +98,33 @@ return function(H)
     "a cue without text has no range"
   )
 
+  -- a file that lost the blank line between two cues: split at the timing lines, none of them is cue text
+  do
+    local broken = {
+      "1",
+      "00:00:01,000 --> 00:00:02,000",
+      "Hello",
+      "2",
+      "00:00:03,000 --> 00:00:04,000",
+      "World",
+      "3",
+      "00:00:05,000 --> 00:00:06,000",
+      "!",
+    }
+    local br = subtitle.cue_ranges(broken, "srt")
+    H.eq(#br, 3, "no blank line: still three cues")
+    H.eq(br[1].s .. "-" .. br[1].e, "3-3", "no blank line: the first text, without the next index")
+    H.eq(br[2].s .. "-" .. br[2].e, "6-6", "no blank line: the second text")
+    for _, range in ipairs(br) do
+      for l = range.s, range.e do
+        H.ok(
+          not broken[l]:find("-->", 1, true),
+          "no blank line: a timing line is never in a text range"
+        )
+      end
+    end
+  end
+
   -- detection --------------------------------------------------------------
   H.eq(subtitle.detect("/x/movie.SRT", "", {}), "srt", "by extension, any case")
   H.eq(subtitle.detect("", "vtt", {}), "vtt", "by filetype")
@@ -192,6 +219,18 @@ return function(H)
     end,
   }, SRT, "srt")
   H.falsy(got.ok, "structure: a separator that did not come back blank fails")
+
+  got = run({
+    translate = function(lines, _, _, _, cb)
+      local o = {}
+      for i in ipairs(lines) do
+        o[i] = i == 1 and 42 or lines[i]
+      end
+      cb(true, o)
+    end,
+  }, SRT, "srt")
+  H.falsy(got.ok, "structure: a line that is no string fails, it does not raise")
+  H.contains(got.result, "nothing was written", "structure: and says so, too")
 
   -- an engine error is passed on
   got = run({
