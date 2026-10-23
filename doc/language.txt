@@ -103,8 +103,10 @@ defaulting to the whole-buffer scope.
         --files=<mode>      output mode when scope is cwd/path=<dir> — see
                             |language-translate-files|
         scope               selection (default with a range) | buffer | cwd
-                            | path=<dir>
+                            | path=<dir> | cword (the word under the cursor,
+                            character-exact through `run_region`)
     Examples: >
+        :Translate DE cword           " the word under the cursor, in the popup
         :'<,'>Translate DE            " popup near the cursor, buffer untouched
         :Translate EN --output=vsplit " open the translation in a vertical split
         :Translate FR --output=buffer " open the translation in a new buffer
@@ -191,6 +193,23 @@ Subtitles (SRT and WebVTT)
     engine damaged keeps its source text and is reported; an engine answer
     with another line structure writes nothing.
     A sentence that runs across two cues is translated cue by cue.
+
+                                                              *language-hover*
+The word under the cursor (hover.nvim)~
+With hover.nvim installed, `:Hover show` over a word answers with its
+translation in the hover float. Optional in both directions: without
+hover.nvim nothing registers and nothing is missing.
+    - Only on request. The contribution is `on_request`, so the automatic
+      hover trigger never sends the word under the cursor to a translation
+      endpoint; only `:Hover show` (or a key bound to it) does.
+    - Target language: `translate.default_target`, else `EN`.
+    - It waits for the answer, at most 2 seconds (hover.nvim asks
+      synchronously); a failure is shown in the float, not as an error.
+    - `hover = false` in |language-config| switches it off.
+    - `:checkhealth language` reports whether it is registered and flagged
+      `on_request`.
+`:Translate <lang> cword` is the same word into a language you name, in the
+popup. See docs/FEATURES/HOVER.md.
 
 ==============================================================================
 5. SCOPING                                                   *language-scoping*
@@ -520,6 +539,7 @@ Defaults (abridged; see lua/language/config/DEFAULTS.lua): >lua
         deepl = { api_key = nil },
         files = { output = "suffix" },  -- :Translate cwd/path=<dir> default
       },
+      hover = true,     -- register the word-under-cursor translation with hover.nvim
       commands = true,
     })
 <
