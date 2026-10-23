@@ -104,7 +104,7 @@ function M.refresh()
     pcall(state.job.cancel)
   end
   set_output({ "…" })
-  state.job = provider.translate(lines, state.target, nil, cfg(), function(ok, result)
+  local function on_result(ok, result)
     if not M.is_open() then
       return
     end
@@ -114,7 +114,15 @@ function M.refresh()
     else
       set_output({ "(error: " .. tostring(result) .. ")" })
     end
-  end)
+  end
+  -- Subtitle text (SRT/WebVTT) in the input: only the cue text goes out.
+  local subtitle = require("language.translate.subtitle")
+  local kind = subtitle.sniff(lines)
+  if kind then
+    state.job = subtitle.translate(provider, lines, kind, state.target, cfg(), on_result)
+  else
+    state.job = provider.translate(lines, state.target, nil, cfg(), on_result)
+  end
 end
 
 ---@internal

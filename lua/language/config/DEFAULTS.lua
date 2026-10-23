@@ -132,7 +132,19 @@ local defaults = {
     -- Override per call with `--files=<mode>`.
     files = {
       output = "suffix",
-      extensions = { "md", "markdown", "txt", "text", "rst", "adoc", "asciidoc", "tex", "org" },
+      extensions = {
+        "md",
+        "markdown",
+        "txt",
+        "text",
+        "rst",
+        "adoc",
+        "asciidoc",
+        "tex",
+        "org",
+        "srt",
+        "vtt",
+      },
       max_kb = 512,
     },
   },

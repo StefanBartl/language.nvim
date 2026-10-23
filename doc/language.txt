@@ -175,6 +175,23 @@ holds).
     has nothing to translate" going unremarked; a notify warning names the
     directory and the reason.
 
+                                                      *language-translate-subtitles*
+Subtitles (SRT and WebVTT)
+    Subtitle text is recognised by file name (`.srt`, `.vtt`), filetype, or,
+    in an unnamed buffer, by a `WEBVTT` header or a timing line. Only the text
+    lines of each cue are translated; the index, the timing line, the `WEBVTT`
+    header and `NOTE`/`STYLE`/`REGION` blocks are copied byte for byte. Tags
+    (`<i>`, `<c.class>`, `<v Name>`, `<00:00:01.000>`) and `{\an8}`
+    overrides are protected and put back. All cues go out in one request,
+    separated by blank lines; a cue with several lines stays together.
+    This applies to every way of translating: `:Translate`,
+    `:TranslateReplace` (also with `--nocode`, which is not needed), the
+    window, and `cwd`/`path=` (`srt` and `vtt` are in
+    `translate.files.extensions`). There is no switch. A cue whose tags the
+    engine damaged keeps its source text and is reported; an engine answer
+    with another line structure writes nothing.
+    A sentence that runs across two cues is translated cue by cue.
+
 ==============================================================================
 5. SCOPING                                                   *language-scoping*
 

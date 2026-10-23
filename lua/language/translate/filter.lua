@@ -55,4 +55,32 @@ function M.translatable_ranges(bufnr, start_line, end_line)
   return ranges
 end
 
+---Line ranges of the cue text of an SRT/WebVTT buffer inside `[start_line, end_line]`:
+---one range per cue, never an index, timing, header or `NOTE`/`STYLE` line. The kind
+---comes from the buffer (file name, filetype, content), there is no switch.
+---@param bufnr integer
+---@param start_line integer  1-based inclusive
+---@param end_line integer    1-based inclusive
+---@return { s: integer, e: integer }[]
+function M.subtitle_ranges(bufnr, start_line, end_line)
+  if not bufnr or not start_line or not end_line then
+    return {}
+  end
+  local subtitle = require("language.translate.subtitle")
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local kind = subtitle.detect(vim.api.nvim_buf_get_name(bufnr), vim.bo[bufnr].filetype, lines)
+  if not kind then
+    return {}
+  end
+  ---@type { s: integer, e: integer }[]
+  local ranges = {}
+  for _, r in ipairs(subtitle.cue_ranges(lines, kind)) do
+    local s, e = math.max(r.s, start_line), math.min(r.e, end_line)
+    if s <= e then
+      ranges[#ranges + 1] = { s = s, e = e }
+    end
+  end
+  return ranges
+end
+
 return M

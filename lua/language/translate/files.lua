@@ -10,7 +10,8 @@
 ---   "buffers" → open each translation in a scratch buffer (no disk write)
 ---
 --- Note: `--nocode` and per-range code-skipping apply to buffer/selection
---- translation only; whole files are translated as one block here.
+--- translation only; whole files are translated as one block here, except
+--- subtitle files (`.srt`, `.vtt`), where only the cue text is sent.
 
 require("language.@types")
 require("language.translate.@types")
@@ -216,7 +217,31 @@ function M.process(provider, picked, target, mode, on_done)
       vim.schedule(step)
     end
 
-    local started, thrown = pcall(provider.translate, lines, target, nil, c, on_result)
+    local kind = require("language.translate.subtitle").detect(picked[i].abs, nil, lines)
+    local started, thrown
+    if kind then
+      started, thrown = pcall(
+        require("language.translate.subtitle").translate,
+        provider,
+        lines,
+        kind,
+        target,
+        c,
+        function(ok3, result, info)
+          if ok3 and info and info.kept > 0 then
+            notify.warn(
+              ("%s: %d subtitle cue(s) kept in the source language (the engine broke a tag)"):format(
+                picked[i].rel,
+                info.kept
+              )
+            )
+          end
+          on_result(ok3, result)
+        end
+      )
+    else
+      started, thrown = pcall(provider.translate, lines, target, nil, c, on_result)
+    end
     if not started then
       on_result(false, thrown)
     end

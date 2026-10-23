@@ -199,6 +199,45 @@ local function translate_range(provider, bufnr, s, e, target, mode)
 end
 
 ---@internal
+---Translate the cue text of an SRT/WebVTT range and deliver via `mode`. Index,
+---timing and header lines are copied, not sent (see `translate/subtitle.lua`).
+---@param provider LanguageTranslateProvider
+---@param bufnr integer
+---@param s integer
+---@param e integer
+---@param target string
+---@param mode LanguageTranslateOutput
+---@param kind "srt"|"vtt"
+---@return nil
+local function translate_subtitle(provider, bufnr, s, e, target, mode, kind)
+  local subtitle = require("language.translate.subtitle")
+  local all = api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local lines = api.nvim_buf_get_lines(bufnr, s - 1, e, false)
+  local jobref = subtitle.translate(provider, all, kind, target, cfg(), function(ok, result, info)
+    if not ok then
+      notify.error(tostring(result))
+      return
+    end
+    ---@cast result string[]
+    if (mode == "replace" or mode == "insert") and not range_unchanged(bufnr, s, e, lines) then
+      return
+    end
+    if info and info.kept > 0 then
+      notify.warn(
+        ("%d subtitle cue(s) kept in the source language (the engine broke a tag)"):format(
+          info.kept
+        )
+      )
+    end
+    output.apply(mode, result, { bufnr = bufnr, s = s, e = e, target = target })
+    require("language.translate.history").record({ input = lines, output = result, target = target })
+  end, { s = s, e = e })
+  if jobref then
+    active[#active + 1] = jobref
+  end
+end
+
+---@internal
 ---Translate the prose sub-ranges of [s,e] (skip code), replacing bottom-up.
 ---@param provider LanguageTranslateProvider
 ---@param bufnr integer
@@ -329,7 +368,15 @@ function M.run(lang, opts)
     nocode = c.nocode_default
   end
 
-  if nocode and mode == "replace" then
+  local subtitle_kind = require("language.translate.subtitle").detect(
+    api.nvim_buf_get_name(bufnr),
+    vim.bo[bufnr].filetype,
+    api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  )
+  if subtitle_kind then
+    -- Always: timestamps must never be translated, so `--nocode` is not asked.
+    translate_subtitle(provider, bufnr, s, e, lang, mode, subtitle_kind)
+  elseif nocode and mode == "replace" then
     translate_nocode(provider, bufnr, s, e, lang)
   else
     translate_range(provider, bufnr, s, e, lang, mode)
