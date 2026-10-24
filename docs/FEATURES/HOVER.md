@@ -25,7 +25,7 @@ missing, and they are separable:
 The `cword` scope is the part that had to exist either way — the hover uses the
 same word-finding. What the hover adds on top is that the answer arrives
 **where you are already looking**, alongside whatever else answers for that
-position (documentation.nvim, insights.nvim); `<M-n>` steps between them.
+position (docmap.nvim, insights.nvim); `<M-n>` steps between them.
 
 ## It is `on_request`, and that is not decoration
 
