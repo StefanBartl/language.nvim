@@ -343,7 +343,7 @@ return function(H)
   end
 
   -- G: an old lib.nvim without `lib.nvim.bindings.usercmd.composer` (the case check_lib()'s own
-  -- advice names, "Update StefanBartl/lib.nvim"). check_lib() warns, and the three composer
+  -- advice names, "Update WKDSteve/lib.nvim"). check_lib() warns, and the three composer
   -- sections at the end of M.check() are skipped without a second message instead of crashing
   -- `:checkhealth language` with a traceback below the report. Everything before them is there.
   package.loaded["lib.nvim.bindings.usercmd.composer"] = nil

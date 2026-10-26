@@ -9,7 +9,7 @@ bash scripts/test.sh --file config    # only spec files whose name contains "con
 bash scripts/test.sh --json ir.json   # also write the machine-readable result
 ```
 
-The specs are run by [testing.nvim](https://github.com/StefanBartl/testing.nvim)
+The specs are run by [testing.nvim](https://github.com/WKDSteve/testing.nvim)
 (configured in `.testing.lua`; dialect `h`, i.e. on this directory's own
 `harness.lua`). Every `*_spec.lua` under `TESTS/` is discovered — there is no
 list to maintain. Exit 0 is a pass; a failed spec, or a missing testing.nvim /

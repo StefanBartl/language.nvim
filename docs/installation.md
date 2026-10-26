@@ -9,8 +9,8 @@ mistaken for a broken install.
 
 ```lua
 {
-  "StefanBartl/language.nvim",
-  dependencies = { "StefanBartl/lib.nvim" },
+  "WKDSteve/language.nvim",
+  dependencies = { "WKDSteve/lib.nvim" },
   event = "VeryLazy",
   opts = {},
 }
@@ -26,8 +26,8 @@ buffers opened after the plugin loaded.
 
 ```lua
 use {
-  "StefanBartl/language.nvim",
-  requires = { "StefanBartl/lib.nvim" }, -- required
+  "WKDSteve/language.nvim",
+  requires = { "WKDSteve/lib.nvim" }, -- required
   config = function()
     require("language").setup()
   end,
@@ -37,8 +37,8 @@ use {
 ## vim-plug
 
 ```vim
-Plug 'StefanBartl/lib.nvim' " required
-Plug 'StefanBartl/language.nvim'
+Plug 'WKDSteve/lib.nvim' " required
+Plug 'WKDSteve/language.nvim'
 
 lua require("language").setup()
 ```

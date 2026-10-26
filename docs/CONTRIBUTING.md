@@ -1,7 +1,7 @@
 # Contributing to language.nvim
 
 Thank you for your interest! Bugs, ideas and questions are welcome in the
-[issue tracker](https://github.com/StefanBartl/language.nvim/issues); pull
+[issue tracker](https://github.com/WKDSteve/language.nvim/issues); pull
 requests very welcome.
 
 ## Getting the repository into a session
@@ -14,7 +14,7 @@ vim.opt.rtp:prepend("/path/to/language.nvim")
 require("language").setup({})
 ```
 
-[lib.nvim](https://github.com/StefanBartl/lib.nvim) has to be on the runtime
+[lib.nvim](https://github.com/WKDSteve/lib.nvim) has to be on the runtime
 path too — several modules require it at load time. `curl` has to be on `PATH`
 for anything to translate.
 
@@ -90,7 +90,7 @@ picker, no window, no external CLI, no network.
 bash scripts/test.sh
 ```
 
-The specs run on [testing.nvim](https://github.com/StefanBartl/testing.nvim)
+The specs run on [testing.nvim](https://github.com/WKDSteve/testing.nvim)
 (`.testing.lua`). Exit 0 is a pass. `scripts/test.sh` resolves testing.nvim
 and lib.nvim from `$TESTING_NVIM_DIR` / `$LIB_NVIM_DIR`, then `.deps/<name>`,
 then a sibling `../<name>` checkout, then the lazy.nvim-managed copy — the

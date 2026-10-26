@@ -1,6 +1,6 @@
 # The word under the cursor, translated
 
-An integration rather than a domain: [hover.nvim](https://github.com/StefanBartl/hover.nvim)
+An integration rather than a domain: [hover.nvim](https://github.com/WKDSteve/hover.nvim)
 brings the float, the dismissal and the paging between several answers;
 language.nvim brings the answer. Optional in both directions — without
 hover.nvim installed, nothing here registers and nothing is missing.

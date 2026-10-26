@@ -10,7 +10,7 @@ registered with which-key automatically when `which_key.enable = true`
 switch: no keymap is bound at all, neither the global ones nor the session-local ones.
 
 Every entry below is a **named action**, declared through
-[`lib.nvim.bindings.keymap`](https://github.com/StefanBartl/lib.nvim): the
+[`lib.nvim.bindings.keymap`](https://github.com/WKDSteve/lib.nvim): the
 config key is the action's name, an lhs may be a list of keys
 (`panel = { "<leader>ss", "z=" }`), and a misspelled name is reported with
 its nearest match instead of silently binding nothing. `to` becomes one
@@ -63,7 +63,7 @@ once in `lua/language/bindings/keymaps/init.lua`.
 
 ## User commands
 
-Each is its own [`lib.nvim.bindings.usercmd.composer`](https://github.com/StefanBartl/lib.nvim)
+Each is its own [`lib.nvim.bindings.usercmd.composer`](https://github.com/WKDSteve/lib.nvim)
 verb (a flat `path = {}` root route — no subcommand tree), defined in
 `lua/language/bindings/usrcmds/init.lua`.
 
@@ -82,7 +82,7 @@ than falling through to the buffer, which would be a wrong answer in the shape
 of a right one.
 
 The same word-finding answers `:Hover show` when
-[hover.nvim](https://github.com/StefanBartl/hover.nvim) is installed — asked
+[hover.nvim](https://github.com/WKDSteve/hover.nvim) is installed — asked
 only on an explicit request, never on its automatic trigger, because every
 answer is a network request carrying the word under the cursor. See
 [FEATURES/HOVER.md](FEATURES/HOVER.md).

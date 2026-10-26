@@ -46,13 +46,13 @@ local function check_lib()
   if pcall(require, "lib.nvim.notify") then
     ok_s("lib.nvim installed (notify + cross-platform helpers)")
   else
-    err_s("lib.nvim not found", { "Install StefanBartl/lib.nvim as a dependency" })
+    err_s("lib.nvim not found", { "Install WKDSteve/lib.nvim as a dependency" })
   end
   if pcall(require, "lib.nvim.bindings.usercmd.composer") then
     ok_s("lib.nvim.bindings.usercmd.composer available (:Spellcheck/:Translate/:TranslateReplace)")
   else
     err_s("lib.nvim.bindings.usercmd.composer not found — commands will fail to register", {
-      "Update StefanBartl/lib.nvim",
+      "Update WKDSteve/lib.nvim",
     })
   end
 end
@@ -71,13 +71,13 @@ local function check_ui()
   elseif tostring(err):find("module 'ui.kit' not found", 1, true) then
     warn_s(
       "ui.nvim not found — the default :Translate popup, the spell panel and the pickers cannot open",
-      { "Install StefanBartl/ui.nvim" }
+      { "Install WKDSteve/ui.nvim" }
     )
   else
     -- there, but it raised while loading: say what it said instead of asking for an install
     warn_s(
       "ui.nvim is installed but ui.kit failed to load: " .. (tostring(err):match("[^\n]+") or "?"),
-      { "Update StefanBartl/ui.nvim, or check :messages" }
+      { "Update WKDSteve/ui.nvim, or check :messages" }
     )
   end
 end

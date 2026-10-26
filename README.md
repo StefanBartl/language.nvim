@@ -18,10 +18,10 @@
 [![Neovim](https://img.shields.io/badge/Neovim-0.9%2B-57A143?logo=neovim&logoColor=white)](https://neovim.io)
 [![Lua](https://img.shields.io/badge/Lua-5.1%2FLuaJIT-2C2D72?logo=lua&logoColor=white)](https://www.lua.org)
 ![Status](https://img.shields.io/badge/status-beta-orange)
-[![CI](https://github.com/StefanBartl/language.nvim/actions/workflows/ci.yml/badge.svg)](https://github.com/StefanBartl/language.nvim/actions/workflows/ci.yml)
-[![wkd](https://img.shields.io/badge/wkd-family-c6ff3d)](https://stefanbartl.github.io/wkd/p/language/)
+[![CI](https://github.com/WKDSteve/language.nvim/actions/workflows/ci.yml/badge.svg)](https://github.com/WKDSteve/language.nvim/actions/workflows/ci.yml)
+[![wkd](https://img.shields.io/badge/wkd-family-c6ff3d)](https://wkdsteve.github.io/wkd/p/language/)
 
-> Part of the [wkd](https://stefanbartl.github.io/wkd/) family — see this plugin's [page](https://stefanbartl.github.io/wkd/p/language/) on the site.
+> Part of the [wkd](https://wkdsteve.github.io/wkd/) family — see this plugin's [page](https://wkdsteve.github.io/wkd/p/language/) on the site.
 
 Spelling, grammar, translation and synonyms in one plugin, all of it
 asynchronous and all of it acting on the buffer you are already in.
@@ -32,13 +32,13 @@ endpoint work with zero configuration.
 
 ## Around it
 
-> **[hover.nvim](https://github.com/StefanBartl/hover.nvim)** — the word under
+> **[hover.nvim](https://github.com/WKDSteve/hover.nvim)** — the word under
 > the cursor, translated into a float. It is asked only on request rather than
 > on every hover, because the keyless endpoint answers a passive contribution
 > with HTTP 429 — the measurement is in
 > [docs/FEATURES/HOVER.md](docs/FEATURES/HOVER.md).
 >
-> **[sessions.nvim](https://github.com/StefanBartl/sessions.nvim)** — restores
+> **[sessions.nvim](https://github.com/WKDSteve/sessions.nvim)** — restores
 > your workspace by project and branch, so a spell session and its target
 > language come back where you left them instead of being set up again.
 >
@@ -47,7 +47,7 @@ endpoint work with zero configuration.
 > quickfix list is the fallback.
 >
 > All of the above are soft: without them everything else works unchanged.
-> [lib.nvim](https://github.com/StefanBartl/lib.nvim) is the one real
+> [lib.nvim](https://github.com/WKDSteve/lib.nvim) is the one real
 > dependency — see [Requirements](docs/requirements.md).
 
 ---
@@ -76,7 +76,7 @@ question each page answers.
 - [Workflow](docs/WORKFLOW.md) — how the pieces combine into a habit, and the two traps: `:Translate` against `:TranslateReplace`, and reading the confirmation before `--files=replace`.
 - [Health check](docs/health.md) — the nine `:checkhealth language` sections, and which findings are actually problems.
 - [Contributing](docs/CONTRIBUTING.md) — ground rules, project layout, and how to add a provider.
-- [Feedback](https://github.com/StefanBartl/language.nvim/issues) — bugs, feature requests and usage questions; broader discussion in [Discussions](https://github.com/StefanBartl/language.nvim/discussions).
+- [Feedback](https://github.com/WKDSteve/language.nvim/issues) — bugs, feature requests and usage questions; broader discussion in [Discussions](https://github.com/WKDSteve/language.nvim/discussions).
 
 `:help language` is the same reference inside the editor.
 

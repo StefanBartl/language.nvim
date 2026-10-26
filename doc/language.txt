@@ -41,7 +41,7 @@ long/blocking work asynchronously with cancellation and timeouts.
 2. REQUIREMENTS                                         *language-requirements*
 
     - Neovim >= 0.9 (0.10+ recommended for `vim.system`)
-    - StefanBartl/lib.nvim
+    - WKDSteve/lib.nvim
     - curl (for translation)
     - Optional: folke/trouble.nvim (nicer list; pcall-guarded)
     - Optional spell CLIs: typos, cspell, codespell
@@ -56,8 +56,8 @@ long/blocking work asynchronously with cancellation and timeouts.
 <
 Call once. See |language-config| for the full option tree. With lazy.nvim: >lua
     {
-      "StefanBartl/language.nvim",
-      dependencies = { "StefanBartl/lib.nvim", "folke/trouble.nvim" },
+      "WKDSteve/language.nvim",
+      dependencies = { "WKDSteve/lib.nvim", "folke/trouble.nvim" },
       event = "VeryLazy",
       config = function() require("language").setup({}) end,
     }
