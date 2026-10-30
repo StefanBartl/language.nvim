@@ -717,6 +717,10 @@ return function(H)
     -- it): the code span in the cell stays whole
     seg = seg_of({ "| h1 | h2 |", "| -- | -- |", "| `a \\\\| b` | c |", "| x \\\\ | y |" })
     H.eq(table.concat(texts(seg), "#"), "h1#h2#`a \\\\| b`#c#x \\\\#y")
+    -- the same rule counts the header cells: `a \\| b` is one cell, so the header matches its delimiter row and
+    -- the table is a table (its rows are translated)
+    seg = seg_of({ "| a \\\\| b | c |", "| - | - |", "| x | y |" })
+    H.eq(table.concat(texts(seg), "#"), "a \\\\| b#c#x#y", "a header with \\\\| is a table header")
 
     -- a task box with nothing behind it is still the item's paragraph: the line below goes on with it, and a list
     -- that interrupts it is a list

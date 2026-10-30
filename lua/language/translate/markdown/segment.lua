@@ -293,28 +293,19 @@ local function row_cells(text)
   if text:byte(s) == 124 then
     s = s + 1
   end
-  -- a trailing pipe closes the last cell, unless a backslash escapes it
-  if e >= s and text:byte(e) == 124 then
-    local k = 0
-    while e - 1 - k >= s and text:byte(e - 1 - k) == 92 do
-      k = k + 1
-    end
-    if k % 2 == 0 then
-      e = e - 1
-    end
+  -- A pipe right behind a backslash is escaped whatever stands before that backslash (`\\|` too, as in
+  -- `pipes`): a trailing pipe closes the last cell unless it is escaped, every other one starts a cell.
+  if e >= s and text:byte(e) == 124 and (e == 1 or text:byte(e - 1) ~= 92) then
+    e = e - 1
   end
   if s > e then
     return 0
   end
-  local n, i = 1, s
-  while i <= e do
-    local c = text:byte(i)
-    if c == 92 then
-      i = i + 1
-    elseif c == 124 then
+  local n = 1
+  for i = s, e do
+    if text:byte(i) == 124 and (i == 1 or text:byte(i - 1) ~= 92) then
       n = n + 1
     end
-    i = i + 1
   end
   return n
 end
