@@ -150,25 +150,30 @@ local function html_ends(h, line)
   elseif h.kind == "decl" then
     return line:find(">", 1, true) ~= nil
   elseif h.kind == "raw" then
-    return line:lower():find("</" .. h.tag, 1, true) ~= nil
+    -- Any of the four end tags closes it, not only its own (`<script>` ends at `</pre>`), and only the
+    -- complete tag: `</prefix>` is no `</pre>`.
+    local low = line:lower()
+    for tag in pairs(RAW_TAGS) do
+      if low:find("</" .. tag .. ">", 1, true) then
+        return true
+      end
+    end
+    return false
   end
   return false
 end
 
 ---@internal
----Split a table row at its unescaped pipes.
+---Split a table row at its unescaped pipes. A pipe right behind a backslash is escaped whatever stands before
+---that backslash (comrak keeps `\\|` in the cell, too).
 ---@param s string
 ---@return integer[] pipes
 local function pipes(s)
-  local out, i = {}, 1
-  while i <= #s do
-    local c = s:sub(i, i)
-    if c == "\\" then
-      i = i + 1
-    elseif c == "|" then
+  local out = {}
+  for i = 1, #s do
+    if s:byte(i) == 124 and (i == 1 or s:byte(i - 1) ~= 92) then
       out[#out + 1] = i
     end
-    i = i + 1
   end
   return out
 end
@@ -668,14 +673,33 @@ function M.segment(lines, tick)
     seg.defs[require("language.translate.markdown.mask")._norm_label(label)] = true
     seg.refdefs[#seg.refdefs + 1] = L
     local took = 0
-    local nxt = lines[L + 1]
+    ---Line `N` without the quote markers of the quotes the definition stands in (as many as it has: one
+    ---with fewer is a lazy continuation, its text still goes on).
+    ---@param N integer
+    ---@return string|nil
+    local function inner(N)
+      local s = lines[N]
+      for _ = 1, s and nquote or 0 do
+        local r = s:match("^[ \t]*>[ ]?(.*)$")
+        if not r then
+          break
+        end
+        s = r
+      end
+      return s
+    end
+    local nxt = inner(L + 1)
     -- `[label]:` alone: the destination is on the next line. That line stays as it
     -- is: a translation that came out as one word would become the destination
     -- and swallow the paragraph. (A line that starts a block is none.)
     if
       is_blank(tail)
       and nxt
-      and nxt:match("^[ \t]*[^ \t\r#>|<`*+%-]")
+      and nxt:match("^[ \t]*[^ \t\r#>|<`]")
+      -- a bullet marker or a thematic break / setext underline starts a block, `-->` is a destination
+      and not nxt:match("^[ \t]*[*+%-][ \t\r]")
+      and not nxt:match("^[ \t]*[*+%-]$")
+      and not nxt:match("^[ \t]*[*_=%-][ \t*_=%-]*$")
       and not nxt:match("^[ \t]*```+[^`]*$")
       and not nxt:match("^[ \t]*~~~+")
       -- an ordered item starts a block of its own (`1. text`), it is no destination
@@ -684,7 +708,7 @@ function M.segment(lines, tick)
     then
       p.lines[#p.lines + 1] = lit_line(L + 1)
       took = took + 1
-      nxt = lines[L + 1 + took]
+      nxt = inner(L + 1 + took)
     end
     if nxt and nxt:match("^[ \t]+[\"'(]") then
       p.lines[#p.lines + 1] = lit_line(L + 1 + took)

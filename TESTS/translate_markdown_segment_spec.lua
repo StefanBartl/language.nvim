@@ -691,5 +691,31 @@ return function(H)
     seg = seg_of({ "[a]: /x", "    [b]: /y", "text" })
     H.ok(literal(seg, 1) and literal(seg, 2), "definitions in a row, whatever the indent")
     H.ok(seg.defs["a"] and seg.defs["b"])
+
+    -- a raw HTML block (`<script>`, `<pre>`, ...) ends at any of the four end tags, not only at its own, and
+    -- only at the complete tag
+    seg = seg_of({ "<script>", "</pre>", "text *a*" })
+    H.ok(literal(seg, 1) and literal(seg, 2), "the block is literal up to the foreign end tag")
+    H.eq(table.concat(texts(seg), "|"), "text *a*", "the line after </pre> is text again")
+    seg = seg_of({ "<pre>", "x </prefix> y", "", "text", "</PRE>", "", "*b*" })
+    H.ok(literal(seg, 4), "</prefix> is no end tag: the blank line does not end the block either")
+    H.eq(table.concat(texts(seg), "|"), "*b*", "</PRE> ends it, whatever the case")
+
+    -- the destination line of a bare `[label]:` in a quote is read without its quote markers, also when it is a
+    -- lazy continuation, and `-->` is a destination, no bullet
+    seg = seg_of({ "> [ref]:", "> /url", "> text" })
+    H.ok(literal(seg, 2), "the destination in a quote stays")
+    H.eq(table.concat(texts(seg), "|"), "text", "the text below it is translated")
+    seg = seg_of({ "> > - [ref]:", "> dest", "" })
+    H.ok(literal(seg, 2), "a lazy destination line stays")
+    seg = seg_of({ "[ref]:", "-->", "text" })
+    H.ok(literal(seg, 2), "--> is a destination")
+    seg = seg_of({ "> [ref]:", "> - item" })
+    H.eq(table.concat(texts(seg), "|"), "item", "a bullet in the quote is no destination")
+
+    -- a pipe right behind a backslash is no cell border, also behind an escaped backslash (`\\|`, as comrak reads
+    -- it): the code span in the cell stays whole
+    seg = seg_of({ "| h1 | h2 |", "| -- | -- |", "| `a \\\\| b` | c |", "| x \\\\ | y |" })
+    H.eq(table.concat(texts(seg), "#"), "h1#h2#`a \\\\| b`#c#x \\\\#y")
   end
 end

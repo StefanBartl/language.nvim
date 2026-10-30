@@ -6,9 +6,7 @@
 // Per pair: the sequence of block elements with their start lines, the text of every
 // <pre> block, and the multisets of link targets (anchors excluded), image sources and
 // inline code. Exit code 1 when a pair differs. Differences that are not bugs: a bare
-// URL directly followed by a backslash break (the autolink takes the backslash), and an
-// inline `<pre>` tag in prose (the HTML it opens swallows the rest of the document, so the
-// translated text lands in a <pre>).
+// URL directly followed by a backslash break (the autolink takes the backslash).
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -32,7 +30,22 @@ function describe(md) {
   const tags = [...html.matchAll(/<(\w+)[^>]*?data-sourcepos="(\d+):\d+-\d+:\d+"[^>]*>/g)].map(
     (m) => `${m[1]}@${m[2]}`,
   );
-  const pres = [...html.matchAll(/<pre[^>]*>([\s\S]*?)<\/pre>/g)].map((m) => m[1]);
+  // The literal blocks come from a second rendering with the source map on: every run of rendered text is then a
+  // `<span data-sp>`, so what a <pre> holds besides those spans is literal. A raw `<pre>` that is never closed in
+  // the source, or one inline in a paragraph (an indented continuation line), is closed by the sanitizer far below,
+  // and the Markdown rendered after it (translated on purpose) lands inside it: everything from its first rendered
+  // block (data-sourcepos) on, and the text spans before it, are not its own. A code block is compared as it is.
+  const mapped = glue.render_markdown(norm(md), true);
+  const pres = [...mapped.matchAll(/<pre([^>]*)>([\s\S]*?)<\/pre>/g)].map((m) =>
+    m[1].includes('data-sourcepos')
+      ? m[2]
+      : m[2]
+          .replace(/<\w+[^>]*data-sourcepos[\s\S]*$/, '')
+          .replace(/<span data-sp[^>]*>[\s\S]*?<\/span>/g, ' ')
+          .replace(/<[^>]*>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim(),
+  );
   const hrefs = [...html.matchAll(/<a [^>]*href="([^"]*)"/g)].map((m) => m[1]).filter((h) => !h.startsWith('#'));
   const imgs = [...html.matchAll(/<img [^>]*src="([^"]*)"/g)].map((m) => m[1]);
   const code = [...html.replace(/<pre[\s\S]*?<\/pre>/g, '').matchAll(/<code>([\s\S]*?)<\/code>/g)].map((m) =>

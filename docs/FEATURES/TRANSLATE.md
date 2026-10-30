@@ -379,13 +379,19 @@ translate = {
   `scripts/markdown_fuzz.lua <dir> [count] [seed] [wide]` writes random documents (fragments under random
   quote / list / tab containers) and a `list.txt` for the oracle: `markdown_oracle.lua <pairs> @<dir>/list.txt`.
   `wide` adds footnotes, open HTML blocks (`<pre>`, `<details>`, `<script>`), `$$` in lists, table variants,
-  definitions with titles and odd markers. A difference in a document with a `<pre>` is usually no bug (see
-  above: the raw tag swallows the rest of the page).
+  definitions with titles and odd markers. A raw `<pre>` that is never closed (or stands inline in a paragraph)
+  swallows the Markdown rendered after it; the oracle reads the literal blocks from a second rendering with the
+  source map on and leaves out what is rendered text there, so such a page is no false alarm any more.
   The container stack (2026-10-20) took the segmenter from 56 differing runs of 2 000 (1 000 documents) to none in
   20 000 random documents (four seeds of 5 000), and none in the real files of the repos. The wide set found five
   more kinds of case (container widths are relative to the container around them, a footnote ends at a line of one to
   three spaces, a header with another cell count than its delimiter row stays literal, a destination line is no
-  list item, definitions below definitions at any indent), all fixed.
+  list item, definitions below definitions at any indent), all fixed. With the honest `<pre>` check (2026-10-30) one
+  more: a raw HTML block (`<script>`, `<pre>`, `<style>`, `<textarea>`) ends at any of the four end tags, not only
+  at its own; the destination line of a bare `[label]:` in a quote is read without its quote markers (also a lazy
+  one), and `-->` is a destination, no bullet. In the real files: a pipe right behind a backslash is no cell border,
+  also behind an escaped backslash (`\\|`). After that: three seeds of 5 000 wide documents and 1 500 real files,
+  no difference.
   `node scripts/markdown_reduce.mjs <file.md>` shrinks a flagged file to the few lines that matter (it removes
   lines while the oracle still flags the result): the way each remaining difference was found.
 
