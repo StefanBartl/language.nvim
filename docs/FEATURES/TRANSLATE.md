@@ -390,8 +390,9 @@ translate = {
   more: a raw HTML block (`<script>`, `<pre>`, `<style>`, `<textarea>`) ends at any of the four end tags, not only
   at its own; the destination line of a bare `[label]:` in a quote is read without its quote markers (also a lazy
   one), and `-->` is a destination, no bullet. In the real files: a pipe right behind a backslash is no cell border,
-  also behind an escaped backslash (`\\|`). After that: three seeds of 5 000 wide documents and 1 500 real files,
-  no difference.
+  also behind an escaped backslash (`\\|`). A fourth seed added two: a task box with nothing behind it (`- [ ] `) is
+  still the item's paragraph, and below a paragraph of nothing but definitions an underline (`===`, `---`) is text.
+  After that: four seeds of 5 000 wide documents, 5 000 default ones and 1 500 real files, no difference.
   `node scripts/markdown_reduce.mjs <file.md>` shrinks a flagged file to the few lines that matter (it removes
   lines while the oracle still flags the result): the way each remaining difference was found.
 

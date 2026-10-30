@@ -947,6 +947,13 @@ function M.segment(lines, tick)
         if interrupt and (b == 61 or b == 45) then
           -- setext underline: the paragraph above ends here
           if line:find("^=+[ \t\r]*$", np) or line:find("^%-+[ \t\r]*$", np) then
+            if leaf.defs_only then
+              -- a paragraph of nothing but definitions has no text to underline: comrak makes the underline
+              -- its text (`===` or `---`), and a `-` below may underline that in turn
+              leaf.defs_only = nil
+              leaf.lines[#leaf.lines + 1] = lit_line(L)
+              return 0
+            end
             local p = leaf
             if p and p.kind == "para" then
               p.kind = "heading"
@@ -1119,8 +1126,17 @@ function M.segment(lines, tick)
       if box then
         np = np + #box
         if line:find("^[\r\f\v]*$", np) then
+          -- the box alone is still the item's paragraph: a line below goes on with it (lazily, too), so a
+          -- list that interrupts it is a list and no continuation
           mark_content()
-          tpl[L] = line
+          leaf = {
+            t = "para",
+            kind = "item",
+            lines = { lit_line(L) },
+            qdepth = nquote,
+            listctx = nitem > 0,
+          }
+          leaf.lines[1].qlen = pos - 1
           return 0
         end
         open_para(L, np, "item", nc - (col + eoff))

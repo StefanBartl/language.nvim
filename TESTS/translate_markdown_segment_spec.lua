@@ -717,5 +717,18 @@ return function(H)
     -- it): the code span in the cell stays whole
     seg = seg_of({ "| h1 | h2 |", "| -- | -- |", "| `a \\\\| b` | c |", "| x \\\\ | y |" })
     H.eq(table.concat(texts(seg), "#"), "h1#h2#`a \\\\| b`#c#x \\\\#y")
+
+    -- a task box with nothing behind it is still the item's paragraph: the line below goes on with it, and a list
+    -- that interrupts it is a list
+    seg = seg_of({ "- [ ] ", "?>", "\t- + item" })
+    H.ok(literal(seg, 1), "the box stays")
+    H.eq(table.concat(texts(seg), "|"), "?>|item", "the nested list is no continuation of the text")
+
+    -- below a paragraph of nothing but definitions an underline is text, and a `-` below it is its underline: the
+    -- tab-indented line after that is indented code, no item
+    seg = seg_of({ "   [ref]: /x", "   ===", "-", "\t> quote" })
+    H.ok(literal(seg, 2) and literal(seg, 3), "underline text and underline stay")
+    H.ok(literal(seg, 4), "the indented line is code")
+    H.eq(#seg.units, 0)
   end
 end
