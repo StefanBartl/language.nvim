@@ -250,9 +250,33 @@ function M.process(provider, picked, target, mode, on_done)
   step()
 end
 
----Run multi-file translation under `dir`.
+---Map a `cwd`/`path` scope to what `M.run` translates: the directory to
+---pick files from, or the one file to translate. A path that is neither an
+---existing directory nor a readable file yields `nil` and the reason, so the
+---caller can say so instead of guessing.
+---@param scope LanguageScope
+---@return { dir?: string, file?: string }|nil target, string|nil err
+function M.target(scope)
+  if scope.kind == "cwd" then
+    return { dir = fn.getcwd() }
+  end
+  local path = scope.path
+  if type(path) ~= "string" or path == "" then
+    return nil, "path= needs a file or directory"
+  end
+  if fn.isdirectory(path) == 1 then
+    return { dir = path }
+  end
+  if fn.filereadable(path) == 1 then
+    return { file = path }
+  end
+  return nil, "no such file or directory: " .. path
+end
+
+---Run multi-file translation under `opts.dir`, or translate the one file
+---`opts.file` the same way without a picker.
 ---@param target string
----@param opts { dir: string, mode?: string }
+---@param opts { dir?: string, file?: string, mode?: string }
 ---@return nil
 function M.run(target, opts)
   if type(target) ~= "string" or target == "" then
@@ -263,6 +287,28 @@ function M.run(target, opts)
   local provider, err = require("language.translate.providers.registry").resolve(c)
   if not provider then
     notify.error(err or "no translate engine available")
+    return
+  end
+
+  if opts.file then
+    local abs = fn.fnamemodify(opts.file, ":p")
+    if fn.filereadable(abs) ~= 1 then
+      notify.error("no such file: " .. opts.file)
+      return
+    end
+    local fmode = opts.mode or (c.files and c.files.output) or "suffix"
+    if fmode == "replace" then
+      local ans = fn.confirm(
+        ("Overwrite %s in place with the %s translation?"):format(fn.fnamemodify(abs, ":t"), target),
+        "&Yes\n&No",
+        2
+      )
+      if ans ~= 1 then
+        notify.info("cancelled")
+        return
+      end
+    end
+    M.process(provider, { { rel = fn.fnamemodify(abs, ":~:."), abs = abs } }, target, fmode)
     return
   end
 

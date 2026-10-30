@@ -103,12 +103,54 @@ return function(H)
     "and the buffer is untouched"
   )
 
-  -- run(): cwd/path is explicitly rejected here (routed to run_files instead,
-  -- by the command layer, before M.run ever sees it) ------------------------
+  -- run(): a cwd/path scope (the Lua facade's way in) goes to run_files, the
+  -- same way the command sends it -- never to a buffer range, never a
+  -- "not supported" warning ---------------------------------------------------
   stub_provider(true, { "X" })
   translate = reload_translate()
+  local files_calls = {}
+  translate.run_files = function(lang, o)
+    files_calls[#files_calls + 1] = { lang = lang, opts = o }
+  end
+  local orig_notify = vim.notify
+  local notes = {}
+  vim.notify = function(msg, level)
+    notes[#notes + 1] = { msg = msg, level = level }
+  end
+
   translate.run("FR", { output = "replace", scope = { kind = "cwd" } })
-  H.eq(#translate_calls, 0, "cwd is rejected, not silently translated as a buffer")
+  H.eq(#translate_calls, 0, "cwd is not translated as a buffer")
+  H.eq(#files_calls, 1, "cwd reaches run_files")
+  H.eq(files_calls[1].lang, "FR", "with the language")
+  H.eq(files_calls[1].opts.dir, vim.fn.getcwd(), "over the working directory")
+  H.eq(files_calls[1].opts.mode, "replace", "output=replace (translate_replace) forces replace")
+
+  local scratch = (vim.fn.tempname() .. "-init"):gsub("\\", "/")
+  vim.fn.mkdir(scratch, "p")
+  vim.fn.writefile({ "hello" }, scratch .. "/note.md")
+
+  translate.run("DE", { scope = { kind = "path", path = scratch } })
+  H.eq(files_calls[2].opts.dir, scratch, "path=<dir> reaches run_files as a directory")
+  H.eq(files_calls[2].opts.mode, nil, "without a forced mode (translate.files.output applies)")
+
+  translate.run(
+    "DE",
+    { files = "buffers", scope = { kind = "path", path = scratch .. "/note.md" } }
+  )
+  H.eq(files_calls[3].opts.file, scratch .. "/note.md", "path=<file> reaches run_files as one file")
+  H.eq(files_calls[3].opts.dir, nil, "not as a directory to pick from")
+  H.eq(files_calls[3].opts.mode, "buffers", "opts.files picks the file output mode")
+
+  translate.run("DE", { scope = { kind = "path", path = scratch .. "/missing.md" } })
+  vim.notify = orig_notify
+  H.eq(#files_calls, 3, "a path that does not exist never reaches run_files")
+  H.eq(#translate_calls, 0, "nor the provider")
+  local said = notes[#notes] and notes[#notes].msg or ""
+  H.contains(said, "no such file or directory", "it is reported as missing")
+  for _, n in ipairs(notes) do
+    H.eq(n.msg:find("not supported", 1, true), nil, "no 'not supported yet' warning")
+  end
+  vim.fn.delete(scratch, "rf")
 
   -- run_region(): guards --------------------------------------------------
   stub_provider(true, { "X" })

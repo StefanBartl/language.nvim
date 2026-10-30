@@ -28,5 +28,8 @@
 ---@field nocode boolean|nil
 ---@field output LanguageTranslateOutput|nil
 ---@field scope  LanguageScope|nil
+---Output mode for a cwd/path scope (`suffix`|`replace`|`buffers`); default
+---`translate.files.output`, or `replace` when `output` is `replace`.
+---@field files  string|nil
 
 return {}

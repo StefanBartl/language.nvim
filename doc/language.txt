@@ -100,10 +100,11 @@ defaulting to the whole-buffer scope.
                             (only takes effect together with --output=replace)
         --output=<mode>     popup (default) | replace | buffer | vsplit
                             | split | tab | insert | clipboard | notify
-        --files=<mode>      output mode when scope is cwd/path=<dir> — see
+        --files=<mode>      output mode when scope is cwd/path=<p> — see
                             |language-translate-files|
         scope               selection (default with a range) | buffer | cwd
-                            | path=<dir> | cword (the word under the cursor,
+                            | path=<p> (a file or directory) | cword (the
+                            word under the cursor,
                             character-exact through `run_region`)
     Examples: >
         :Translate DE cword           " the word under the cursor, in the popup
@@ -126,8 +127,9 @@ defaulting to the whole-buffer scope.
     name/behavior matches the classic `:TranslateReplace`). Always replaces;
     there is no `--output=`. `--nocode` skips fenced code blocks and
     inline-code lines. `scope` is `selection` (default with a range) |
-    `buffer` | `cwd` | `path=<dir>` — for `cwd`/`path=<dir>` this picks and
-    overwrites multiple files in place (with a confirmation prompt), see
+    `buffer` | `cwd` | `path=<p>` — for `cwd`/`path=<dir>` this picks and
+    overwrites multiple files in place, for `path=<file>` that one file
+    (both with a confirmation prompt), see
     |language-translate-files|.
     Examples: >
         :'<,'>TranslateReplace DE
@@ -154,9 +156,12 @@ holds).
 
                                                           *language-translate-files*
 :Translate <lang> cwd
-:Translate <lang> path=<dir> [--files=<mode>]
+:Translate <lang> path=<p> [--files=<mode>]
 :TranslateReplace <lang> cwd
-:TranslateReplace <lang> path=<dir>
+:TranslateReplace <lang> path=<p>
+    `path=<p>` is a file or a directory; a path that does not exist is
+    reported as an error. A single file is translated directly, without the
+    chooser, with the same output modes below.
     Translate multiple files. Gathers translatable files under the directory
     (by `translate.files.extensions`, skipping .git/node_modules/…), opens a
     multi-select chooser (<Tab> to toggle, <CR> to confirm), then translates
@@ -165,7 +170,7 @@ holds).
         replace  overwrite the file in place (asks for confirmation first)
         buffers  open each translation in a scratch buffer (no disk write)
     `:Translate … --files=<mode>` overrides `translate.files.output` for one
-    call; `:TranslateReplace … cwd|path=<dir>` always forces `replace`.
+    call; `:TranslateReplace … cwd|path=<p>` always forces `replace`.
     Note: `--nocode` code-skipping applies to buffer/selection translation,
     not to whole-file translation. In `replace` mode, each file is
     re-verified against its on-disk content immediately before it is
@@ -537,7 +542,7 @@ Defaults (abridged; see lua/language/config/DEFAULTS.lua): >lua
         default_output = "popup", default_input = "selection",
         nocode_default = false, timeout_ms = 8000,
         deepl = { api_key = nil },
-        files = { output = "suffix" },  -- :Translate cwd/path=<dir> default
+        files = { output = "suffix" },  -- :Translate cwd/path=<p> default
       },
       hover = true,     -- register the word-under-cursor translation with hover.nvim
       commands = true,

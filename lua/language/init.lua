@@ -3,7 +3,7 @@
 ---@description
 --- Two independent domains behind two top-level commands:
 ---   :Spellcheck [lang] [buffer|visible|cwd|path=<p>|clear|refresh]
----   :Translate  <lang> [--nocode] [--output=<mode>] [selection|buffer|path=<dir>]
+---   :Translate  <lang> [--nocode] [--output=<mode>] [selection|buffer|path=<p>]
 ---
 --- Both share a common scope model (see `language/@types`) and are built on
 --- lib.nvim as a deliberate shared dependency.
@@ -74,7 +74,7 @@ end
 ---(popup, non-mutating). Use `M.translate_replace` to force in-place replace.
 ---@see M.translate_replace
 ---@param lang string  target language, e.g. "EN", "DE"
----@param opts table|nil  { nocode?, output?, scope? }
+---@param opts table|nil  { nocode?, output?, scope?, files? }  (cwd/path scope: see translate.run_files)
 ---@return nil
 function M.translate(lang, opts)
   require("language.translate").run(lang, opts)

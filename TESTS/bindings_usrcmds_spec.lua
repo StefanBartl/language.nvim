@@ -104,9 +104,8 @@ return function(H)
     "--files=<mode> reaches run_files as opts.mode"
   )
 
-  -- `path=<p>` is a multi-file scope only for a DIRECTORY: a file path stays a path scope that
-  -- translate.run then refuses, which is why the help text says `path=<dir>`. `--nocode` is not
-  -- forwarded to run_files either.
+  -- `path=<dir>` opens the multi-file picker, `path=<file>` translates that one file through
+  -- the same run_files path. `--nocode` is not forwarded to run_files either.
   local scratch_dir = (vim.fn.tempname() .. "-usrcmds"):gsub("\\", "/")
   vim.fn.mkdir(scratch_dir, "p")
   local scratch_file = scratch_dir .. "/note.md"
@@ -120,12 +119,25 @@ return function(H)
 
   vim.cmd("Translate FR path=" .. scratch_file)
   local file_call = translate_calls[#translate_calls]
-  H.eq(file_call.fn, "run", "path=<file> is not a multi-file scope")
-  H.eq(file_call.opts.scope.kind, "path", "it reaches translate.run as a path scope")
+  H.eq(file_call.fn, "run_files", "path=<file> is routed to run_files")
   H.eq(
-    vim.fs.normalize(file_call.opts.scope.path),
+    vim.fs.normalize(file_call.opts.file),
     vim.fs.normalize(scratch_file),
-    "carrying the file, which translate.run then refuses"
+    "as that one file (no picker)"
+  )
+  H.eq(file_call.opts.dir, nil, "not as a directory")
+
+  vim.cmd("TranslateReplace FR path=" .. scratch_file)
+  H.eq(translate_calls[#translate_calls].opts.mode, "replace", "TranslateReplace forces replace")
+
+  -- A path that does not exist is reported (notify.error re-raises through
+  -- vim.cmd, hence the pcall) and reaches neither run nor run_files.
+  local before_missing = #translate_calls
+  local ok_missing, missing_err = pcall(vim.cmd, "Translate FR path=" .. scratch_dir .. "/nope.md")
+  H.eq(#translate_calls, before_missing, "a missing path reaches neither run nor run_files")
+  H.ok(
+    not ok_missing and tostring(missing_err):find("no such file or directory", 1, true) ~= nil,
+    "and is reported as missing"
   )
 
   vim.fn.delete(scratch_dir, "rf")

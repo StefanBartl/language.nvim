@@ -14,14 +14,14 @@ stays untouched. `--output=` selects an alternative destination:
 `replace`, no `--output=` flag — restoring the classic "select, translate,
 replace" workflow under its own name. `--nocode` skips fenced code blocks
 and every line that holds inline code (relevant to replace-style output of a
-text scope only; `cwd`, `path=<dir>` and `cword` ignore it).
+text scope only; `cwd`, `path=<p>` and `cword` ignore it).
 If the translated lines change while the request is running (`replace`, `insert`,
 `--nocode`), the result is discarded and the buffer stays as it is; with `--nocode`
 that holds for all ranges at once.
 
 - **Tab:** true
 - **Module:** `translate/init.lua`, `translate/output/init.lua`
-- **Usercmds:** `:Translate <lang> [--nocode|--output=<m>|--files=<m>] [cword|selection|buffer|visible|cwd|path=<dir>]`, `:TranslateReplace <lang> [--nocode] [selection|buffer|visible|cwd|path=<dir>]` — [user commands](../BINDINGS.md#user-commands)
+- **Usercmds:** `:Translate <lang> [--nocode|--output=<m>|--files=<m>] [cword|selection|buffer|visible|cwd|path=<p>]`, `:TranslateReplace <lang> [--nocode] [selection|buffer|visible|cwd|path=<p>]` — [user commands](../BINDINGS.md#user-commands)
 - **One word:** the `cword` scope, and — with hover.nvim installed — `:Hover show` over a word. See [HOVER.md](HOVER.md).
 - **Config:** `opts.translate.default_output` (default `"popup"`), `opts.translate.engine` (default `"google"`)
 
@@ -557,6 +557,15 @@ translates each — writing a language-suffixed sibling file by default
 (`name.DE.ext`), overwriting in place with `--files=replace` (confirmed),
 or opening scratch buffers with `--files=buffers`.
 `:TranslateReplace <lang> cwd` forces file-mode `replace`.
+
+`path=<p>` accepts a file or a directory (`~` and environment variables are
+expanded). A single file (`path=README.md`) skips the chooser and is
+translated the same way, with the same output modes; `:TranslateReplace`
+asks before overwriting it. A path that does not exist is reported as an
+error. The Lua API takes the same scopes:
+`require("language").translate("DE", { scope = { kind = "path", path = "README.md" }, files = "buffers" })`
+— `files` picks the output mode (default `translate.files.output`;
+`translate_replace` forces `replace`).
 
 - **Module:** `translate/files.lua`
 - **Config:** `opts.translate.files.output`

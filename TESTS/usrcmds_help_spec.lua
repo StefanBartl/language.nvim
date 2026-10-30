@@ -83,8 +83,8 @@ return function(H)
 
   -- The texts must say what the code does, not what one would hope. `--nocode` skips every line
   -- that holds a backtick (translate/filter.lua), prose around the code included, and only for a
-  -- text scope: cwd/path=<dir> go to run_files and a word to run_region, neither reads it.
-  -- And a path scope is a multi-file scope only when it is a DIRECTORY.
+  -- text scope: cwd/path=<p> go to run_files and a word to run_region, neither reads it.
+  -- A path scope is a file or a directory; both go to run_files.
   local function flag_text(name, flag_name)
     for _, route in ipairs(composer.registry()[name]:spec().routes or {}) do
       for _, flag in ipairs(route.flags or {}) do
@@ -117,12 +117,12 @@ return function(H)
 
   local scope_text = argtypes.get("TRANSLATE_SCOPE").desc or ""
   H.ok(
-    scope_text:find("path=<dir>", 1, true) ~= nil,
-    "TRANSLATE_SCOPE offers a directory, not any path: " .. scope_text
+    scope_text:find("path=<p>", 1, true) ~= nil,
+    "TRANSLATE_SCOPE offers any path (file or directory): " .. scope_text
   )
   H.ok(
-    scope_text:find("path=<p>", 1, true) == nil,
-    "TRANSLATE_SCOPE does not offer path=<p>: " .. scope_text
+    scope_text:find("path=<dir>", 1, true) == nil,
+    "TRANSLATE_SCOPE no longer limits path= to a directory: " .. scope_text
   )
   H.ok(
     scope_text:find("visible", 1, true) ~= nil,

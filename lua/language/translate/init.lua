@@ -131,8 +131,8 @@ local function scope_range(scope)
   if scope and (scope.kind == "selection" or scope.kind == "visible") and scope.range then
     return bufnr, math.max(1, scope.range.s), math.min(total, scope.range.e)
   end
-  -- buffer (default). A cwd/path scope never reaches here: the command layer
-  -- routes it to `run_files`, and `M.run` rejects it before this call.
+  -- buffer (default). A cwd/path scope never reaches here: `M.run` (and the
+  -- command layer before it) hands it to `run_files` before this call.
   return bufnr, 1, total
 end
 
@@ -314,14 +314,29 @@ function M.run(lang, opts)
     return
   end
 
+  local scope = opts.scope
+
+  -- A cwd/path scope is whole files, not a buffer range: it goes the same
+  -- way the command sends it, through `run_files` (a directory opens the
+  -- picker, a single file is translated directly). The Lua facade
+  -- (`require("language").translate`) reaches here with such a scope.
+  if scope and (scope.kind == "cwd" or scope.kind == "path") then
+    local target, terr = require("language.translate.files").target(scope)
+    if not target then
+      notify.error(("Translate: %s"):format(terr))
+      return
+    end
+    local files_mode = opts.files or (opts.output == "replace" and "replace" or nil)
+    M.run_files(lang, { dir = target.dir, file = target.file, mode = files_mode })
+    return
+  end
+
   local c = cfg()
   local provider, err = registry.resolve(c)
   if not provider then
     notify.error(err or "no translate engine available")
     return
   end
-
-  local scope = opts.scope
 
   -- A word is a character region, not a line range, so it does not go through
   -- `scope_range` at all -- it goes through `run_region`, which already exists
@@ -345,11 +360,6 @@ function M.run(lang, opts)
       ec = r.ec,
       output = opts.output,
     })
-    return
-  end
-
-  if scope and (scope.kind == "cwd" or scope.kind == "path") then
-    notify.warn("Translate over cwd/path is not supported yet — use a buffer or selection")
     return
   end
 
@@ -383,11 +393,11 @@ function M.run(lang, opts)
   end
 end
 
----Translate multiple files under a directory (cwd/path scope). Opens a
----multi-select picker.
+---Translate files for a cwd/path scope: `opts.dir` opens a multi-select
+---picker over that directory, `opts.file` translates that one file directly.
 ---@see language.translate.files
 ---@param lang string
----@param opts { dir: string, mode?: string }
+---@param opts { dir?: string, file?: string, mode?: string }
 ---@return nil
 function M.run_files(lang, opts)
   require("language.translate.files").run(lang, opts)

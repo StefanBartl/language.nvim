@@ -124,7 +124,7 @@ local defaults = {
     --             A count cannot carry the language on an operator -- there it
     --             belongs to the motion -- hence a key per language.
     keymaps = { operator = false, visual = false, to = {} },
-    -- Multi-file translation (:Translate cwd / path=<dir>): pick files (kit
+    -- Multi-file translation (:Translate cwd / path=<p>): pick files (kit
     -- multi-select, <Tab>), then per file:
     --   "suffix"  → write a sibling file  name.<TARGET>.ext  (non-destructive, default)
     --   "replace" → overwrite the file in place (asks for confirmation first)

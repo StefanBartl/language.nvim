@@ -70,8 +70,8 @@ verb (a flat `path = {}` root route — no subcommand tree), defined in
 | Command             | Defined in                          | Purpose |
 |----------------------|--------------------------------------|---------|
 | `:Spellcheck`        | `lua/language/bindings/usrcmds/init.lua`  | Spell/grammar review — `[lang] [buffer\|visible\|cwd\|path=<p>\|clear\|refresh]` |
-| `:Translate`         | `lua/language/bindings/usrcmds/init.lua`  | Translate (popup by default) — `<lang> [--nocode\|--output=<m>\|--files=<m>] [cword\|selection\|buffer\|visible\|cwd\|path=<dir>]`; `!` opens the interactive window |
-| `:TranslateReplace`  | `lua/language/bindings/usrcmds/init.lua`  | Translate and replace in place — `<lang> [--nocode] [selection\|buffer\|visible\|cwd\|path=<dir>]` |
+| `:Translate`         | `lua/language/bindings/usrcmds/init.lua`  | Translate (popup by default) — `<lang> [--nocode\|--output=<m>\|--files=<m>] [cword\|selection\|buffer\|visible\|cwd\|path=<p>]`; `!` opens the interactive window |
+| `:TranslateReplace`  | `lua/language/bindings/usrcmds/init.lua`  | Translate and replace in place — `<lang> [--nocode] [selection\|buffer\|visible\|cwd\|path=<p>]` |
 | `:TranslateOffice`   | `lua/language/bindings/usrcmds/init.lua`  | Translate a `.pptx` / `.docx` into a copy `name.<lang>.ext` next to it — `<file> <lang>` |
 
 `cword` is the scope for a single word: `:Translate DE cword` translates the

@@ -204,6 +204,42 @@ return function(H)
   files.run("", { dir = dir }) -- no target: warns and returns
   files.run("FR", { dir = dir .. "/does-not-exist" }) -- no files under the dir: info + return
 
+  -- target(): what a cwd/path scope translates ---------------------------------
+  H.eq(files.target({ kind = "cwd" }).dir, vim.fn.getcwd(), "cwd → the working directory")
+  H.eq(files.target({ kind = "path", path = dir }).dir, dir, "path=<dir> → that directory")
+  local ft = files.target({ kind = "path", path = dir .. "/a.md" })
+  H.eq(ft.file, dir .. "/a.md", "path=<file> → that one file")
+  H.eq(ft.dir, nil, "and no directory to pick from")
+  local missing, merr = files.target({ kind = "path", path = dir .. "/nope.md" })
+  H.eq(missing, nil, "a path that does not exist has no target")
+  H.contains(merr, "no such file or directory", "and says so")
+
+  -- run({ file }): one file, no picker, same write path as the picked files ---
+  local orig_registry = package.loaded["language.translate.providers.registry"]
+  package.loaded["language.translate.providers.registry"] = {
+    resolve = function()
+      return fake_provider
+    end,
+  }
+  local orig_kit = package.loaded["ui.kit"]
+  local picker_opened = false
+  package.loaded["ui.kit"] = {
+    select = function()
+      picker_opened = true
+    end,
+  }
+  vim.fn.writefile({ "single" }, dir .. "/one.md")
+  translated_calls = {}
+  files.run("NL", { file = dir .. "/one.md", mode = "suffix" })
+  vim.wait(1000, function()
+    return vim.fn.filereadable(dir .. "/one.NL.md") == 1
+  end)
+  H.eq(picker_opened, false, "a single file never opens the picker")
+  H.eq(#translated_calls, 1, "the provider is asked once")
+  H.contains(H.read(dir .. "/one.NL.md"), "TRANSLATED: single", "and the sibling file is written")
+  package.loaded["ui.kit"] = orig_kit
+  package.loaded["language.translate.providers.registry"] = orig_registry
+
   config.setup({})
   cleanup()
 end

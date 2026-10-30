@@ -95,11 +95,11 @@ composer.register_type("TRANSLATE_LANG", {
   end,
 })
 
--- 2nd+ positional shared by :Translate / :TranslateReplace. A path scope must
--- be a directory (dispatch_translate hands it to run_files); a single file is
--- translated by opening it and using `buffer`.
+-- 2nd+ positional shared by :Translate / :TranslateReplace. A path scope is a
+-- file or a directory: dispatch_translate hands both to run_files (a
+-- directory opens the picker, a file is translated directly).
 composer.register_type("TRANSLATE_SCOPE", {
-  desc = "What to translate: cword, selection, buffer, visible, cwd or path=<dir>",
+  desc = "What to translate: cword, selection, buffer, visible, cwd or path=<p>",
   validate = function(raw)
     return true, raw, nil
   end,
@@ -187,12 +187,19 @@ local function dispatch_translate(o, force_output, force_files_mode)
     return
   end
 
-  -- cwd, or path=<directory> → multi-file translation (pick files, then
-  -- write per translate.files.output / --files=<mode> / forced mode).
-  local is_dir_path = scope.kind == "path" and scope.path and vim.fn.isdirectory(scope.path) == 1
-  if scope.kind == "cwd" or is_dir_path then
-    local dir = scope.kind == "cwd" and vim.fn.getcwd() or (scope.path or vim.fn.getcwd())
-    require("language.translate").run_files(rest[1], { dir = dir, mode = files_mode })
+  -- cwd, path=<directory> → multi-file translation (pick files); path=<file>
+  -- → that one file, no picker. Both write per translate.files.output /
+  -- --files=<mode> / forced mode. A path that does not exist is reported.
+  if scope.kind == "cwd" or scope.kind == "path" then
+    local target, terr = require("language.translate.files").target(scope)
+    if not target then
+      notify.error(("Translate: %s"):format(terr))
+      return
+    end
+    require("language.translate").run_files(
+      rest[1],
+      { dir = target.dir, file = target.file, mode = files_mode }
+    )
     return
   end
 
@@ -225,7 +232,7 @@ function M.setup()
   -- without touching the buffer). :Translate![lang] opens the interactive
   -- translation window instead.
   composer.verb("Translate", {
-    desc = "Translate (popup by default)  <lang> [--nocode|--output=<m>|--files=<m>] [cword|selection|buffer|visible|cwd|path=<dir>]  (! = window)",
+    desc = "Translate (popup by default)  <lang> [--nocode|--output=<m>|--files=<m>] [cword|selection|buffer|visible|cwd|path=<p>]  (! = window)",
     bang = true,
     range = true,
     routes = {
@@ -262,7 +269,7 @@ function M.setup()
             name = "files",
             type = "STRING",
             enum = TR_FILES_MODES,
-            desc = "How translated files are written (cwd or path=<dir> scope)",
+            desc = "How translated files are written (cwd or path=<p> scope)",
             enum_desc = {
               suffix = "Write a sibling file name.<LANG>.ext",
               replace = "Overwrite each file in place, after asking",
@@ -321,7 +328,7 @@ function M.setup()
   -- `:TranslateReplace` behavior). No `--output=`/`--files=` — its whole
   -- purpose is to replace.
   composer.verb("TranslateReplace", {
-    desc = "Translate and replace in place  <lang> [--nocode] [selection|buffer|visible|cwd|path=<dir>]",
+    desc = "Translate and replace in place  <lang> [--nocode] [selection|buffer|visible|cwd|path=<p>]",
     range = true,
     routes = {
       {
@@ -334,7 +341,7 @@ function M.setup()
           {
             name = "nocode",
             bool = true,
-            desc = "Skip code blocks and lines with inline code (not for cword, cwd, path=<dir>)",
+            desc = "Skip code blocks and lines with inline code (not for cword, cwd, path=<p>)",
           },
         },
         range = true,
