@@ -373,6 +373,7 @@ function M.wrap(provider)
 
     local cancelled, settled = false, false
     local current, active = 0, nil
+    local finished = 0 -- blocks whose result is in `out` (the deadline message counts them)
     ---@type string[]
     local out = {}
     ---@type string[]
@@ -454,7 +455,9 @@ function M.wrap(provider)
       local payload = b.pieces
         or ((lo == 1 and hi == #lines) and lines or vim.list_slice(lines, lo, hi))
 
+      local answered = false
       local started, job = pcall(inner, payload, target, source, cfg, function(ok, result)
+        answered = true
         if cancelled or settled then
           return
         end
@@ -493,14 +496,16 @@ function M.wrap(provider)
           vim.list_extend(out, result, 1, m)
           vim.list_extend(out, lines, hi + 1, b.last)
         end
+        finished = n
         advance(n + 1)
       end)
       if not started then
         fail(n, job)
         return
       end
-      -- A synchronous callback has already moved on to the next block.
-      if current == n then
+      -- A synchronous callback has already moved on (to the next block or into
+      -- the pause before it): its handle is done and must not be cancelled.
+      if current == n and not answered then
         active = job
       end
     end
@@ -524,6 +529,7 @@ function M.wrap(provider)
         end
         -- Blank throughout: nothing to translate, keep the lines as they are.
         vim.list_extend(out, lines, b.first, b.last)
+        finished = n
         n = n + 1
       end
     end
@@ -548,7 +554,7 @@ function M.wrap(provider)
           if settled or cancelled then
             return
           end
-          local done = math.max(current - 1, 0)
+          local done = finished
           settle(
             false,
             ("%s: the call took longer than translate.deadline_ms (%d ms), %d of %d blocks done"):format(

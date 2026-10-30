@@ -1035,6 +1035,36 @@ return function(H)
     vim.wait(80)
     H.eq(rq.calls(), 1, "the deadline timer is gone once the call settled")
 
+    -- the deadline can strike in the pause after a block: that block counts as done, and
+    -- its finished request (answered synchronously) is not cancelled again
+    local pp_cancels = 0
+    local ppd = fake({ max_bytes = 10, pause_ms = 500 }, function(lines, cb)
+      local up = {}
+      for i, l in ipairs(lines) do
+        up[i] = l:upper()
+      end
+      cb(true, up)
+      return {
+        cancel = function()
+          pp_cancels = pp_cancels + 1
+        end,
+      }
+    end)
+    local rpd = run(ppd, six3, { deadline_ms = 40 })
+    H.ok(
+      vim.wait(2000, function()
+        return rpd.calls() > 0
+      end, 5),
+      "the deadline ends the call during the pause"
+    )
+    H.falsy(rpd.ok(), "as a failure")
+    H.contains(rpd.result(), "1 of 3 blocks done", "counting the block before the pause")
+    H.eq(pp_cancels, 0, "the answered request is not cancelled")
+    local rpc = run(ppd, six3)
+    rpc.job.cancel()
+    H.eq(pp_cancels, 0, "nor by a cancel during the pause")
+    H.eq(rpc.calls(), 0, "which drops the callback")
+
     -- a block with another line count is reported once the call succeeds
     local real_notify = vim.notify
     local warnings = {}
