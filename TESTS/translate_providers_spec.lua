@@ -356,6 +356,37 @@ return function(H)
   H.eq(calls[1].argv[1], "my-translator", "cmd()'s argv is really what gets run")
   H.eq(c_result[1], "OUT1", "with no parse(), stdout is split into lines")
   H.eq(c_result[2], "OUT2", "both of them")
+  H.eq(calls[1].opts.stdin, nil, "no stdin field: no stdin")
+
+  -- A `stdin` field of the returned argv goes to the process, not onto the command line (Windows: an ANSI-built
+  -- program such as Git for Windows' curl.exe turns a non-ASCII argv element into code-page bytes or `?`).
+  stub_job(true, "OUT")
+  custom = reload("language.translate.providers.custom")
+  custom.translate({ "a ü", "中" }, "FR", nil, {
+    custom = {
+      cmd = function(lines)
+        return { "curl", "--data-urlencode", "q@-", "http://x/", stdin = table.concat(lines, "\n") }
+      end,
+    },
+  }, function() end)
+  H.eq(calls[1].opts.stdin, "a ü\n中", "the stdin field is written to the process")
+  H.ok(
+    vim.deep_equal(calls[1].argv, { "curl", "--data-urlencode", "q@-", "http://x/" }),
+    "and is not part of the argv: " .. vim.inspect(calls[1].argv)
+  )
+
+  local bad_stdin_ok, bad_stdin_err
+  custom.translate({ "a" }, "FR", nil, {
+    custom = {
+      cmd = function()
+        return { "cmd", stdin = 42 }
+      end,
+    },
+  }, function(ok12, err)
+    bad_stdin_ok, bad_stdin_err = ok12, err
+  end)
+  H.falsy(bad_stdin_ok, "a stdin that is not a string is refused")
+  H.contains(bad_stdin_err, "stdin that is not a string", "with a message saying so")
 
   stub_job(true, "raw output")
   custom = reload("language.translate.providers.custom")

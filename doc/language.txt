@@ -295,6 +295,11 @@ Which providers run per scope is controlled by `spell.providers` (see
                 dependency; see |language-translate-ai|.
     custom      any CLI: provide `translate.custom = { cmd = fun(lines,
                 target, source) -> argv, parse = fun(stdout) -> lines }`.
+                A `stdin` field (string) of the returned argv is written to
+                the process instead of the command line. On Windows put
+                non-ASCII text there: a program without a Unicode entry
+                point (e.g. Git for Windows' curl.exe) receives an argv
+                element in the ANSI code page (`ü` -> 0xFC, CJK -> `?`).
 
 `translate.engine` selects the engine; `translate.fallback` is a chain tried
 when the chosen engine is unavailable (e.g. deepl without a key -> google).

@@ -99,6 +99,7 @@ local defaults = {
       concurrency = 2, -- requests in flight per run
       max_total_chars = 500000, -- cumulative characters per run (a document); false = no cap
     },
+    -- cmd returns the argv; a `stdin` field of it goes to the process (use it for non-ASCII text on Windows)
     custom = nil, -- { cmd = function(text, target) ... end, parse = function(out) ... end, max_bytes = nil }
     -- translate_markdown(): the Markdown-safe document translation (docs/FEATURES/TRANSLATE.md).
     markdown = {

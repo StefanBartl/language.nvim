@@ -58,7 +58,7 @@ the JSON quoting of each text. This is the unit of `translate.max_chars`.
 | --- | --- | --- |
 | google | 15 000 | POST body on stdin (`--data-urlencode q@-`): neither in the URL nor in argv |
 | shell | 6000 on Windows, 20 000 elsewhere | stdin, never argv (a `trans.cmd` shim runs through `cmd.exe /c`); `trans` translates it line by line, one request per non-empty line, and `translate.timeout_ms` is granted per such line |
-| custom | same as shell; `translate.custom.max_bytes` replaces it | whatever `cmd` builds |
+| custom | same as shell; `translate.custom.max_bytes` replaces it | whatever `cmd` builds; a `stdin` field of the returned argv goes to the process on stdin |
 | deepl | 50 lines, 60 000 | key **and** JSON body on stdin (`curl -K -`), never argv |
 
 - **Blank lines at the edge of a block are layout, not content.** The engines
@@ -244,7 +244,8 @@ the units on the Windows curl path. It reproduces on a current machine too: with
 the text as one argv element, `curl` hands a loopback server `?1?` for the
 Unicode pair and `{1}` for the ASCII one (and even `ü` arrives as the single
 byte `%FC`, not UTF-8, which is why an argv-based `custom` engine is the weak
-spot on Windows, while `google`, `deepl` and `shell` send stdin).
+spot on Windows, while `google`, `deepl` and `shell` send stdin). See
+[non-ASCII text on Windows](#non-ascii-text-on-windows) for the cause.
 `TESTS/translate_markdown_curl_spec.lua` runs the whole pipeline through a real
 curl and a loopback server to keep it that way.
 
@@ -480,8 +481,43 @@ an escape hatch mirroring `spell.providers.custom`. `cmd` receives one block
 of lines (see [chunking](#large-inputs-chunking)); a trailing empty entry in
 what `parse` returns is dropped when the block has gained a line.
 
+The argv `cmd` returns may carry a `stdin` field (a string). It is written to
+the process and the pipe is closed; it is not part of the command line. Put
+the text there whenever it can be non-ASCII and the program reads stdin:
+
+```lua
+cmd = function(lines)
+  return {
+    "curl", "-s", "-X", "POST", "--data-urlencode", "q@-", url,
+    stdin = table.concat(lines, "\n"),
+  }
+end,
+```
+
+With the text on stdin, `max_bytes` can be raised as well (no command-line
+limit applies).
+
 - **Module:** `translate/providers/custom.lua`
 - **Config:** `opts.translate.custom` (`cmd`, `parse`, optional `max_bytes`)
+- **Spec:** `TESTS/translate_custom_stdin_curl_spec.lua` (real curl, loopback server)
+
+### Non-ASCII text on Windows
+
+Measured 2026-10-30 (Windows 11, Neovim 0.12): Neovim hands every argv element
+to the child as exact UTF-8 (UTF-16 on the Windows command line). What the
+child makes of it depends on how the program was built. A program with a
+Unicode entry point (`C:\Windows\System32\curl.exe`, Neovim) gets the text
+intact; one without it, such as the `curl.exe` of Git for Windows / MSYS2
+(`mingw64/bin/curl.exe`), gets it converted to the ANSI code page: `ü`
+becomes the single byte 0xFC, CJK and `⟦ ⟧` become `?`. The editor cannot
+change the code page of another program, so the text has to bypass argv.
+
+| Engine | Non-ASCII text on Windows |
+| --- | --- |
+| google, deepl | safe: the text goes to curl on stdin |
+| shell | safe: the text goes to `trans` on stdin |
+| ai | depends on ai.nvim's transport (not measured here) |
+| custom | safe with the `stdin` field; text in an argv element depends on the program's build |
 
 ## Indent-preserving round trip
 
