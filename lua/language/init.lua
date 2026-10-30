@@ -83,12 +83,12 @@ end
 ---Translate a range/selection and replace it in place (`:TranslateReplace`).
 ---@see M.translate
 ---@param lang string  target language, e.g. "EN", "DE"
----@param opts table|nil  { nocode?, scope? }
+---@param opts table|nil  { nocode?, scope? }  (a cwd/path scope always overwrites the files, like :TranslateReplace)
 ---@return nil
 function M.translate_replace(lang, opts)
   require("language.translate").run(
     lang,
-    vim.tbl_extend("force", opts or {}, { output = "replace" })
+    vim.tbl_extend("force", opts or {}, { output = "replace", files = "replace" })
   )
 end
 

@@ -150,6 +150,16 @@ return function(H)
   for _, n in ipairs(notes) do
     H.eq(n.msg:find("not supported", 1, true), nil, "no 'not supported yet' warning")
   end
+
+  -- The facade's translate_replace always replaces, like :TranslateReplace
+  -- (which ignores --files=): an `opts.files` the caller passes along must not
+  -- turn it into a suffix/buffers run.
+  require("language").translate_replace(
+    "DE",
+    { files = "suffix", scope = { kind = "path", path = scratch .. "/note.md" } }
+  )
+  H.eq(#files_calls, 4, "translate_replace with a path scope reaches run_files")
+  H.eq(files_calls[4].opts.mode, "replace", "translate_replace forces replace over opts.files")
   vim.fn.delete(scratch, "rf")
 
   -- run_region(): guards --------------------------------------------------
