@@ -27,9 +27,15 @@
 --- (`LanguageTranslateLimits`). `translate.max_chars` can only lower it. A
 --- failed block fails the whole call, and `cb` still runs exactly once. Every
 --- request runs with the provider's own timeout, so `translate.timeout_ms` is
---- a budget per block, not per call.
+--- a budget per block; `translate.deadline_ms` (0 = off) bounds the whole
+--- call. Between two requests the wrapper waits `limits.pause_ms` (the keyless
+--- engines rate-limit; `translate.block_pause_ms` replaces it), and a block
+--- that comes back with another line count than was sent is reported with a
+--- warning once the call succeeds, instead of being passed on silently.
 
 require("language.translate.@types")
+
+local notify = require("lib.nvim.notify").create("[language.translate]")
 
 local M = {}
 
@@ -38,6 +44,7 @@ local M = {}
 ---@field max_lines? integer                    -- most lines per block (DeepL: 50 texts per request)
 ---@field cost? fun(line: string): integer      -- cost of one line incl. its separator; default `#line + 1`. Must grow with the line and never be below `#line` (the line splitter relies on both)
 ---@field override? fun(cfg: LanguageTranslateCfg|table): integer|nil -- budget from the engine's own config; may raise `max_bytes`
+---@field pause_ms? integer                     -- pause between two requests of one call (the keyless engines rate-limit); `translate.block_pause_ms` replaces it
 
 -- ASCII white space as explicit bytes: `%s` follows the C locale, which on some
 -- Windows code pages classifies the 0xA0 byte inside UTF-8 sequences as a space.
@@ -76,7 +83,16 @@ function M.limits_for(provider, cfg)
   if type(user) == "number" and user > 0 and user < max_bytes then
     max_bytes = math.floor(user)
   end
-  return { max_bytes = max_bytes, max_lines = base.max_lines, cost = base.cost }
+  local pause = cfg and cfg.block_pause_ms
+  if type(pause) ~= "number" or pause < 0 then
+    pause = base.pause_ms
+  end
+  return {
+    max_bytes = max_bytes,
+    max_lines = base.max_lines,
+    cost = base.cost,
+    pause_ms = (type(pause) == "number" and pause > 0) and math.floor(pause) or 0,
+  }
 end
 
 ---@internal
@@ -361,6 +377,22 @@ function M.wrap(provider)
     local out = {}
     ---@type string[]
     local joined = {} -- translated pieces of the over-long line being re-joined
+    ---@type string|nil
+    local mismatch -- the first block whose engine answered with another line count
+    ---@type uv.uv_timer_t|nil
+    local pause_timer
+    ---@type uv.uv_timer_t|nil
+    local deadline_timer
+
+    local function stop_timers()
+      for _, t in pairs({ pause = pause_timer, deadline = deadline_timer }) do
+        if not t:is_closing() then
+          t:stop()
+          t:close()
+        end
+      end
+      pause_timer, deadline_timer = nil, nil
+    end
 
     ---@param ok boolean
     ---@param result string[]|string
@@ -369,6 +401,10 @@ function M.wrap(provider)
         return
       end
       settled = true
+      stop_timers()
+      if ok and mismatch then
+        notify.warn(mismatch)
+      end
       cb(ok, result)
     end
 
@@ -387,6 +423,25 @@ function M.wrap(provider)
     end
 
     local step
+
+    ---Go on with block `n`, after `limits.pause_ms` when a request follows.
+    ---@param n integer
+    local function advance(n)
+      if limits.pause_ms <= 0 or n > total then
+        step(n)
+        return
+      end
+      active = nil
+      pause_timer = pause_timer or vim.uv.new_timer()
+      vim.uv.update_time() -- the loop clock is stale after synchronous work
+      pause_timer:start(
+        limits.pause_ms,
+        0,
+        vim.schedule_wrap(function()
+          step(n)
+        end)
+      )
+    end
 
     ---Send block `n` to the provider. `lo`/`hi` bound its text lines (blank
     ---edges excluded); the pieces of an over-long line carry no edges.
@@ -428,11 +483,17 @@ function M.wrap(provider)
           while m > #payload and result[m] == "" do
             m = m - 1
           end
+          if m ~= #payload and total > 1 and not mismatch then
+            mismatch = (
+              "%s: block %d/%d (lines %d-%d) came back with %d lines for %d sent; "
+              .. "the lines after it are shifted"
+            ):format(provider.name, n, total, b.first, b.last, m, #payload)
+          end
           vim.list_extend(out, lines, b.first, lo - 1)
           vim.list_extend(out, result, 1, m)
           vim.list_extend(out, lines, hi + 1, b.last)
         end
-        step(n + 1)
+        advance(n + 1)
       end)
       if not started then
         fail(n, job)
@@ -467,14 +528,48 @@ function M.wrap(provider)
       end
     end
 
+    ---Stop the request in flight (cancel, deadline).
+    local function abort_active()
+      local job = active
+      active = nil
+      if job and type(job.cancel) == "function" then
+        pcall(job.cancel)
+      end
+    end
+
+    local deadline = cfg and cfg.deadline_ms
+    if type(deadline) == "number" and deadline > 0 then
+      deadline_timer = vim.uv.new_timer()
+      vim.uv.update_time() -- the loop clock is stale after synchronous work
+      deadline_timer:start(
+        math.floor(deadline),
+        0,
+        vim.schedule_wrap(function()
+          if settled or cancelled then
+            return
+          end
+          local done = math.max(current - 1, 0)
+          settle(
+            false,
+            ("%s: the call took longer than translate.deadline_ms (%d ms), %d of %d blocks done"):format(
+              provider.name,
+              math.floor(deadline),
+              done,
+              total
+            )
+          )
+          abort_active()
+        end)
+      )
+    end
+
     step(1)
 
     return {
       cancel = function()
         cancelled = true
-        if active and type(active.cancel) == "function" then
-          pcall(active.cancel)
-        end
+        stop_timers()
+        abort_active()
       end,
     }
   end

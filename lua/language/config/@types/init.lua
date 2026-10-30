@@ -94,6 +94,8 @@
 ---@field timeout_ms     integer
 ---@field max_chars      integer                 -- lowers the per-request block budget (bytes, DeepL: bytes + 8 per line); 0 = provider default
 ---@field max_blocks     integer                 -- most requests one call may need (an input that needs more is refused up front); 0 = no limit
+---@field block_pause_ms? integer                -- pause between the requests of one call; nil = engine default (google/shell 300, others 0)
+---@field deadline_ms    integer                 -- budget for the whole call across its requests; 0 = none
 ---@field deepl          { api_key: string|nil }
 ---@field ai             LanguageTranslateAiCfg
 ---@field custom         LanguageTranslateCustomProviderCfg|nil
@@ -236,6 +238,8 @@
 ---@field timeout_ms?     integer
 ---@field max_chars?      integer                 -- lowers the per-request block budget (bytes, DeepL: bytes + 8 per line); 0 = provider default
 ---@field max_blocks?     integer                 -- most requests one call may need (an input that needs more is refused up front); 0 = no limit
+---@field block_pause_ms? integer                 -- pause between the requests of one call; nil = engine default (google/shell 300, others 0)
+---@field deadline_ms?    integer                 -- budget for the whole call across its requests; 0 = none
 ---@field deepl?          { api_key: string|nil }
 ---@field ai?             LanguageTranslateAiOpts
 ---@field custom?         LanguageTranslateCustomProviderCfg|nil

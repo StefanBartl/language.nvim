@@ -53,6 +53,8 @@ require("language").setup({
     timeout_ms = 8000,           -- per request: a large input is split into several, each gets this budget
     max_chars = 0,               -- lower the per-request block budget in bytes (DeepL: bytes + 8 per line; 0 = provider default)
     max_blocks = 50,             -- most requests one call may need; more is refused before the first (0 = no limit)
+    block_pause_ms = nil,        -- pause between the requests of one call; nil = engine default (google/shell 300 ms)
+    deadline_ms = 0,             -- budget for the whole call across all its requests (0 = none)
     deepl = { api_key = nil },   -- or $DEEPL_API_KEY
     ai = { max_chars = 6000, concurrency = 2, max_total_chars = 500000 }, -- engine "ai" (ai.nvim); also provider, model, glossary, style
     -- require("language").translate_markdown(): Markdown-safe, line-true document translation

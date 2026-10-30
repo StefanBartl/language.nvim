@@ -951,6 +951,121 @@ return function(H)
     H.contains(rcap.result(), "translate.max_blocks (2)", "and names the cap")
   end
 
+  -- pause between blocks, deadline for the whole call, line-count warning ---------------
+  -- The keyless gtx endpoint answers a burst with HTTP 429: the blocks of one call go out
+  -- with `limits.pause_ms` between them (`translate.block_pause_ms` replaces it), a call
+  -- can be bounded as a whole (`translate.deadline_ms`), and a block whose engine merged
+  -- or split lines is reported instead of being passed on silently.
+  do
+    local ppause = fake({ max_bytes = 100, pause_ms = 300 })
+    H.eq(chunk.limits_for(ppause, {}).pause_ms, 300, "the engine's pause is the default")
+    H.eq(chunk.limits_for(ppause, { block_pause_ms = 0 }).pause_ms, 0, "0 turns it off")
+    H.eq(chunk.limits_for(ppause, { block_pause_ms = 25 }).pause_ms, 25, "the option replaces it")
+    H.eq(
+      chunk.limits_for(ppause, { block_pause_ms = -1 }).pause_ms,
+      300,
+      "a negative value is no pause"
+    )
+    H.eq(chunk.limits_for(fake({ max_bytes = 100 }), {}).pause_ms, 0, "no engine pause: none")
+
+    local six3 = { "aaaa", "bbbb", "cccc", "dddd", "eeee", "ffff" }
+    local pwait = fake({ max_bytes = 10, pause_ms = 40 })
+    local t0 = vim.uv.hrtime()
+    local rwait = run(pwait, six3)
+    H.eq(#pwait.calls, 1, "the next block waits for the pause")
+    H.eq(rwait.calls(), 0, "nothing is delivered yet")
+    H.ok(
+      vim.wait(2000, function()
+        return rwait.calls() > 0
+      end, 5),
+      "the call completes after the pauses"
+    )
+    local elapsed = (vim.uv.hrtime() - t0) / 1e6
+    H.eq(#pwait.calls, 3, "every block is sent")
+    H.ok(rwait.ok(), "success")
+    H.eq(table.concat(rwait.result(), ","), "AAAA,BBBB,CCCC,DDDD,EEEE,FFFF", "joined in order")
+    H.eq(rwait.calls(), 1, "cb exactly once")
+    H.ok(elapsed >= 75, ("two pauses of 40 ms between three blocks (%.0f ms)"):format(elapsed))
+
+    local poff = fake({ max_bytes = 10, pause_ms = 40 })
+    local roff = run(poff, six3, { block_pause_ms = 0 })
+    H.eq(#poff.calls, 3, "block_pause_ms = 0: all blocks go out right away")
+    H.eq(roff.calls(), 1, "and the call is done synchronously")
+
+    local pone1 = fake({ max_bytes = 100, pause_ms = 40 })
+    local rone1 = run(pone1, { "a", "b" })
+    H.eq(rone1.calls(), 1, "a single block is never delayed")
+
+    local pcp = fake({ max_bytes = 10, pause_ms = 30 })
+    local rcp = run(pcp, six3)
+    H.eq(#pcp.calls, 1, "first block sent, pause pending")
+    rcp.job.cancel()
+    vim.wait(120)
+    H.eq(#pcp.calls, 1, "cancel during the pause sends no further block")
+    H.eq(rcp.calls(), 0, "and drops the callback")
+
+    -- deadline_ms: the request in flight is cancelled, the call fails once
+    local stuck_cb, stuck_cancels = nil, 0
+    local pstuck = fake({ max_bytes = 10 }, function(_, cb)
+      stuck_cb = cb
+      return {
+        cancel = function()
+          stuck_cancels = stuck_cancels + 1
+        end,
+      }
+    end)
+    local rdl = run(pstuck, six3, { deadline_ms = 40 })
+    H.ok(
+      vim.wait(2000, function()
+        return rdl.calls() > 0
+      end, 5),
+      "the deadline ends a call that hangs"
+    )
+    H.falsy(rdl.ok(), "as a failure")
+    H.contains(rdl.result(), "translate.deadline_ms (40 ms)", "naming the option")
+    H.contains(rdl.result(), "0 of 3 blocks done", "and how far it got")
+    H.eq(stuck_cancels, 1, "the request in flight is cancelled")
+    stuck_cb(true, { "AAAA", "BBBB" })
+    H.eq(#pstuck.calls, 1, "a late result starts no further block")
+    H.eq(rdl.calls(), 1, "and is not delivered")
+
+    local pquick = fake({ max_bytes = 10 })
+    local rq = run(pquick, six3, { deadline_ms = 30 })
+    H.ok(rq.ok(), "a call that finishes in time is not touched")
+    vim.wait(80)
+    H.eq(rq.calls(), 1, "the deadline timer is gone once the call settled")
+
+    -- a block with another line count is reported once the call succeeds
+    local real_notify = vim.notify
+    local warnings = {}
+    vim.notify = function(msg, level)
+      if level == vim.log.levels.WARN then
+        warnings[#warnings + 1] = msg
+      end
+    end
+    local pmerge = fake({ max_bytes = 10 }, function(lines, cb, n)
+      if n == 2 then
+        cb(true, { table.concat(lines, " ") }) -- the engine merged the two lines
+      else
+        cb(true, lines)
+      end
+    end)
+    local rmerge = run(pmerge, six3)
+    local pmerge1 = fake({ max_bytes = 100 }, function(lines, cb)
+      cb(true, { table.concat(lines, " ") })
+    end)
+    local rmerge1 = run(pmerge1, { "a", "b" })
+    local psame = fake({ max_bytes = 10 })
+    run(psame, six3)
+    vim.notify = real_notify
+    H.ok(rmerge.ok(), "a merged block still delivers the result")
+    H.eq(#rmerge.result(), 5, "with the line the engine merged away")
+    H.eq(#warnings, 1, "one warning for the call (single-block call and matching counts: none)")
+    H.contains(warnings[1] or "", "block 2/3 (lines 3-4)", "naming the block and its lines")
+    H.contains(warnings[1] or "", "1 lines for 2 sent", "and both counts")
+    H.ok(rmerge1.ok(), "a single block passes its own result through")
+  end
+
   -- registry: every engine is wrapped ---------------------------------------------------
   package.loaded["language.translate.providers.registry"] = nil
   package.loaded["language.translate.providers.google"] = nil
@@ -971,9 +1086,18 @@ return function(H)
     g_lines[i] = ("line %04d "):format(i) .. string.rep("a", 60)
   end
   local gdone, gok, gres = 0, nil, nil
-  google.translate(g_lines, "DE", nil, {}, function(o, rr)
+  -- no pause between the blocks here: this section runs the blocks synchronously; the
+  -- stub answers one line per block, so the line-count warning is expected and muted
+  local notify_before = vim.notify
+  local g_warned = 0
+  vim.notify = function()
+    g_warned = g_warned + 1
+  end
+  google.translate(g_lines, "DE", nil, { block_pause_ms = 0 }, function(o, rr)
     gdone, gok, gres = gdone + 1, o, rr
   end)
+  vim.notify = notify_before
+  H.eq(g_warned, 1, "the merged lines of the stub are reported once")
   H.ok(#runs > 1, "google through the registry: the input is split into several requests")
   for _, argv in ipairs(runs) do
     for _, a in ipairs(argv) do
@@ -1007,7 +1131,7 @@ return function(H)
   local function google_one(line)
     echo_runs = {}
     local res
-    registry.get("google").translate({ line }, "DE", nil, {}, function(o, got)
+    registry.get("google").translate({ line }, "DE", nil, { block_pause_ms = 0 }, function(o, got)
       res = { ok = o, result = got }
     end)
     return res, #echo_runs
@@ -1032,6 +1156,45 @@ return function(H)
   H.eq(g3.result[1], huge:upper(), "re-joined without losing a word")
   for _, req in ipairs(echo_runs) do
     H.ok(#req.stdin <= 15000, "each piece fits the request budget")
+  end
+
+  -- google: a rate limit or an HTML page is named as such, not "invalid response" ---------
+  do
+    local answer, seen_argv
+    package.loaded["language.util.job"] = {
+      run = function(argv, opts)
+        seen_argv = argv
+        opts.on_done(true, answer, "")
+        return { cancel = function() end }
+      end,
+    }
+    package.loaded["language.translate.providers.google"] = nil
+    local graw = require("language.translate.providers.google")
+    H.eq(graw.limits.pause_ms, 300, "google pauses between the blocks of one call by default")
+    ---@param out string
+    ---@return table
+    local function gtx(out)
+      answer = out
+      local res
+      graw.translate({ "Hallo" }, "EN", nil, {}, function(o, got)
+        res = { ok = o, result = got }
+      end)
+      return res
+    end
+    local ok200 = gtx('[[["Hello","Hallo"]]]\n200')
+    H.ok(ok200.ok, "a JSON answer with status 200 is translated")
+    H.eq(ok200.result[1], "Hello", "the status line is not part of the text")
+    H.ok(vim.tbl_contains(seen_argv, "-w"), "curl is asked for the HTTP status")
+    H.ok(gtx('[[["Hello","Hallo"]]]').ok, "an answer without a status line still parses")
+    local r429 = gtx("<html><body>Too Many Requests</body></html>\n429")
+    H.falsy(r429.ok, "HTTP 429 fails the request")
+    H.contains(r429.result, "rate limited", "naming the rate limit")
+    H.contains(r429.result, "HTTP 429", "and the status")
+    local r503 = gtx("Service Unavailable\n503")
+    H.contains(r503.result, "HTTP 503", "another error status is named")
+    local rhtml = gtx("<!DOCTYPE html><html>sorry</html>\n200")
+    H.falsy(rhtml.ok, "an HTML page instead of JSON fails")
+    H.contains(rhtml.result, "HTML page", "and says what came back")
   end
 
   package.loaded["language.util.job"] = real_job

@@ -24,9 +24,10 @@ M.name = "shell"
 ---budget (kept from the argv era: 6000 on Windows, 20 000 elsewhere) bounds the
 ---lines per `trans` process and, since `trans` sends every line as its own
 ---request, the size of one request. A line above it is cut at sentence or word
----boundaries by `translate/chunk.lua`.
+---boundaries by `translate/chunk.lua`. `trans` uses the same keyless Google
+---endpoint as the `google` engine, so the blocks get the same pause between them.
 ---@type LanguageTranslateLimits
-M.limits = { max_bytes = vim.fn.has("win32") == 1 and 6000 or 20000 }
+M.limits = { max_bytes = vim.fn.has("win32") == 1 and 6000 or 20000, pause_ms = 300 }
 
 ---@see LanguageTranslateProvider
 ---@param _cfg LanguageTranslateCfg

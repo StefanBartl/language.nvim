@@ -88,6 +88,8 @@ local defaults = {
     timeout_ms = 8000, -- network timeout per request; a large input is split into several, each gets this budget
     max_chars = 0, -- lower the per-request block budget in bytes (DeepL: bytes + 8 per line; 0 = provider default); larger inputs are split on line boundaries
     max_blocks = 50, -- most requests one call may need; an input that needs more is refused before the first request (0 = no limit)
+    block_pause_ms = nil, -- pause between the requests of one call; nil = engine default (google/shell 300: the keyless endpoint rate-limits, others 0)
+    deadline_ms = 0, -- budget for the whole call, across all its requests (0 = none; timeout_ms still applies per request)
     deepl = { api_key = nil }, -- or ENV "DEEPL_API_KEY"
     -- engine = "ai": translation through ai.nvim (soft dependency, bulk profile, policy-checked).
     ai = {

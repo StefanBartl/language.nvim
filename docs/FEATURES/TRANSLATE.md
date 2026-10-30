@@ -84,8 +84,22 @@ the JSON quoting of each text. This is the unit of `translate.max_chars`.
   sent before a late failure has already left the machine.
 - `opts.translate.timeout_ms` applies to **each request**, not to the whole
   call: a chunked input can take up to `blocks * timeout_ms`.
+  `opts.translate.deadline_ms` (default `0` = none) bounds the whole call: when
+  it runs out, the request in flight is cancelled and the call fails with a
+  message naming the option and how many blocks were done.
+- `opts.translate.block_pause_ms` is the pause between two requests of one
+  call. `nil` (the default) takes the engine's own: `300` ms for `google` and
+  `shell` (both use the keyless endpoint, which answers a burst with HTTP 429),
+  `0` for the others; `0` turns it off.
+- A rate limit is named as such: `google` reads the HTTP status (`curl -w`) and
+  reports HTTP 429, another non-2xx status or an HTML page instead of JSON
+  plainly, and the call stops at that block.
+- A block that comes back with another line count than was sent (the engine
+  merged or split lines) is reported with a warning naming the block and its
+  lines once the call succeeds; the lines after it are shifted.
 - A failing block fails the whole call (one callback, with the block and
-  line range in the message); `cancel` stops the running block and the rest.
+  line range in the message); `cancel` stops the running block, a pending
+  pause and the rest.
 - `util/job.run` reports a spawn failure through `on_done(false, ...)`
   instead of throwing, and `translate.files.process` turns a failure into a
   failed file while the remaining files carry on.

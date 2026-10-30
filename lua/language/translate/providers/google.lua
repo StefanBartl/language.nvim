@@ -26,9 +26,11 @@ M.name = "google"
 ---the default cost). 15 000 is conservative: the endpoint answered complete
 ---translations for bodies of 57 000 bytes in a measurement (multi-line ASCII,
 ---Cyrillic, one 15 000-byte Japanese line). A line above it is cut at sentence
----or word boundaries by `translate/chunk.lua`.
+---or word boundaries by `translate/chunk.lua`. The endpoint is keyless and
+---answers a burst of requests with HTTP 429, so the blocks of one call are
+---sent with a short pause between them (`translate.block_pause_ms`).
 ---@type LanguageTranslateLimits
-M.limits = { max_bytes = 15000 }
+M.limits = { max_bytes = 15000, pause_ms = 300 }
 
 local ENDPOINT = "https://translate.googleapis.com/translate_a/single"
 
@@ -38,6 +40,37 @@ local ENDPOINT = "https://translate.googleapis.com/translate_a/single"
 ---@return boolean
 function M.available(_cfg)
   return vim.fn.executable("curl") == 1
+end
+
+---@internal
+---`curl -w` appends the HTTP status on a line of its own: split it off.
+---@param out string
+---@return string body, string|nil status
+local function split_status(out)
+  local body, status = out:match("^(.*)\n(%d%d%d)$")
+  if not body then
+    return out, nil
+  end
+  return body, status
+end
+
+---@internal
+---A failure the endpoint reported itself (status, HTML page), named plainly.
+---@param body string
+---@param status string|nil
+---@return string|nil err
+local function endpoint_error(body, status)
+  if status == "429" then
+    return "rate limited by the keyless endpoint (HTTP 429); wait a moment or translate less at once"
+  end
+  if status and status:sub(1, 1) ~= "2" then
+    return ("the endpoint answered HTTP %s"):format(status)
+  end
+  if body:match("^[ \t\r\n]*<") then
+    return "the endpoint answered with an HTML page instead of a translation "
+      .. "(rate limit or block); wait a moment or translate less at once"
+  end
+  return nil
 end
 
 ---@internal
@@ -93,6 +126,8 @@ function M.translate(lines, target, source, cfg, cb)
     "--compressed",
     "--data-urlencode",
     "q@-",
+    "-w",
+    "\\n%{http_code}", -- curl expands `\n` itself; the status ends the output
     url,
   }
 
@@ -104,7 +139,13 @@ function M.translate(lines, target, source, cfg, cb)
         cb(false, err ~= "" and err or "translation request failed")
         return
       end
-      local translated, perr = parse(out)
+      local body, status = split_status(out)
+      local eerr = endpoint_error(body, status)
+      if eerr then
+        cb(false, eerr)
+        return
+      end
+      local translated, perr = parse(body)
       if not translated then
         cb(false, perr or "could not parse translation")
         return

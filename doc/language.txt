@@ -323,8 +323,14 @@ re-joined with a space into one line; only a line without any such boundary
 (one giant token) fails the call, with a message naming the line.
 `translate.max_blocks` (default 50, 0 = no limit) refuses an input that would
 need more requests than that before the first one is sent.
-`translate.timeout_ms` applies to each request, not to the whole call. A
-failing block fails the whole call.
+`translate.timeout_ms` applies to each request, not to the whole call;
+`translate.deadline_ms` (default 0 = none) bounds the whole call.
+`translate.block_pause_ms` is the pause between two requests of one call
+(nil = engine default: 300 ms for google and shell, whose keyless endpoint
+answers a burst with HTTP 429; 0 for the others). google names HTTP 429,
+another error status or an HTML page instead of JSON plainly. A block that
+comes back with another line count than was sent is reported with a warning.
+A failing block fails the whole call.
 On Windows a `.cmd`/`.bat` launcher (not an .exe) runs through `cmd.exe /c`;
 a command whose text contains `"` `%` `^` `&` `|` `<` `>` or a line break is
 refused there instead of being run.
