@@ -48,6 +48,10 @@ local function is_timing(line)
   return line:match(TIMING) ~= nil
 end
 
+-- A full SRT timing line, `00:00:04,120 --> 00:00:07,300`: hours, comma and milliseconds on both sides. An
+-- agenda arrow like `10:30 --> 11:00` never has this shape.
+local STRICT_SRT_TIMING = "^%s*%d%d:%d%d:%d%d,%d%d%d%s*%-%->%s*%d%d:%d%d:%d%d,%d%d%d"
+
 ---True when one of `lines[s..e]` is a timing line.
 ---@param lines string[]
 ---@param s integer
@@ -94,7 +98,9 @@ end
 ---at its two edges:
 ---  - a leading block without a timing line is the text tail of a cue cut in
 ---    the middle; it needs at least two whole cues after it, so a paragraph
----    followed by a single arrow line stays prose
+---    followed by a single arrow line stays prose. One whole cue is enough when
+---    a timing line has the full SRT shape (`00:00:08,000 --> 00:00:09,000`),
+---    which an agenda arrow like `10:30 --> 11:00` never has
 ---  - a trailing block that is a lone index line is the start of the next cue
 ---@param lines string[]
 ---@return "srt"|"vtt"|nil
@@ -105,6 +111,7 @@ function M.sniff(lines)
   end
   local cues, blocks = 0, 0
   local leading_stub = false
+  local strict = false
   local i, n = 1, #lines
   while i <= n do
     if lines[i]:match("^%s*$") then
@@ -133,6 +140,8 @@ function M.sniff(lines)
         or opens_with(head, "REGION")
       if is_timing(head) or (head:match("^%s*%d+%s*$") and nxt and is_timing(nxt)) then
         cues = cues + 1
+        local timing = is_timing(head) and head or nxt
+        strict = strict or timing:match(STRICT_SRT_TIMING) ~= nil
       elseif not comment and blocks == 1 and not has_timing(lines, start, i - 1) then
         leading_stub = true
       elseif not (comment or (is_last and lone_index and cues > 0)) then
@@ -143,7 +152,7 @@ function M.sniff(lines)
     end
   end
   if leading_stub then
-    return cues >= 2 and "srt" or nil
+    return (cues >= 2 or (cues == 1 and strict)) and "srt" or nil
   end
   return cues > 0 and "srt" or nil
 end
@@ -208,6 +217,11 @@ function M.cue_ranges(lines, kind)
           or opens_with(head, "REGION")
           or head:match("^WEBVTT") ~= nil
       end
+      -- Same view of the first line as `sniff`: without a BOM.
+      local head = lines[first]
+      if first == 1 then
+        head = head:gsub("^\239\187\191", "")
+      end
       if not skip then
         -- A block normally holds one cue. A file that lost the blank line between two cues has several timing
         -- lines in one block: it is split there, and the line before the next timing line (that cue's index or
@@ -222,11 +236,11 @@ function M.cue_ranges(lines, kind)
           #timings == 0
           and leading
           and kind == "srt"
-          and not (first == last and lines[first]:match("^%s*%d+%s*$"))
+          and not (first == last and head:match("^%s*%d+%s*$"))
           and not (
-            opens_with(lines[first], "NOTE")
-            or opens_with(lines[first], "STYLE")
-            or opens_with(lines[first], "REGION")
+            opens_with(head, "NOTE")
+            or opens_with(head, "STYLE")
+            or opens_with(head, "REGION")
           )
         then
           ranges[#ranges + 1] = { s = first, e = last }

@@ -219,6 +219,28 @@ return function(H)
     H.eq(#r, 3, "fragment: the cut cue and two whole cues")
     H.eq(r[1].s .. "-" .. r[1].e, "1-1", "fragment: the leading tail is cue text")
     H.eq(#subtitle.cue_ranges(CUT_TAIL, "srt"), 1, "fragment: the trailing index is not cue text")
+    -- the smallest fragment: a cut cue and one whole cue; a full SRT timing line is enough proof
+    local CUT_ONE = { "tail", "", "3", "00:00:08,000 --> 00:00:09,000", "Third.", "", "4" }
+    H.eq(
+      subtitle.sniff(CUT_ONE),
+      "srt",
+      "sniff: a cut cue and one whole cue with a full SRT timing"
+    )
+    H.eq(
+      subtitle.sniff({ "tail", "", "00:08.000 --> 00:09.000", "Third." }),
+      nil,
+      "sniff: ...but not with a short timing, which an agenda could have"
+    )
+    r = subtitle.cue_ranges(CUT_ONE, "srt")
+    H.eq(#r, 2, "fragment: the cut cue and the whole cue, not the trailing index")
+    H.eq(r[1].s .. "-" .. r[1].e, "1-1", "fragment: ...the leading tail is cue text")
+    -- a lone index with a BOM is an index, not cue text
+    r = subtitle.cue_ranges(
+      { "\239\187\1911", "", "2", "00:00:01,000 --> 00:00:02,000", "Hi" },
+      "srt"
+    )
+    H.eq(#r, 1, "fragment: a lone index with a BOM is not cue text")
+    H.eq(r[1].s .. "-" .. r[1].e, "5-5", "fragment: ...only the cue's text is")
 
     -- translate: SRT ---------------------------------------------------------
     local got = run(marking(), SRT, "srt")
@@ -442,7 +464,9 @@ return function(H)
       "window: no cue text is said, not echoed"
     )
     -- SRT fragments: the timing lines and indices come out byte-identical, the engine never sees them
-    for name, frag in pairs({ head = CUT_HEAD, tail = CUT_TAIL }) do
+    -- ipairs, not pairs: the order of a hash table varies per LuaJIT process
+    for _, case in ipairs({ { "head", CUT_HEAD }, { "tail", CUT_TAIL } }) do
+      local name, frag = case[1], case[2]
       window.open({ target = "DE", source_lines = frag })
       window.refresh()
       vim.wait(500, function()
@@ -462,12 +486,16 @@ return function(H)
           ("window %s fragment: no timing line reached the engine"):format(name)
         )
       end
+      if name == "head" then
+        H.eq(shown[1]:sub(1, 2), ">>", "window head fragment: the cut cue's tail is translated")
+        H.ok(
+          vim.tbl_contains(seen, "and {1}the second line."),
+          "window head fragment: the cut cue's tail reached the engine (masked)"
+        )
+      else
+        H.eq(shown[3], ">>Hello there.", "window tail fragment: the cue text is translated")
+      end
     end
-    H.eq(
-      vim.api.nvim_buf_get_lines(window._state().output_buf, 0, -1, false)[3],
-      ">>Hello there.",
-      "window tail fragment: the cue text is translated"
-    )
     window.close()
     package.loaded["language.translate.providers.registry"] = nil
     package.loaded["language.translate"] = nil
