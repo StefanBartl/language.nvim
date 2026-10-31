@@ -38,6 +38,8 @@ local M = {}
 
 local EXT = { srt = "srt", vtt = "vtt", webvtt = "vtt" }
 
+local BOM = "\239\187\191"
+
 -- `00:00:04,120 --> 00:00:07,300` (SRT) and `00:04.120 --> 00:07.300` or
 -- `00:00:04.120 --> 00:00:07.300 align:start` (WebVTT).
 local TIMING = "^%s*%d+:%d%d[%d:%.,]*%s*%-%->%s*%d+:%d%d"
@@ -344,7 +346,13 @@ function M.translate(provider, lines, kind, target, cfg, cb, range)
       total = total + 1
       local masks, texts, any = {}, {}, false
       for l = cs, ce do
-        local masked, mask = mask_text(lines[l])
+        local text = lines[l]
+        if l == 1 then
+          -- A fragment that starts in the middle of a cue has its text on line 1, BOM included: the BOM is not
+          -- text, it stays out of the request and is put back in front of the answer.
+          text = text:gsub("^" .. BOM, "")
+        end
+        local masked, mask = mask_text(text)
         masks[#masks + 1] = mask
         texts[#texts + 1] = masked
         any = any or has_text(masked)
@@ -407,7 +415,11 @@ function M.translate(provider, lines, kind, target, cfg, cb, range)
       end
       if good then
         for k = 1, #out do
-          base[cue.s - s + k] = out[k]
+          local l = cue.s + k - 1
+          if l == 1 and lines[1]:sub(1, #BOM) == BOM then
+            out[k] = BOM .. out[k]
+          end
+          base[l - s + 1] = out[k]
         end
       else
         info.kept = info.kept + 1

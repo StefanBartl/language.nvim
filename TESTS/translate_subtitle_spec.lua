@@ -241,6 +241,42 @@ return function(H)
     )
     H.eq(#r, 1, "fragment: a lone index with a BOM is not cue text")
     H.eq(r[1].s .. "-" .. r[1].e, "5-5", "fragment: ...only the cue's text is")
+    -- a BOM in front of a cut cue's text stays out of the request and comes back in front
+    local BOM_CUT = {
+      "\239\187\191tail of a cue",
+      "",
+      "3",
+      "00:00:08,000 --> 00:00:09,000",
+      "Third.",
+      "",
+      "4",
+    }
+    local bom_got = run(marking(), BOM_CUT, "srt")
+    H.ok(bom_got.ok, "fragment with BOM: translated")
+    H.eq(seen[1], "tail of a cue", "fragment with BOM: the engine never sees the BOM")
+    H.eq(
+      bom_got.result[1],
+      "\239\187\191>>tail of a cue",
+      "fragment with BOM: the BOM is back in front of the answer"
+    )
+    for _, i in ipairs({ 2, 3, 4, 6, 7 }) do
+      H.eq(
+        bom_got.result[i],
+        BOM_CUT[i],
+        ("fragment with BOM: line %d is byte-identical"):format(i)
+      )
+    end
+    H.eq(bom_got.result[5], ">>Third.", "fragment with BOM: the whole cue is translated")
+    -- a cue the engine broke keeps its source, BOM included
+    BOM_CUT[1] = "\239\187\191<i>tail</i>"
+    bom_got = run(
+      marking(function(l)
+        return (l:gsub("{%d+}", ""))
+      end),
+      BOM_CUT,
+      "srt"
+    )
+    H.eq(bom_got.result[1], BOM_CUT[1], "fragment with BOM: a kept cue keeps its BOM")
 
     -- translate: SRT ---------------------------------------------------------
     local got = run(marking(), SRT, "srt")
