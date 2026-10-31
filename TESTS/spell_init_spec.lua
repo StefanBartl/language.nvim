@@ -78,30 +78,37 @@ return function(H)
     )
     local prev_rtp = vim.o.runtimepath
     vim.opt.runtimepath:prepend(de_dir)
+    local buf_win = vim.fn.bufwinid(buf)
+    vim.api.nvim_set_option_value("spell", false, { scope = "local", win = buf_win })
+    local global_spell = vim.api.nvim_get_option_value("spell", { scope = "global" })
+    local global_spelllang = vim.api.nvim_get_option_value("spelllang", { scope = "global" })
     spell.run("de", { kind = "buffer", bufnr = buf })
     H.eq(vim.bo[buf].spelllang, "de", "the session applies the requested language")
+    H.ok(
+      vim.api.nvim_get_current_win() ~= buf_win,
+      "precondition: list.open() left the quickfix window current"
+    )
+    H.eq(vim.wo[buf_win].spell, true, "'spell' is switched on in the buffer's own window")
 
-    -- BUG: clear() does not actually restore the buffer's previous 'spelllang'
-    -- here. `M.run`/`M.clear` apply and restore it via `vim.wo.spell` /
-    -- `vim.opt_local.spelllang` — CURRENT-window options — but with the
-    -- quickfix view (the non-default, non-panel UI this spec deliberately uses
-    -- to avoid `ui.kit`), `list.open()` opens the quickfix window and leaves it
-    -- current; `list.close()` (which returns focus to the original window) only
-    -- runs *after* the spelllang restore line in `M.clear`. The restore's
-    -- `vim.opt_local.spelllang = st.prev_spelllang` therefore lands on the
-    -- quickfix window (about to be closed and discarded) instead of on `buf`'s
-    -- own window, so `buf` is left at "de" forever — even though the session
-    -- object it read `prev_spelllang` from was correct. Confirmed to leak into
-    -- the *global* 'spelllang' value too (checked separately, not asserted
-    -- here to keep this from depending on option-scope internals). Not fixed
-    -- here: the fix is `nvim_set_option_value(..., { buf = bufnr })` /
-    -- resolving the buffer's window explicitly, a real source change.
+    -- clear() restores on the checked buffer and its window, even though the
+    -- quickfix window is current: options must not be set or restored there.
     spell.clear()
-    H.eq(vim.bo[buf].spelllang, "de", "BUG: the language is never actually restored")
-    H.eq(diag_count(), 0, "the diagnostics are still cleared correctly despite the option bug")
+    H.eq(vim.bo[buf].spelllang, prev_spelllang, "clear() restores the buffer's previous language")
+    H.eq(vim.wo[buf_win].spell, false, "and the window's previous 'spell'")
+    H.eq(
+      vim.api.nvim_get_option_value("spell", { scope = "global" }),
+      global_spell,
+      "the global 'spell' is never touched by run/clear"
+    )
+    H.eq(
+      vim.api.nvim_get_option_value("spelllang", { scope = "global" }),
+      global_spelllang,
+      "nor the global 'spelllang'"
+    )
+    H.eq(diag_count(), 0, "the diagnostics are cleared")
 
     -- Leave the buffer in a known-good state for the rest of this spec.
-    vim.opt_local.spelllang = prev_spelllang
+    vim.bo[buf].spelllang = prev_spelllang
     vim.o.runtimepath = prev_rtp
     de_cleanup()
 

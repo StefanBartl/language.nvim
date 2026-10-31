@@ -42,5 +42,6 @@
 ---@field spell_was_on    boolean
 ---@field prev_spelllang  string
 ---@field lang            string
+---@field win?            integer window the session set 'spell' in (restore target)
 
 return {}

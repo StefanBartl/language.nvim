@@ -53,15 +53,61 @@ local function view_is_panel()
 end
 
 ---@internal
----Temporarily set spelllang for the current window/buffer, returning the prior.
+---The window showing `bufnr`: the current one when it does, else the first
+---one `bufwinid` finds, else nil.
+---
+---Never "just the current window": `list.open()` leaves the quickfix / Trouble
+---window current, so options set or restored there would land on the list
+---instead of on the checked buffer.
+---@param bufnr integer
+---@param hint? integer window remembered from an earlier call
+---@return integer|nil
+local function buf_win(bufnr, hint)
+  if hint and api.nvim_win_is_valid(hint) and api.nvim_win_get_buf(hint) == bufnr then
+    return hint
+  end
+  local cur = api.nvim_get_current_win()
+  if api.nvim_win_get_buf(cur) == bufnr then
+    return cur
+  end
+  local win = vim.fn.bufwinid(bufnr)
+  return win ~= -1 and win or nil
+end
+
+---@internal
+---Window-local 'spell' of `win` (false without a window).
+---@param win integer|nil
+---@return boolean
+local function get_spell(win)
+  if not win then
+    return false
+  end
+  return api.nvim_get_option_value("spell", { win = win }) == true
+end
+
+---@internal
+---Set the window-LOCAL 'spell' of `win`, leaving the global value alone
+---(`vim.wo.spell = x` behaves like `:set` and changes both).
+---@param win integer|nil
+---@param on boolean
+---@return nil
+local function set_spell(win, on)
+  if win and api.nvim_win_is_valid(win) then
+    api.nvim_set_option_value("spell", on, { scope = "local", win = win })
+  end
+end
+
+---@internal
+---Temporarily set 'spelllang' of `bufnr` (buffer-local), returning the prior.
+---@param bufnr integer
 ---@param lang string
 ---@return string prev
-local function apply_lang(lang)
-  local prev = vim.bo.spelllang
+local function apply_lang(bufnr, lang)
+  local prev = vim.bo[bufnr].spelllang
   if type(prev) ~= "string" or prev == "" then
     prev = "en"
   end
-  vim.opt_local.spelllang = lang
+  vim.bo[bufnr].spelllang = lang
   return prev
 end
 
@@ -285,8 +331,8 @@ function M.run(lang, scope)
     if lang and scope.kind ~= "cwd" and scope.kind ~= "path" then
       local b = scope.bufnr or api.nvim_get_current_buf()
       if buf_valid(b) then
-        vim.opt_local.spelllang = lang
-        vim.wo.spell = true
+        vim.bo[b].spelllang = lang
+        set_spell(buf_win(b), true)
       end
     end
     require("language.spell.ui.panel").open(scope, cfg())
@@ -327,19 +373,20 @@ function M.run(lang, scope)
     return M.clear()
   end
 
-  local spell_was_on = vim.wo.spell
-  local prev_spelllang = lang and apply_lang(lang) or vim.bo.spelllang
+  local win = buf_win(bufnr)
+  local spell_was_on = get_spell(win)
+  local prev_spelllang = lang and apply_lang(bufnr, lang) or vim.bo[bufnr].spelllang
   if not spell_was_on then
-    vim.wo.spell = true
+    set_spell(win, true)
   end
 
   local issues = collect.scan(scope, cfg())
 
   if #issues == 0 then
     notify.info("No spelling errors found")
-    vim.wo.spell = spell_was_on
+    set_spell(win, spell_was_on)
     if lang then
-      vim.opt_local.spelllang = prev_spelllang
+      vim.bo[bufnr].spelllang = prev_spelllang
     end
     return
   end
@@ -347,7 +394,8 @@ function M.run(lang, scope)
   sessions[bufnr] = {
     spell_was_on = spell_was_on,
     prev_spelllang = prev_spelllang,
-    lang = lang or vim.bo.spelllang,
+    lang = lang or vim.bo[bufnr].spelllang,
+    win = win,
   }
 
   touched = list.publish(issues, SOURCE, cfg().max_highlights, cfg().highlights)
@@ -393,10 +441,12 @@ function M.clear()
   sessions[bufnr] = nil
   detach_keymaps(bufnr)
 
-  if st then
-    vim.wo.spell = st.spell_was_on
+  -- Restore on the checked buffer and its window, not the current one: after
+  -- `list.open()` that is the quickfix / Trouble window.
+  if st and buf_valid(bufnr) then
+    set_spell(buf_win(bufnr, st.win), st.spell_was_on)
     if type(st.prev_spelllang) == "string" and st.prev_spelllang ~= "" then
-      vim.opt_local.spelllang = st.prev_spelllang
+      vim.bo[bufnr].spelllang = st.prev_spelllang
     end
   end
 
