@@ -929,4 +929,48 @@ return function(H)
     H.contains(notified[1].msg, "cb exploded")
     H.eq(notified[1].level, vim.log.levels.ERROR)
   end
+
+  -- an engine that answers inside `translate` (on the stack of the slicer's coroutine): the inline
+  -- booking of a small answer runs under `sl.hold`, no counting tick (here the words of a reflow
+  -- of a paragraph with far more than 256 words) yields while the engine's `translate` is running
+  do
+    local words = {}
+    for i = 1, 1200 do
+      words[i] = "wort" .. i
+    end
+    local para = { table.concat(words, " ", 1, 600), table.concat(words, " ", 601) }
+    local inside, crossed, yielded = false, 0, 0
+    local orig_yield = coroutine.yield
+    rawset(coroutine, "yield", function(...)
+      if inside then
+        crossed = crossed + 1
+      else
+        yielded = yielded + 1
+      end
+      return orig_yield(...)
+    end)
+    local ok_run, r = pcall(run, para, {
+      slice_ms = 0,
+      provider = fake(scramble, {
+        on_request = function(lines, cb)
+          local out = {}
+          for i, l in ipairs(lines) do
+            out[i] = scramble(l)
+          end
+          inside = true
+          local ok, err = pcall(cb, true, out)
+          inside = false
+          assert(ok, err)
+          return { cancel = function() end }
+        end,
+      }),
+    })
+    rawset(coroutine, "yield", orig_yield)
+    H.ok(ok_run, tostring(r))
+    H.eq(r.calls, 1, "answered inside translate: cb exactly once")
+    H.ok(r.ok, tostring(r.res))
+    H.eq(#r.res, 2, "the paragraph keeps its two lines")
+    H.ok(yielded > 0, "the run does give way outside of translate")
+    H.eq(crossed, 0, "no yield while the engine's translate is on the stack")
+  end
 end

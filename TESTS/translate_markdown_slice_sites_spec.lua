@@ -966,6 +966,8 @@ return function(H)
     vim.wait(500, function()
       return free
     end, 1)
+    H.ok(free, "the rest ran after the yield")
+    H.eq(sl.yields(), 3)
   end
 
   ---A paragraph of `k` pieces of mixed inline syntax (about 100 bytes and 9 placeholders each).
