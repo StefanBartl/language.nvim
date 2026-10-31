@@ -609,6 +609,69 @@ return function(H)
     end
   end
 
+  -- ONE unit of a megabyte: the loops inside it give way (mask, check, normalize, unmask, reflow) ------------
+  do
+    local piece = "Wort `code` und [Link](https://e.x/a) &amp; <b>fett</b> https://e.x/p mehr"
+      .. " {#id} ![b](i.png) Text x@y.de www.z.de/q "
+    local BIG_LINE = piece:rep(math.ceil(1e6 / #piece))
+    local doc = { "# Titel", "", BIG_LINE, "", "Ein kurzer Absatz danach.", "", "- und ein Punkt" }
+    -- (an engine that costs nothing: what is measured is the work of the plugin, not of a fake that
+    -- runs a `gsub` over a megabyte inside `translate`)
+    local function ident(l)
+      return l
+    end
+    local base = summary(doc, { provider = fake(ident, { sync = true }), slice_ms = 1e9 })
+    H.ok(base.ok, "one line of a megabyte: the unsliced reference run")
+    H.eq(base.res[3], BIG_LINE, "and it comes back as the engine said")
+    for _, mode in ipairs({ "sync engine", "async engine", "cache_only" }) do
+      local label = "one line of a megabyte, " .. mode
+      local cached = mode == "cache_only"
+      if cached then
+        md.cache._reset()
+        local w = run(doc, { provider = fake(ident, { sync = true }), cache = true, cfg = cfg })
+        H.ok(w.ok, label .. ": warming the cache")
+      end
+      local events
+      local r, worst, limit = best_of_two(doc, function()
+        events = {}
+        return {
+          target = "EN",
+          cache = cached,
+          cache_only = cached,
+          cfg = cfg,
+          provider = cached
+              and fake(function()
+                error("a cached unit must not be sent again")
+              end, { sync = true })
+            or fake(
+              ident,
+              { sync = mode == "sync engine", delay_ms = mode == "async engine" and 0 or nil }
+            ),
+          on_unit = function(ev)
+            events[#events + 1] = ev
+          end,
+        }
+      end)
+      H.ok(r.ok, label .. ": " .. tostring(r.res))
+      H.eq(r.calls, 1, label .. ": cb exactly once")
+      H.ok(
+        worst < limit,
+        ("%s: the event loop was blocked for %.1f ms at a time (limit %.1f ms)"):format(
+          label,
+          worst,
+          limit
+        )
+      )
+      H.ok(r.info.slices >= 10, label .. ": the work was handed back " .. r.info.slices .. " times")
+      deq(r.res, base.res, label .. ": the unsliced result")
+      H.eq(#events, 4, label .. ": one event for every block")
+      for i, ev in ipairs(events) do
+        H.eq(ev.done, i, label .. ": done counts in the order of the calls")
+      end
+      md.cache._reset()
+    end
+  end
+
   -- a small document is not sliced ------------------------------------------------------------------
   do
     local small = build(1000)

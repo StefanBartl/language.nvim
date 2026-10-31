@@ -137,12 +137,49 @@ return function(H)
       "a {1} b",
       "fullwidth braces (CJK targets)"
     )
+    -- (a loop of `find` since the slicer may yield in it: the same answers as the `gsub` it replaced)
+    H.eq(mask.normalize("{1}{ 2}{3 }x{\t4\n}"), "{1}{2}{3}x{4}", "every placeholder, at every edge")
+    H.eq(mask.normalize("{ a } { } {12"), "{ a } { } {12", "what is no placeholder stays")
+    local plain = "nothing to change {1} here"
+    H.eq(mask.normalize(plain), plain)
+    H.eq(
+      mask.normalize("\239\189\155 2 }\239\189\157"),
+      "{2}}",
+      "a fullwidth brace and a blank in one placeholder"
+    )
   end
 
   -- unmask --------------------------------------------------------------------------------------------------
   do
     local _, mk = mask.mask("a `x%1` b")
     H.eq(mask.unmask("so {1} da", mk), "so `x%1` da", "a % in the protected text is not a pattern")
+    H.eq(
+      mask.unmask("{0} {1} {2} {01}", mk),
+      "{0} `x%1` {2} `x%1`",
+      "a number without a placeholder stays"
+    )
+    H.eq(mask.unmask("{1}{1}", mk), "`x%1``x%1`", "next to each other")
+    H.eq(mask.unmask("ohne", mk), "ohne")
+    H.eq(mask.unmask("{ 1 } {", mk), "{ 1 } {")
+  end
+
+  -- has_text: a placeholder never holds a letter (no copy without them first) ------------------------
+  for _, t in ipairs({ "{1}", "{1}{2} 3", "{12}a", "\195\164{1}", "", "{x}" }) do
+    H.eq(
+      mask.has_text(t),
+      (t:gsub("{%d+}", "")):find("[%a\128-\255]") ~= nil,
+      "has_text as with the placeholders cut out: " .. t
+    )
+  end
+
+  -- bare addresses: the e-mail and the `www.` ranges are merged in order -------------------------------
+  do
+    local masked, mk = mask.mask("x@a.de www.b.de/p y@c.org www.d.de z@e.net")
+    H.eq(masked, "{1} {2} {3} {4} {5}", "both kinds, interleaved")
+    H.eq(table.concat(mk.toks, ","), "x@a.de,www.b.de/p,y@c.org,www.d.de,z@e.net")
+    masked, mk = mask.mask("www.x@a.de und mehr")
+    H.eq(masked, "{1} und mehr", "an address in an address: one of them, whole")
+    H.eq(mk.toks[1], "www.x@a.de")
   end
 
   -- bare e-mail and www addresses are linked by the previewer: masked whole ------------------

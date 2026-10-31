@@ -21,6 +21,8 @@
 
 local M = {}
 
+local slice = require("language.translate.markdown.slice")
+
 ---@class LanguageMdMask
 ---@field toks string[]               -- the protected text of placeholder n
 ---@field pair table<integer, integer> -- open placeholder -> its closing placeholder
@@ -60,6 +62,7 @@ end
 ---@param n integer
 ---@return boolean
 local function spend(ctx, n)
+  ctx.tick()
   ctx.budget = ctx.budget - n
   return ctx.budget >= 0
 end
@@ -305,6 +308,7 @@ end
 scan = function(ctx, i, j)
   local s = ctx.s
   while i <= j do
+    ctx.tick()
     -- The next special character at or after `i`. Looked up once and kept: a text with few
     -- of them but many bare addresses would otherwise search to the end of the unit once per
     -- address (n addresses cost n * length).
@@ -465,14 +469,16 @@ end
 ---order (`www` is true for a `www.` address). The previewer links both (GFM autolinks); an
 ---engine that "translates" `john.doe@example.com` breaks the link.
 ---@param text string
+---@param tick fun()
 ---@return table[]
-local function bare_ranges(text)
-  local out = {}
+local function bare_ranges(text, tick)
+  local ats, wwws = {}, {}
   if text:find("@", 1, true) then
     -- Anchored at each `@` (the local part is taken backwards, the domain forwards): a
     -- find for the whole address from every byte of a long run of letters costs run^2.
     local init = 1
     while true do
+      tick()
       local at = text:find("@", init, true)
       if not at then
         break
@@ -485,7 +491,7 @@ local function bare_ranges(text)
       if a < at and dom then
         local b = at + #dom
         if a == 1 or not text:sub(a - 1, a - 1):match("[%w_]") then
-          out[#out + 1] = { a, b }
+          ats[#ats + 1] = { a, b }
         end
         init = b + 1
       else
@@ -496,6 +502,7 @@ local function bare_ranges(text)
   if text:find("www.", 1, true) then
     local init = 1
     while true do
+      tick()
       local a, b = text:find("www%.[%w%-]+%.[^%s<>]*", init)
       if not a then
         break
@@ -505,17 +512,24 @@ local function bare_ranges(text)
         local last = trim_tail(text, a, b)
         if last - a + 1 > 6 then
           -- The third field: it may be cut short at the end of a link text (see `scan`).
-          out[#out + 1] = { a, last, true }
+          wwws[#wwws + 1] = { a, last, true }
         end
       end
     end
   end
-  table.sort(out, function(x, y)
-    return x[1] < y[1]
-  end)
-  -- Overlapping ranges (an address in an address): the first one wins.
+  -- Both lists are in order already: merged, not sorted (a comparator is a C boundary the
+  -- slicer can not yield across). Overlapping ranges (an address in an address): the first one
+  -- wins; of two that start at the same byte, the e-mail address.
   local clean, last = {}, 0
-  for _, r in ipairs(out) do
+  local x, y = 1, 1
+  while ats[x] or wwws[y] do
+    tick()
+    local r
+    if wwws[y] == nil or (ats[x] and ats[x][1] <= wwws[y][1]) then
+      r, x = ats[x], x + 1
+    else
+      r, y = wwws[y], y + 1
+    end
     if r[1] > last then
       clean[#clean + 1] = r
       last = r[2]
@@ -525,9 +539,11 @@ local function bare_ranges(text)
 end
 
 ---Mask `text`. `opts.defs` is the set of normalised reference-definition
----labels, `opts.keep` a list of words that must stay as they are.
+---labels, `opts.keep` a list of words that must stay as they are. `opts.tick` is an
+---interruption point of the slicer: a unit of a megabyte calls it every few hundred steps of
+---the scan (see `slice.every`); the result does not depend on it.
 ---@param text string
----@param opts? { defs?: table<string, boolean>, keep?: string[] }
+---@param opts? { defs?: table<string, boolean>, keep?: string[], tick?: fun() }
 ---@return string masked, LanguageMdMask mask
 function M.mask(text, opts)
   opts = opts or {}
@@ -542,7 +558,9 @@ function M.mask(text, opts)
       keepby[b][#keepby[b] + 1] = w
     end
   end
+  local tick = slice.every(opts.tick)
   local ctx = {
+    tick = tick,
     s = text,
     out = {},
     toks = {},
@@ -550,7 +568,7 @@ function M.mask(text, opts)
     defs = opts.defs or {},
     keepby = keepby,
     budget = 64 * #text + 4096,
-    bare = bare_ranges(text),
+    bare = bare_ranges(text, tick),
     bi = 1,
     run = { from = 1, stop = 0 },
     special = "[`\\!%[<&{h" .. table.concat(extra) .. "]",
@@ -568,27 +586,76 @@ end
 ---@param masked string
 ---@return boolean
 function M.has_text(masked)
-  return (masked:gsub("{%d+}", "")):find("[%a\128-\255]") ~= nil
+  -- (a placeholder `{n}` holds neither a letter nor a high byte: nothing to cut out first)
+  return masked:find("[%a\128-\255]") ~= nil
+end
+
+---@internal
+---`text` with every match of `pat` replaced by what `fn(a, b, capture)` makes of it (nil: the
+---match stays). A loop of `find`, not `gsub`: the slicer may yield between two matches, and an
+---answer in which nothing changes is returned as it is, not copied.
+---@param text string
+---@param pat string
+---@param plain boolean
+---@param fn fun(a: integer, b: integer, cap: string|nil): string|nil
+---@param tick fun()
+---@return string
+local function replace(text, pat, plain, fn, tick)
+  local out, init, last = nil, 1, 1
+  while true do
+    tick()
+    local a, b, cap = text:find(pat, init, plain)
+    if not a then
+      break
+    end
+    local new = fn(a, b, cap)
+    if new then
+      out = out or {}
+      out[#out + 1] = text:sub(last, a - 1)
+      out[#out + 1] = new
+      last = b + 1
+    end
+    init = b + 1
+  end
+  if not out then
+    return text
+  end
+  out[#out + 1] = text:sub(last)
+  return table.concat(out)
 end
 
 ---Normalise what an engine returned: fullwidth braces and spaces inside a
 ---placeholder (`{ 3 }`) are put right.
 ---@param text string
+---@param tick? fun()  -- an interruption point of the slicer (see `M.mask`)
 ---@return string
-function M.normalize(text)
-  text = text:gsub(FW_OPEN, "{"):gsub(FW_CLOSE, "}")
-  return (text:gsub("{%s*(%d+)%s*}", "{%1}"))
+function M.normalize(text, tick)
+  tick = slice.every(tick)
+  local function brace(to)
+    return function()
+      return to
+    end
+  end
+  text = replace(text, FW_OPEN, true, brace("{"), tick)
+  text = replace(text, FW_CLOSE, true, brace("}"), tick)
+  return replace(text, "{%s*(%d+)%s*}", false, function(a, b, d)
+    -- (only a placeholder with white space in it changes)
+    return b - a + 1 ~= #d + 2 and ("{" .. d .. "}") or nil
+  end, tick)
 end
 
 ---Every placeholder exactly once, an open half before its close half.
 ---@param text string  -- already normalised
 ---@param mask LanguageMdMask
+---@param tick? fun()  -- an interruption point of the slicer (see `M.mask`)
 ---@return boolean ok, string|nil err
-function M.check(text, mask)
+function M.check(text, mask, tick)
+  tick = slice.every(tick)
   local n = #mask.toks
   local pos = {}
   local total = 0
   for from, d in text:gmatch("()%{(%d+)%}") do
+    tick()
     local k = tonumber(d)
     total = total + 1
     if k < 1 or k > n or pos[k] then
@@ -600,6 +667,7 @@ function M.check(text, mask)
     return false, ("%d of %d placeholders came back"):format(total, n)
   end
   for open, close in pairs(mask.pair) do
+    tick()
     local a, b = pos[open], pos[close]
     if a and b and a > b then
       return false, "a link's halves changed places"
@@ -608,14 +676,36 @@ function M.check(text, mask)
   return true
 end
 
----Put the protected text back.
+---Put the protected text back. A loop of `find`, not `gsub` with a function: the slicer can not
+---yield out of a callback of `gsub`. A number that is no placeholder of `mask` stays as it is.
 ---@param text string
 ---@param mask LanguageMdMask
+---@param tick? fun()  -- an interruption point of the slicer (see `M.mask`)
 ---@return string
-function M.unmask(text, mask)
-  return (text:gsub("{(%d+)}", function(d)
-    return mask.toks[tonumber(d)]
-  end))
+function M.unmask(text, mask, tick)
+  if not text:find("{", 1, true) then
+    return text
+  end
+  tick = slice.every(tick)
+  local toks = mask.toks
+  local out, init = {}, 1
+  while true do
+    local a, b, d = text:find("{(%d+)}", init)
+    if not a then
+      break
+    end
+    tick()
+    local t = toks[tonumber(d)]
+    if t then
+      out[#out + 1] = text:sub(init, a - 1)
+      out[#out + 1] = t
+    else
+      out[#out + 1] = text:sub(init, b)
+    end
+    init = b + 1
+  end
+  out[#out + 1] = text:sub(init)
+  return table.concat(out)
 end
 
 return M

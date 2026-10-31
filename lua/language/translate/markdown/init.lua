@@ -66,6 +66,9 @@ local SLICE_COST_LINE, SLICE_COST_BYTE, SLICE_COST_PIPE = 12, 0.375, 3
 ---An answer for texts that occur this often in the document (all its entries together) is booked
 ---in slices, too (the loop over its units reports each of them).
 local SLICE_ANSWER_UNITS = 256
+---An answer of more bytes than this (all its lines together) is validated and booked in a
+---coroutine of its own: the check of the placeholders of ONE unit of a megabyte is tens of ms.
+local SLICE_ANSWER_BYTES = 64 * 1024
 local MAX_ERRORS = 5
 local ABORT_AFTER = 3
 
@@ -130,15 +133,17 @@ end
 -- a `www.` address or an e-mail address (the last two are links to the previewer, too). The
 -- e-mail pattern is as wide as the previewer's autolinker: `.`, `+`, `-` and `_` in the local
 -- part (`_@x.example`, `.@x.example`), `_` in the first label of the domain (`a@x_y.example`).
+-- Each with a literal that every match contains: a text without it has no match, and a plain `find`
+-- says so far faster than the pattern (a megabyte without an `@`).
 local NEW_SYNTAX = {
-  "%]%(",
-  "%]%[",
-  "<%a",
-  "</",
-  "<!",
-  "://",
-  "www%.",
-  "[%w%._%+%-]@[%w_%-]+%.%w",
+  { "%]%(", "](" },
+  { "%]%[", "][" },
+  { "<%a", "<" },
+  { "</", "</" },
+  { "<!", "<!" },
+  { "://", "://" },
+  { "www%.", "www." },
+  { "[%w%._%+%-]@[%w_%-]+%.%w", "@" },
 }
 
 ---@internal
@@ -187,8 +192,9 @@ local ADDRESS_CHARS = "[%w%-%._~:/%?#%[%]@!$&'()*+,;=%%]"
 ---plain `find` and runs outwards from there with an anchored match: an unanchored pattern would
 ---retry from every byte of a long run of letters (30000 of them took 8 s).
 ---@param s string
+---@param tick fun()
 ---@return table<string, integer>|nil counts
-local function addresses(s)
+local function addresses(s, tick)
   local has_scheme = s:find("://", 1, true)
   local has_www = s:find("www.", 1, true)
   local has_at = s:find("@", 1, true)
@@ -207,6 +213,7 @@ local function addresses(s)
   if has_scheme then
     local init = 1
     while true do
+      tick()
       local at = s:find("://", init, true)
       if not at then
         break
@@ -232,6 +239,7 @@ local function addresses(s)
   if has_www then
     local init = 1
     while true do
+      tick()
       local at = s:find("www.", init, true)
       if not at then
         break
@@ -249,6 +257,7 @@ local function addresses(s)
   if has_at then
     local init = 1
     while true do
+      tick()
       local at = s:find("@", init, true)
       if not at then
         break
@@ -280,18 +289,37 @@ end
 ---alone is in the source, so an engine may keep it but not swap it for another.
 ---@param orig string
 ---@param text string
+---@param tick? fun()  -- an interruption point of the slicer (an answer of a megabyte)
 ---@return boolean
-local function adds_syntax(orig, text)
-  for _, pat in ipairs(NEW_SYNTAX) do
-    local _, a = orig:gsub(pat, "")
-    local _, b = text:gsub(pat, "")
-    if b > a then
+local function adds_syntax(orig, text, tick)
+  local scan = tick or function() end
+  tick = slice.every(tick)
+  ---The matches of `pat` in `str`, counted as `gsub` counts them, but with a `find` per match:
+  ---no copy of the text, and the slicer may yield between two of them (and before each scan: a
+  ---pattern that is not there is one `find` over the whole text).
+  local function count(str, pat, lit)
+    scan()
+    if not str:find(lit, 1, true) then
+      return 0
+    end
+    local n, init = 0, 1
+    while true do
+      tick()
+      local _, e = str:find(pat, init)
+      if not e then
+        return n
+      end
+      n, init = n + 1, e + 1
+    end
+  end
+  for _, syn in ipairs(NEW_SYNTAX) do
+    if count(text, syn[1], syn[2]) > count(orig, syn[1], syn[2]) then
       return true
     end
   end
-  local mine = addresses(text)
+  local mine = addresses(text, tick)
   if mine then
-    local known = addresses(orig) or {}
+    local known = addresses(orig, tick) or {}
     for address, n in pairs(mine) do
       if n > (known[address] or 0) then
         return true
@@ -622,9 +650,11 @@ function M.translate_markdown(lines, opts, cb)
 
     for id, u in ipairs(units) do
       tick()
-      local masked, mk = mask.mask(u.text, { defs = seg.defs, keep = st.keep })
+      local masked, mk = mask.mask(u.text, { defs = seg.defs, keep = st.keep, tick = tick })
       local s = { masked = masked, mk = mk, anchor = false }
+      local every = slice.every(tick)
       for _, t in ipairs(mk.toks) do
+        every()
         if t:match("^%]%(<?#") then
           s.anchor = true
           break
@@ -671,7 +701,7 @@ function M.translate_markdown(lines, opts, cb)
       for i, id in ipairs(seg.headings) do
         old[i] = units[id].text
         local s = ust[id]
-        new[i] = s.tr and mask.unmask(s.tr, s.mk) or units[id].text
+        new[i] = s.tr and mask.unmask(s.tr, s.mk, tick) or units[id].text
         tick()
       end
       local built, _, collisions = anchors.build_map(old, new, tick)
@@ -716,6 +746,8 @@ function M.translate_markdown(lines, opts, cb)
 
     -- Content of a unit / a block -----------------------------------------------
 
+    ---Where an answer can arrive inside the slicer's coroutine (an engine that answers inside
+    ---`translate`), its booking runs under `sl.hold`: the ticks below are no-ops there.
     ---@param id integer
     ---@return string[]|nil
     local function unit_content(id)
@@ -723,7 +755,9 @@ function M.translate_markdown(lines, opts, cb)
       local text, mk = s.tr, s.mk
       if map and s.anchor then
         local toks, changed = {}, false
+        local every = slice.every(tick)
         for i, t in ipairs(mk.toks) do
+          every()
           local new, c = anchors.rewrite_dest(t, map)
           toks[i], changed = new, changed or c
         end
@@ -742,14 +776,17 @@ function M.translate_markdown(lines, opts, cb)
       local function unsafe(word)
         return reflow.starts_block(mask.unmask(word, mk))
       end
-      local out, err =
-        reflow.reflow(text, u.weights, { guard_first = u.guard_first, unsafe = unsafe })
+      local out, err = reflow.reflow(
+        text,
+        u.weights,
+        { guard_first = u.guard_first, unsafe = unsafe, tick = tick }
+      )
       if not out then
         s.reflow_failed = s.tr and (err or true) or nil
         return nil
       end
       for k = 1, #out do
-        out[k] = mask.unmask(out[k], mk)
+        out[k] = mask.unmask(out[k], mk, tick)
         if k == #out and u.hard_backslash and ends_in_address(out[k]) then
           -- A bare address in front of the break would swallow its backslash.
           s.reflow_failed = s.tr and "the break would join an address" or nil
@@ -784,9 +821,14 @@ function M.translate_markdown(lines, opts, cb)
       if finished or not bs.changed or not opts.on_unit then
         return
       end
-      done_blocks = done_blocks + 1
       local blk = seg.blocks[bi]
+      -- (rendered before it is counted: a block of a megabyte gives way in the middle, and a block
+      -- reported in that gap must not overtake it with a higher `done`)
       local out = block_lines(bi)
+      if finished then
+        return
+      end
+      done_blocks = done_blocks + 1
       pcall(opts.on_unit, {
         first = blk.first,
         last = blk.last,
@@ -963,20 +1005,21 @@ function M.translate_markdown(lines, opts, cb)
     ---Validate an answer for `entry`.
     ---@param entry table
     ---@param text any
+    ---@param tk? fun()  -- an interruption point, where one may yield (see SLICE_ANSWER_BYTES)
     ---@return string|nil value, string|nil err
-    local function validate(entry, text)
+    local function validate(entry, text, tk)
       if type(text) ~= "string" then
         return nil, "the engine returned no text"
       end
-      text = flatten(mask.normalize(text))
+      text = flatten(mask.normalize(text, tk))
       if text == "" then
         return nil, "the engine returned an empty translation"
       end
-      local ok, err = mask.check(text, entry.mk)
+      local ok, err = mask.check(text, entry.mk, tk)
       if not ok then
         return nil, err
       end
-      if adds_syntax(entry.masked, text) then
+      if adds_syntax(entry.masked, text, tk) then
         return nil, "the translation adds link or HTML syntax"
       end
       if not plausible(entry.masked, text) then
@@ -995,7 +1038,7 @@ function M.translate_markdown(lines, opts, cb)
       tick()
       e.key = use_cache and cache.key(engine, read_model, target, source, e.masked) or nil
       local hit = e.key and cache.get(e.key)
-      local value = hit and validate(e, hit)
+      local value = hit and validate(e, hit, tick)
       if value then
         resolve_cached(e, value)
       else
@@ -1135,55 +1178,17 @@ function M.translate_markdown(lines, opts, cb)
       fail_entries(skipped, "skipped after repeated failures: " .. err)
     end
 
+    ---Validate the answers of `req` (`res`, one line per entry), book the valid ones and queue or
+    ---fail the rest.
     ---@param req table
-    ---@param ok boolean
-    ---@param res any
-    local function handle_result(req, ok, res)
-      local n = #req.entries
-      if ok and type(res) ~= "table" then
-        ok, res = false, "the engine returned no lines"
-      end
-      if not ok then
-        consec_fail = consec_fail + 1
-        local err = tostring(res)
-        if req.attempt == 1 and consec_fail < ABORT_AFTER then
-          info.retries = info.retries + n
-          table.insert(pending, 1, { entries = req.entries, attempt = 2 })
-        else
-          fail_entries(req.entries, err)
-          if consec_fail >= ABORT_AFTER then
-            abort_rest(err)
-          end
-        end
-        return
-      end
-
-      -- A parse of `out .. "\n"` may add one trailing empty line.
-      local m = #res
-      while m > n and res[m] == "" do
-        m = m - 1
-      end
-      if m ~= n then
-        if n == 1 then
-          res = { table.concat(res, " ", 1, m) }
-        elseif req.attempt == 1 then
-          -- Cannot tell which unit grew a line break: one request per unit.
-          info.retries = info.retries + n
-          for i = n, 1, -1 do
-            table.insert(pending, 1, { entries = { req.entries[i] }, attempt = 2 })
-          end
-          return
-        else
-          fail_entries(req.entries, ("the engine returned %d lines for %d units"):format(m, n))
-          return
-        end
-      end
-
+    ---@param res string[]
+    ---@param tk? fun()
+    local function settle(req, res, tk)
       local invalid, first_err = {}, nil
       local answered = {}
       local write_model = use_cache and cache_model() or nil
       for i, e in ipairs(req.entries) do
-        local value, err = validate(e, res[i])
+        local value, err = validate(e, res[i], tk)
         if value then
           consec_fail = 0
           remaining = remaining - 1
@@ -1207,6 +1212,70 @@ function M.translate_markdown(lines, opts, cb)
           fail_entries(invalid, first_err or "invalid translation")
         end
       end
+    end
+
+    ---@param req table
+    ---@param ok boolean
+    ---@param res any
+    ---@return boolean sliced  -- the answer is settled in a coroutine of its own, which pumps when it is through
+    local function handle_result(req, ok, res)
+      local n = #req.entries
+      if ok and type(res) ~= "table" then
+        ok, res = false, "the engine returned no lines"
+      end
+      if not ok then
+        consec_fail = consec_fail + 1
+        local err = tostring(res)
+        if req.attempt == 1 and consec_fail < ABORT_AFTER then
+          info.retries = info.retries + n
+          table.insert(pending, 1, { entries = req.entries, attempt = 2 })
+        else
+          fail_entries(req.entries, err)
+          if consec_fail >= ABORT_AFTER then
+            abort_rest(err)
+          end
+        end
+        return false
+      end
+
+      -- A parse of `out .. "\n"` may add one trailing empty line.
+      local m = #res
+      while m > n and res[m] == "" do
+        m = m - 1
+      end
+      if m ~= n then
+        if n == 1 then
+          res = { table.concat(res, " ", 1, m) }
+        elseif req.attempt == 1 then
+          -- Cannot tell which unit grew a line break: one request per unit.
+          info.retries = info.retries + n
+          for i = n, 1, -1 do
+            table.insert(pending, 1, { entries = { req.entries[i] }, attempt = 2 })
+          end
+          return false
+        else
+          fail_entries(req.entries, ("the engine returned %d lines for %d units"):format(m, n))
+          return false
+        end
+      end
+
+      local bytes = 0
+      for i = 1, n do
+        bytes = bytes + (type(res[i]) == "string" and #res[i] or 0)
+      end
+      if bytes <= SLICE_ANSWER_BYTES then
+        settle(req, res)
+        return false
+      end
+      -- A big answer: validated and booked in slices. `remaining` keeps the call open until the
+      -- entries are settled, `resolving` keeps the finalisation back until the coroutine is through.
+      resolving = resolving + 1
+      sl.run(function()
+        settle(req, res, tick)
+        pump()
+        release()
+      end)
+      return true
     end
 
     ---@param req table
@@ -1238,13 +1307,19 @@ function M.translate_markdown(lines, opts, cb)
         -- An answer arrives outside of the slicer's coroutines (a timer, a job callback, or inside
         -- `translate` itself, where `pcall` below would swallow the error): a throw in the inline
         -- booking (unmask, render, reflow, anchors) must end the call, not leave it hanging.
-        local booked, err = pcall(function()
-          handle_result(req, ok, res)
-          pump()
+        -- (held: an engine that answers inside `translate` has it and the `pcall` below on the stack
+        -- of the slicer's coroutine, and a yield must not cross them; a big answer is settled in a
+        -- coroutine of its own, see `handle_result`)
+        sl.hold(function()
+          local booked, err = pcall(function()
+            if not handle_result(req, ok, res) then
+              pump()
+            end
+          end)
+          if not booked then
+            crashed(err)
+          end
         end)
-        if not booked then
-          crashed(err)
-        end
       end
       local started, j = pcall(provider.translate, texts, target, source, tr, on_result)
       if not started then

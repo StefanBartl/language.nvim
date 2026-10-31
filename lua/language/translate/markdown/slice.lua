@@ -34,9 +34,37 @@ M.BUDGET_MS = 8
 ---@field stop fun(): boolean            -- asked before each resume; `true` abandons the computation
 ---@field on_error fun(err: any)         -- `body` threw
 
+---How many calls of a counting tick (see `M.every`) make one call of the real one. A step of the
+---loops that take it (a byte of a look-ahead, a placeholder, a word) costs well under a
+---microsecond; 256 of them are far below a slice and keep the clock out of the inner loops.
+M.EVERY = 256
+
+---A tick for a loop over the pieces of ONE unit (the scan of the mask, the placeholders of an
+---answer, the words of a reflow): every `n`-th call (default `M.EVERY`) calls `tick`. A small
+---unit never reaches `n` and never reads the clock. `nil` gives a no-op, so a function can take
+---the tick as an optional argument.
+---@param tick? fun()
+---@param n? integer
+---@return fun()
+function M.every(tick, n)
+  if not tick then
+    return function() end
+  end
+  n = n or M.EVERY
+  local count = 0
+  return function()
+    count = count + 1
+    if count >= n then
+      count = 0
+      tick()
+    end
+  end
+end
+
 ---@class LanguageMdSlicer
 ---@field tick fun()                      -- an interruption point
 ---@field run fun(body: fun())            -- start a computation
+---@field hold fun(fn: fun())             -- run `fn` with every tick of the current coroutine a no-op
 ---@field yields fun(): integer           -- how often a computation gave the control away so far
 
 ---@param opts LanguageMdSlicerOpts
@@ -48,10 +76,12 @@ function M.new(opts)
   local deadline = 0
   local depth = 0
   local yields = 0
+  ---@type table<thread, integer>
+  local held = setmetatable({}, { __mode = "k" })
 
   local function tick()
     local co = coroutine.running()
-    if co and live[co] and uv.hrtime() >= deadline then
+    if co and live[co] and not held[co] and uv.hrtime() >= deadline then
       yields = yields + 1
       coroutine.yield()
     end
@@ -93,9 +123,30 @@ function M.new(opts)
     step()
   end
 
+  ---Code that may run with a `pcall` or a foreign callback on the stack of a computation (an
+  ---engine that answers inside `translate`): a yield there would cross that frame (Lua 5.1 can not
+  ---yield across `pcall`) or suspend the foreign code in the middle. A run started inside `fn`
+  ---is a coroutine of its own and yields as usual.
+  ---@param fn fun()
+  local function hold(fn)
+    local co = coroutine.running()
+    if not co or not live[co] then
+      fn()
+      return
+    end
+    held[co] = (held[co] or 0) + 1
+    local ok, err = pcall(fn)
+    local n = held[co] - 1
+    held[co] = n > 0 and n or nil
+    if not ok then
+      error(err, 0)
+    end
+  end
+
   return {
     tick = tick,
     run = run,
+    hold = hold,
     yields = function()
       return yields
     end,

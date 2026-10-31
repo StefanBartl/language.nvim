@@ -19,6 +19,8 @@
 
 local M = {}
 
+local slice = require("language.translate.markdown.slice")
+
 local NOT_WS = "[^ \t\r\n\f\v]+"
 
 ---Would `word`, placed at the start of a line, begin a new Markdown block?
@@ -67,10 +69,13 @@ end
 
 ---Split `text` at white space.
 ---@param text string
+---@param tick? fun()  -- an interruption point of the slicer, called every few hundred words
 ---@return string[]
-function M.words(text)
+function M.words(text, tick)
+  tick = slice.every(tick)
   local words, n = {}, 0
   for w in text:gmatch(NOT_WS) do
+    tick()
     n = n + 1
     words[n] = w
   end
@@ -80,16 +85,18 @@ end
 ---Wrap `text` onto `#weights` lines.
 ---@param text string
 ---@param weights integer[]                 -- width of each original line (its share of the words)
----@param opts? { guard_first?: boolean, unsafe?: fun(word: string): boolean }
+---@param opts? { guard_first?: boolean, unsafe?: fun(word: string): boolean, tick?: fun() }
 ---`guard_first`: line 1 follows no block marker of its own, so its first word
 ---is checked as well. `unsafe` replaces `starts_block` (the caller expands
----placeholders first).
+---placeholders first). `tick` is an interruption point of the slicer (a paragraph of a megabyte
+---calls it every few hundred words and lines); the result does not depend on it.
 ---@return string[]|nil lines, string|nil err  -- exactly `#weights` lines (padding lines are "")
 function M.reflow(text, weights, opts)
   opts = opts or {}
   local unsafe = opts.unsafe or M.starts_block
   local n = #weights
-  local words = M.words(text)
+  local words = M.words(text, opts.tick)
+  local tick = slice.every(opts.tick)
   local m = #words
   if m == 0 then
     return nil, "empty translation"
@@ -115,6 +122,7 @@ function M.reflow(text, weights, opts)
   local starts = { 1 }
   if m < n then
     for k = 2, m do
+      tick()
       if not ok_start(k) then
         return nil, "no safe line break"
       end
@@ -123,15 +131,18 @@ function M.reflow(text, weights, opts)
   else
     local prefix, acc = {}, 0
     for i = 1, m do
+      tick()
       acc = acc + #words[i] + (i > 1 and 1 or 0)
       prefix[i] = acc
     end
     local sum = 0
     for k = 1, n do
+      tick()
       sum = sum + math.max(weights[k], 1)
     end
     local cum = 0
     for k = 1, n - 1 do
+      tick()
       cum = cum + math.max(weights[k], 1)
       local target = acc * cum / sum
       local lo, hi = starts[k] + 1, m - (n - k - 1)
@@ -150,12 +161,14 @@ function M.reflow(text, weights, opts)
       end
       local best, best_d
       for c = a - 1, lo, -1 do
+        tick()
         if ok_start(c) then
           best, best_d = c, math.abs(prefix[c - 1] - target)
           break
         end
       end
       for c = a, hi do
+        tick()
         if ok_start(c) then
           if not best_d or math.abs(prefix[c - 1] - target) < best_d then
             best = c
@@ -172,6 +185,7 @@ function M.reflow(text, weights, opts)
 
   local out = {}
   for k = 1, n do
+    tick()
     if starts[k] then
       local first = starts[k]
       local last = (starts[k + 1] or (m + 1)) - 1

@@ -900,4 +900,267 @@ return function(H)
       end
     end
   end
+
+  -- the loops inside ONE unit: a paragraph of a megabyte gives way, too ---------------------------------
+
+  do
+    -- slice.every: every n-th call is a real tick; nil is a no-op
+    local n = 0
+    local every = slice.every(function()
+      n = n + 1
+    end, 4)
+    for _ = 1, 10 do
+      every()
+    end
+    H.eq(n, 2, "every 4th of 10 calls")
+    slice.every(nil)()
+    H.eq(slice.EVERY, 256, "the default step")
+  end
+
+  do
+    -- slice.hold: the ticks of the coroutine it runs in are no-ops; a run started inside it yields
+    local sl = slice.new({
+      budget_ms = 0,
+      stop = function()
+        return false
+      end,
+      on_error = error,
+    })
+    local log = {}
+    sl.run(function()
+      sl.hold(function()
+        sl.tick()
+        log[#log + 1] = "held"
+        sl.run(function()
+          sl.tick()
+          log[#log + 1] = "inner"
+        end)
+        log[#log + 1] = "back"
+      end)
+      sl.tick()
+      log[#log + 1] = "after"
+    end)
+    H.eq(
+      table.concat(log, ","),
+      "held,back",
+      "a held tick does not yield, the inner run does, the tick after the hold does"
+    )
+    vim.wait(500, function()
+      return #log >= 4
+    end, 1)
+    H.eq(#log, 4, "and the rest runs later")
+    H.eq(sl.yields(), 2)
+    local ok = pcall(sl.hold, function()
+      error("x", 0)
+    end)
+    H.falsy(ok, "an error inside hold is not swallowed")
+    local free = false
+    sl.run(function()
+      pcall(sl.hold, function()
+        error("x", 0)
+      end)
+      sl.tick()
+      free = true
+    end)
+    H.falsy(free, "a hold that threw is released: the next tick yields")
+    vim.wait(500, function()
+      return free
+    end, 1)
+  end
+
+  ---A paragraph of `k` pieces of mixed inline syntax (about 100 bytes and 9 placeholders each).
+  ---@param k integer
+  ---@return string
+  local function inline(k)
+    local piece = "Wort `code` und [Link](https://e.x/a) &amp; <b>fett</b> https://e.x/p mehr"
+      .. " {#id} ![b](i.png) Text x@y.de www.z.de/q "
+    return piece:rep(k)
+  end
+
+  ---A counting tick and its count.
+  ---@return fun() tick, fun(): integer count
+  local function counter()
+    local n = 0
+    return function()
+      n = n + 1
+    end, function()
+      return n
+    end
+  end
+
+  do
+    local text = inline(600)
+    local masked, mk = mask.mask(text)
+    local n_toks = #mk.toks
+    H.ok(n_toks >= 600 * 9, "the paragraph has its placeholders: " .. n_toks)
+    local min = math.floor(n_toks / slice.EVERY)
+
+    local tk, count = counter()
+    local masked2, mk2 = mask.mask(text, { tick = tk })
+    H.ok(count() >= min, ("mask: %d ticks for %d placeholders"):format(count(), n_toks))
+    H.eq(masked2, masked, "mask: a tick changes nothing")
+    H.ok(vim.deep_equal(mk2, mk), "mask: the same placeholders")
+
+    tk, count = counter()
+    H.eq(mask.check(masked, mk, tk), true, "check: the masked text is valid")
+    H.ok(count() >= min, ("check: %d ticks"):format(count()))
+
+    tk, count = counter()
+    H.eq(mask.unmask(masked, mk, tk), text, "unmask: the text again")
+    H.ok(count() >= min, ("unmask: %d ticks"):format(count()))
+
+    tk, count = counter()
+    local spaced = masked:gsub("{(%d+)}", "{ %1 }")
+    H.eq(mask.normalize(spaced, tk), masked, "normalize: every placeholder put right")
+    H.ok(count() >= min, ("normalize: %d ticks"):format(count()))
+
+    -- a look-ahead that runs to the end of the unit (an open bracket that never closes) ticks, too
+    tk, count = counter()
+    local open = "[" .. ("ab "):rep(20000)
+    mask.mask(open, { tick = tk })
+    H.ok(count() >= math.floor(#open / slice.EVERY), ("a look-ahead: %d ticks"):format(count()))
+
+    local words = reflow.words(masked)
+    local weights = {}
+    for i = 1, 40 do
+      weights[i] = 10 + i
+    end
+    tk, count = counter()
+    local out = reflow.reflow(masked, weights, { tick = tk })
+    H.ok(
+      count() >= 2 * math.floor(#words / slice.EVERY),
+      ("reflow: %d ticks for %d words"):format(count(), #words)
+    )
+    H.ok(vim.deep_equal(out, reflow.reflow(masked, weights)), "reflow: a tick changes nothing")
+  end
+
+  -- ... and translate_markdown hands the tick to every one of them (counted between markers)
+  do
+    -- (masked, it is over the bytes of an answer that is settled in a coroutine of its own)
+    local text = inline(1500)
+    local doc = { "# Titel", "", text, "", "Ende des Dokuments." }
+    local masked0, mk0 = mask.mask(text)
+    H.ok(#masked0 > 64 * 1024, "the masked paragraph is over 64 kB: " .. #masked0)
+    local min = math.floor(#mk0.toks / slice.EVERY)
+    local t = 0
+    local spans = {}
+    local function around(name, fn)
+      return function(...)
+        local t0 = t
+        local a, b = fn(...)
+        local d = t - t0
+        spans[name] = math.max(spans[name] or 0, d)
+        return a, b
+      end
+    end
+    local real_new = slice.new
+    for _, mode in ipairs({ "sync", "async", "cache" }) do
+      spans = {}
+      local cfg = { markdown = { disk_cache = false } }
+      if mode == "cache" then
+        md.cache._reset()
+        local w = run(doc, {
+          provider = fake(function(l)
+            return l
+          end, { sync = true }),
+          cache = true,
+          cfg = cfg,
+        })
+        H.ok(w.ok, "warming the cache")
+      end
+      patched(slice, {
+        new = function(o)
+          local sl = real_new(o)
+          local inner = sl.tick
+          sl.tick = function()
+            t = t + 1
+            return inner()
+          end
+          return sl
+        end,
+      }, function()
+        patched(mask, {
+          mask = around("mask", mask.mask),
+          check = around("check", mask.check),
+          unmask = around("unmask", mask.unmask),
+          normalize = around("normalize", mask.normalize),
+        }, function()
+          patched(reflow, { reflow = around("reflow", reflow.reflow) }, function()
+            local r = run(doc, {
+              provider = fake(function(l)
+                return l
+              end, { sync = mode == "sync", delay_ms = mode == "async" and 0 or nil }),
+              cache = mode == "cache",
+              cache_only = mode == "cache",
+              cfg = cfg,
+              slice_ms = 1e9,
+            })
+            H.ok(r.ok, mode .. ": translated: " .. tostring(r.res))
+            H.eq(r.res[3], text, mode .. ": the paragraph comes back as the engine said")
+          end)
+        end)
+      end)
+      for _, name in ipairs({ "mask", "check", "unmask", "normalize", "reflow" }) do
+        H.ok(
+          (spans[name] or 0) >= min,
+          ("%s: %s ticks %d times inside ONE unit (at least %d)"):format(
+            mode,
+            name,
+            spans[name] or 0,
+            min
+          )
+        )
+      end
+      md.cache._reset()
+    end
+  end
+
+  -- a block that gives way while it is rendered for on_unit is not overtaken by one booked in that gap
+  do
+    local text = inline(1500)
+    local doc = { text, "", "Ein kurzer Absatz." }
+    local held_cb ---@type function|nil
+    local fired = false
+    local provider = {
+      name = "order",
+      available = function()
+        return true
+      end,
+      translate = function(lines, _, _, _, cb)
+        if #lines[1] > 1e4 then
+          vim.defer_fn(function()
+            cb(true, lines)
+          end, 0)
+        else
+          -- the short paragraph waits until the big one is being rendered
+          held_cb = function()
+            cb(true, { "A short paragraph." })
+          end
+        end
+        return { cancel = function() end }
+      end,
+    }
+    local real_reflow = reflow.reflow
+    local r
+    patched(reflow, {
+      reflow = function(t, ...)
+        if #t > 1e4 and held_cb then
+          local f = held_cb
+          held_cb = nil
+          fired = true
+          vim.defer_fn(f, 0)
+        end
+        return real_reflow(t, ...)
+      end,
+    }, function()
+      r = run(doc, { provider = provider, slice_ms = 0 })
+    end)
+    H.ok(fired, "the short answer came while the big block was rendered")
+    H.ok(r.ok, "translated: " .. tostring(r.res))
+    H.eq(#r.units, 2, "two blocks reported")
+    for i, ev in ipairs(r.units) do
+      H.eq(ev.done, i, "done counts in the order of the calls (event " .. i .. ")")
+    end
+    H.eq(r.res[3], "A short paragraph.")
+  end
 end

@@ -171,7 +171,12 @@ booking the units of entries that failed (an error, an invalid answer, the rest 
 repeated failures). The result does not depend on the cuts. The callback contract holds across the
 gaps: `cb` once, never before the call returned, and a cancel or a stale token is noticed before
 every slice, after which nothing is continued and no engine is asked. A single unit (one
-paragraph of 50 000 lines) is not cut: it is one piece of work.
+paragraph of a megabyte) gives way inside, too: the scan of the mask, the placeholder check and
+`unmask` of its answer, the normalisation and syntax check of that answer, and the reflow call the
+interruption point every 256 steps (`slice.every`). An answer of more than 64 kB is validated and
+booked in a coroutine of its own (`SLICE_ANSWER_BYTES`). Measured: one line of 1 MB of mixed
+inline syntax blocked the loop for 300 to 700 ms at a time before, 15 to 40 ms now; what is left is
+the segmenter's look at that one line (about 30 ms).
 
 The order of the `on_unit` events and of `info.errors` is the order in which the work finished,
 and the gaps of a slice let answers of the engine arrive in between: a sliced run can report the
