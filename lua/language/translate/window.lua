@@ -104,11 +104,14 @@ function M.refresh()
     pcall(state.job.cancel)
   end
   set_output({ "…" })
-  local function on_result(ok, result)
+  local function on_result(ok, result, info)
     if not M.is_open() then
       return
     end
-    if ok then
+    if ok and info and info.sent == 0 then
+      -- Subtitle input without any cue text: the source is not a translation.
+      set_output({ "(no subtitle cue text to translate)" })
+    elseif ok then
       ---@cast result string[]
       set_output(result)
     else

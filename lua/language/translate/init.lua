@@ -219,6 +219,12 @@ local function translate_subtitle(provider, bufnr, s, e, target, mode, kind)
       return
     end
     ---@cast result string[]
+    -- Nothing went to the engine (only index/timing lines selected, or cues
+    -- without words): the source must not be shown as its own translation.
+    if info and info.sent == 0 then
+      notify.info("no subtitle cue text in the range; nothing was translated")
+      return
+    end
     if (mode == "replace" or mode == "insert") and not range_unchanged(bufnr, s, e, lines) then
       return
     end

@@ -59,8 +59,22 @@ function M.kind_of_name(name)
   return EXT[ext:lower()]
 end
 
----Subtitle kind by content: a `WEBVTT` header, or at least one strict timing
----line. Covers scratch buffers and the translate window, which have no name.
+---@param line string
+---@param word string
+---@return boolean
+local function opens_with(line, word)
+  return line == word or line:sub(1, #word + 1):match("^" .. word .. "%s") ~= nil
+end
+
+---Subtitle kind by content. Covers scratch buffers and the translate window,
+---which have no name.
+---
+---`vtt`: a `WEBVTT` header. `srt`: the text is built of cue blocks only. Every
+---block of non-blank lines opens with a timing line, or with an index line
+---(`^%d+$`) directly followed by one; `NOTE`/`STYLE`/`REGION` blocks are
+---allowed too. One prose block, and it is prose: a single `10:30 --> 11:00`
+---line among paragraphs must not turn the rest into untranslated "index"
+---lines.
 ---@param lines string[]
 ---@return "srt"|"vtt"|nil
 function M.sniff(lines)
@@ -68,12 +82,30 @@ function M.sniff(lines)
   if type(first) == "string" and first:gsub("^\239\187\191", ""):match("^WEBVTT") then
     return "vtt"
   end
-  for _, line in ipairs(lines) do
-    if is_timing(line) then
-      return "srt"
+  local cues = 0
+  local i, n = 1, #lines
+  while i <= n do
+    if lines[i]:match("^%s*$") then
+      i = i + 1
+    else
+      local head = lines[i]
+      if i == 1 then
+        head = head:gsub("^\239\187\191", "")
+      end
+      local nxt = lines[i + 1]
+      if is_timing(head) or (head:match("^%s*%d+%s*$") and nxt and is_timing(nxt)) then
+        cues = cues + 1
+      elseif
+        not (opens_with(head, "NOTE") or opens_with(head, "STYLE") or opens_with(head, "REGION"))
+      then
+        return nil
+      end
+      while i <= n and not lines[i]:match("^%s*$") do
+        i = i + 1
+      end
     end
   end
-  return nil
+  return cues > 0 and "srt" or nil
 end
 
 ---Kind of a buffer's text: by name, then by filetype, then by content.
@@ -97,13 +129,6 @@ function M.detect(name, filetype, lines)
     return M.sniff(lines)
   end
   return nil
-end
-
----@param line string
----@param word string
----@return boolean
-local function opens_with(line, word)
-  return line == word or line:sub(1, #word + 1):match("^" .. word .. "%s") ~= nil
 end
 
 ---Text-line ranges of every cue in `lines`, in order.
