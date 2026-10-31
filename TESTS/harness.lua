@@ -70,15 +70,127 @@ end
 
 local KEYMAP_MODES = { "n", "i", "x", "s", "o", "c", "t", "l" }
 
----@return table<string, true>
-local function keymap_set()
-  local set = {}
-  for _, mode in ipairs(KEYMAP_MODES) do
-    for _, m in ipairs(vim.api.nvim_get_keymap(mode)) do
-      set[mode .. "\0" .. m.lhs] = true
+--- The fields that make two global maps of one lhs the same map.
+local KEYMAP_FIELDS =
+  { "rhs", "callback", "expr", "noremap", "silent", "nowait", "desc", "replace_keycodes", "script" }
+
+--- The fields that make two user commands of one name the same command.
+local COMMAND_FIELDS = {
+  "definition",
+  "callback",
+  "nargs",
+  "bang",
+  "bar",
+  "register",
+  "range",
+  "count",
+  "addr",
+  "complete",
+  "complete_arg",
+  "keepscript",
+  "preview",
+}
+
+---@param a table
+---@param b table
+---@param fields string[]
+---@return boolean
+local function same(a, b, fields)
+  for _, f in ipairs(fields) do
+    if a[f] ~= b[f] then
+      return false
     end
   end
-  return set
+  return true
+end
+
+--- Every global map, keyed by `mode .. "\0" .. lhs`, as `nvim_get_keymap` returns it.
+---@return table<string, table>
+local function keymap_snapshot()
+  local snap = {}
+  for _, mode in ipairs(KEYMAP_MODES) do
+    for _, m in ipairs(vim.api.nvim_get_keymap(mode)) do
+      snap[mode .. "\0" .. m.lhs] = m
+    end
+  end
+  return snap
+end
+
+--- Put the global maps back to `before`: delete the added ones, re-set the
+--- replaced and the removed ones from their recorded definition.
+---@param before table<string, table>
+local function restore_keymaps(before)
+  local now = keymap_snapshot()
+  for key, m in pairs(now) do
+    local mode = key:match("^[^%z]+")
+    local old = before[key]
+    if not old or not same(old, m, KEYMAP_FIELDS) then
+      pcall(vim.api.nvim_del_keymap, mode, m.lhs)
+    end
+  end
+  for key, old in pairs(before) do
+    local mode = key:match("^[^%z]+")
+    local m = now[key]
+    if not m or not same(old, m, KEYMAP_FIELDS) then
+      pcall(vim.fn.mapset, mode, false, old)
+    end
+  end
+end
+
+--- Re-create a user command from what `nvim_get_commands` reported for it.
+---@param name string
+---@param c table
+local function create_command(name, c)
+  local opts = {
+    nargs = c.nargs,
+    bang = c.bang,
+    bar = c.bar,
+    register = c.register,
+    keepscript = c.keepscript,
+    addr = c.addr,
+    preview = c.preview,
+  }
+  if c.range == "." then
+    opts.range = true
+  elseif c.range == "%" then
+    opts.range = "%"
+  elseif c.range then
+    opts.range = tonumber(c.range)
+  end
+  if c.count then
+    opts.count = tonumber(c.count)
+  end
+  if c.complete_arg then
+    opts.complete = c.complete .. "," .. c.complete_arg
+  else
+    opts.complete = c.complete
+  end
+  local command = c.definition
+  if c.callback then
+    command = c.callback
+    opts.desc = c.definition
+  end
+  pcall(vim.api.nvim_create_user_command, name, command, opts)
+end
+
+--- Put the global user commands back to `before`: delete the added ones,
+--- re-create the replaced and the removed ones.
+---@param before table<string, table>
+local function restore_commands(before)
+  local now = vim.api.nvim_get_commands({})
+  for name, c in pairs(now) do
+    local old = before[name]
+    if not old then
+      pcall(vim.api.nvim_del_user_command, name)
+    elseif not same(old, c, COMMAND_FIELDS) then
+      create_command(name, old)
+    end
+  end
+  for name, old in pairs(before) do
+    if not now[name] then
+      create_command(name, old)
+    end
+  end
 end
 
 ---@return table<integer, true>
@@ -105,13 +217,16 @@ end
 
 --- Record the editor state a spec is about to change, and return a function
 --- that puts it back: buffers and windows created since are wiped / closed,
---- user commands, global keymaps and autocmds created since are deleted, and
---- the named global options get their old value back.
+--- autocmds created since are deleted, global keymaps and user commands are
+--- brought back to their recorded state (added ones deleted, replaced or
+--- removed ones set again from their recorded definition), and the named
+--- global options get their old value back.
 ---
 --- The suite runs every spec file in one editor (`isolated = "none"`), so what
 --- one file leaves (`setup()`'s :Commands, the language_nvim autocmds, scratch
 --- buffers) would otherwise reach the next one; the state guard of
---- testing.nvim reports it as a leak.
+--- testing.nvim reports it as a leak. Prefer `H.tracked`, which also restores
+--- when an assertion fails half-way.
 ---@param opts? { options?: string[] }
 ---@return fun()
 function H.track(opts)
@@ -122,7 +237,7 @@ function H.track(opts)
   local wins = to_set(vim.api.nvim_list_wins())
   local bufs = to_set(vim.api.nvim_list_bufs())
   local cmds = vim.api.nvim_get_commands({})
-  local maps = keymap_set()
+  local maps = keymap_snapshot()
   local aus = autocmd_ids()
   local start_win = vim.api.nvim_get_current_win()
 
@@ -140,18 +255,8 @@ function H.track(opts)
         pcall(vim.api.nvim_buf_delete, buf, { force = true })
       end
     end
-    for name in pairs(vim.api.nvim_get_commands({})) do
-      if not cmds[name] then
-        pcall(vim.api.nvim_del_user_command, name)
-      end
-    end
-    for _, mode in ipairs(KEYMAP_MODES) do
-      for _, m in ipairs(vim.api.nvim_get_keymap(mode)) do
-        if not maps[mode .. "\0" .. m.lhs] then
-          pcall(vim.api.nvim_del_keymap, mode, m.lhs)
-        end
-      end
-    end
+    restore_commands(cmds)
+    restore_keymaps(maps)
     for _, a in ipairs(vim.api.nvim_get_autocmds({})) do
       if a.id and not aus[a.id] then
         pcall(vim.api.nvim_del_autocmd, a.id)
@@ -160,6 +265,24 @@ function H.track(opts)
     for name, value in pairs(options) do
       vim.api.nvim_set_option_value(name, value, { scope = "global" })
     end
+  end
+end
+
+--- Run `body` between `H.track(opts)` and its restore, and restore even when
+--- `body` raises (a failed `H.eq` half-way through a spec): the error is
+--- raised again afterwards, unchanged. `opts` may be left out.
+---@param opts? { options?: string[] }|fun()
+---@param body? fun()
+function H.tracked(opts, body)
+  if type(opts) == "function" then
+    opts, body = nil, opts
+  end
+  assert(type(body) == "function", "H.tracked: body must be a function")
+  local restore = H.track(opts --[[@as { options?: string[] }|nil]])
+  local ok, err = pcall(body)
+  restore()
+  if not ok then
+    error(err, 0)
   end
 end
 

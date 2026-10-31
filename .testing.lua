@@ -24,8 +24,9 @@ return {
     deprecation = "error",
     process_net = "error",
     -- The suite leaves no state behind: every spec that runs setup() or creates buffers, windows,
-    -- :Commands, keymaps, autocmds or changes an option wraps itself in H.track() (TESTS/harness.lua),
-    -- which puts all of it back. A spec that leaks again fails the run.
+    -- :Commands, keymaps, autocmds or changes an option wraps itself in H.tracked() (TESTS/harness.lua),
+    -- which puts all of it back, also when an assertion fails half-way. A spec that leaks again fails
+    -- the run.
     -- (isolated = "file" stays off: spell_init_spec needs a downloaded spell file for "de" in the
     -- developer's real stdpath('data'); a hermetic child gets the "Download? [y/N]" prompt and fails.)
     state = "error",
