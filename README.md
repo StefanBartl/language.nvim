@@ -26,7 +26,9 @@
 Spelling, grammar, translation and synonyms in one plugin, all of it
 asynchronous and all of it acting on the buffer you are already in.
 Translation needs no external Neovim plugin — `curl` and the keyless Google
-endpoint work with zero configuration.
+endpoint work with zero configuration. Subtitle files (`.srt`, `.vtt`) are
+recognised on their own: only the cue text is translated, while indices,
+timing lines, headers and tags stay byte-identical.
 
 ---
 
