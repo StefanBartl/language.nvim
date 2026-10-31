@@ -143,6 +143,42 @@ return function(H)
     )
     H.eq(subtitle.detect("", "", { "plain", "prose" }), nil, "prose is not a subtitle")
 
+    -- sniff is structural: one arrow line among paragraphs is still prose
+    local PROSE_ARROW = {
+      "Agenda for Monday",
+      "",
+      "Standup",
+      "10:30 --> 11:00 in room B",
+      "Then we discuss the release.",
+      "",
+      "Lunch is at noon.",
+    }
+    H.eq(subtitle.sniff(PROSE_ARROW), nil, "sniff: prose with an arrow line is prose")
+    H.eq(subtitle.detect("", "", PROSE_ARROW), nil, "detect: ...also in an unnamed buffer")
+    H.eq(
+      subtitle.sniff({ "10:30 --> 11:00 standup", "", "Lunch is at noon." }),
+      nil,
+      "sniff: a timing-looking first block does not make the rest cues"
+    )
+    H.eq(subtitle.sniff(SRT), "srt", "sniff: a real SRT")
+    H.eq(
+      subtitle.sniff({ "\239\187\1911", "00:00:01,000 --> 00:00:02,000", "Hi" }),
+      "srt",
+      "sniff: an SRT with a BOM"
+    )
+    H.eq(
+      subtitle.sniff({
+        "00:01.000 --> 00:02.000",
+        "Hi",
+        "",
+        "NOTE x",
+        "",
+        "00:03.000 --> 00:04.000",
+      }),
+      "srt",
+      "sniff: cues without index and a NOTE block"
+    )
+
     -- translate: SRT ---------------------------------------------------------
     local got = run(marking(), SRT, "srt")
     H.ok(got.ok, "srt: translated")
@@ -295,6 +331,76 @@ return function(H)
     H.eq(after[2], SRT[2], "run: the timing line is untouched")
     H.eq(after[3], ">>Hello there.", "run: the cue is translated, even with --nocode")
     H.eq(after[6], SRT[6], "run: the second timing line is untouched")
+
+    -- translate.run on a range without cue text: no output, no history -------
+    local applied = {}
+    local recorded = {}
+    package.loaded["language.translate.output"] = {
+      apply = function(mode, result)
+        applied[#applied + 1] = { mode = mode, result = result }
+      end,
+    }
+    package.loaded["language.translate.history"] = {
+      record = function(entry)
+        recorded[#recorded + 1] = entry
+      end,
+    }
+    package.loaded["language.translate"] = nil
+    translate = require("language.translate")
+    vim.api.nvim_buf_set_lines(sbuf, 0, -1, false, SRT)
+    local notified = {}
+    local orig_notify = vim.notify
+    vim.notify = function(msg, ...)
+      notified[#notified + 1] = tostring(msg)
+      return orig_notify(msg, ...)
+    end
+    local nt_ok, nt_err = pcall(function()
+      translate.run(
+        "DE",
+        { output = "popup", scope = { kind = "selection", bufnr = sbuf, range = { s = 1, e = 2 } } }
+      )
+      vim.wait(300, function()
+        return #notified > 0 or #applied > 0
+      end)
+    end)
+    vim.notify = orig_notify
+    H.ok(nt_ok, tostring(nt_err))
+    H.eq(#applied, 0, "run: index/timing-only range is not shown as a translation")
+    H.eq(#recorded, 0, "run: ...and not recorded in the history")
+    H.ok(
+      table.concat(notified, "\n"):find("no subtitle cue text", 1, true) ~= nil,
+      "run: the user is told nothing was translated"
+    )
+    package.loaded["language.translate.output"] = nil
+    package.loaded["language.translate.history"] = nil
+
+    -- the translate window: prose with an arrow line goes out whole ----------
+    local window = require("language.translate.window")
+    window.open({ target = "DE", source_lines = PROSE_ARROW })
+    window.refresh()
+    vim.wait(500, function()
+      local ob = window._state().output_buf
+      return ob and vim.api.nvim_buf_get_lines(ob, 0, 1, false)[1] ~= "…"
+    end)
+    local sent_prose = {}
+    for _, l in ipairs(seen) do
+      sent_prose[#sent_prose + 1] = l
+    end
+    H.eq(#sent_prose, #PROSE_ARROW, "window: every prose line goes to the engine")
+    H.eq(sent_prose[1], "Agenda for Monday", "window: ...including the first paragraph")
+    -- subtitle input without cue text: a notice, not the source as translation
+    window.open({ target = "DE", source_lines = { "1", "00:00:01,000 --> 00:00:02,000", "" } })
+    window.refresh()
+    vim.wait(500, function()
+      local ob = window._state().output_buf
+      return ob and vim.api.nvim_buf_get_lines(ob, 0, 1, false)[1] ~= "…"
+    end)
+    H.eq(
+      vim.api.nvim_buf_get_lines(window._state().output_buf, 0, -1, false)[1],
+      "(no subtitle cue text to translate)",
+      "window: no cue text is said, not echoed"
+    )
+    window.close()
     package.loaded["language.translate.providers.registry"] = nil
     package.loaded["language.translate"] = nil
 
