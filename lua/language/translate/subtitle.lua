@@ -48,6 +48,20 @@ local function is_timing(line)
   return line:match(TIMING) ~= nil
 end
 
+---True when one of `lines[s..e]` is a timing line.
+---@param lines string[]
+---@param s integer
+---@param e integer
+---@return boolean
+local function has_timing(lines, s, e)
+  for k = s, e do
+    if is_timing(lines[k]) then
+      return true
+    end
+  end
+  return false
+end
+
 ---Subtitle kind by file name or filetype.
 ---@param name string|nil  a path, a file name, or a filetype
 ---@return "srt"|"vtt"|nil
@@ -75,6 +89,13 @@ end
 ---allowed too. One prose block, and it is prose: a single `10:30 --> 11:00`
 ---line among paragraphs must not turn the rest into untranslated "index"
 ---lines.
+---
+---A fragment cut out of an SRT (pasted into the translate window) is tolerated
+---at its two edges:
+---  - a leading block without a timing line is the text tail of a cue cut in
+---    the middle; it needs at least two whole cues after it, so a paragraph
+---    followed by a single arrow line stays prose
+---  - a trailing block that is a lone index line is the start of the next cue
 ---@param lines string[]
 ---@return "srt"|"vtt"|nil
 function M.sniff(lines)
@@ -82,28 +103,47 @@ function M.sniff(lines)
   if type(first) == "string" and first:gsub("^\239\187\191", ""):match("^WEBVTT") then
     return "vtt"
   end
-  local cues = 0
+  local cues, blocks = 0, 0
+  local leading_stub = false
   local i, n = 1, #lines
   while i <= n do
     if lines[i]:match("^%s*$") then
       i = i + 1
     else
+      blocks = blocks + 1
+      local start = i
       local head = lines[i]
       if i == 1 then
         head = head:gsub("^\239\187\191", "")
       end
       local nxt = lines[i + 1]
-      if is_timing(head) or (head:match("^%s*%d+%s*$") and nxt and is_timing(nxt)) then
-        cues = cues + 1
-      elseif
-        not (opens_with(head, "NOTE") or opens_with(head, "STYLE") or opens_with(head, "REGION"))
-      then
-        return nil
-      end
       while i <= n and not lines[i]:match("^%s*$") do
         i = i + 1
       end
+      local is_last = true
+      for k = i, n do
+        if not lines[k]:match("^%s*$") then
+          is_last = false
+          break
+        end
+      end
+      local lone_index = i - start == 1 and head:match("^%s*%d+%s*$") ~= nil
+      local comment = opens_with(head, "NOTE")
+        or opens_with(head, "STYLE")
+        or opens_with(head, "REGION")
+      if is_timing(head) or (head:match("^%s*%d+%s*$") and nxt and is_timing(nxt)) then
+        cues = cues + 1
+      elseif not comment and blocks == 1 and not has_timing(lines, start, i - 1) then
+        leading_stub = true
+      elseif not (comment or (is_last and lone_index and cues > 0)) then
+        -- Not a NOTE/STYLE/REGION block between cues, nor the index of the next
+        -- cue cut off after it: prose.
+        return nil
+      end
     end
+  end
+  if leading_stub then
+    return cues >= 2 and "srt" or nil
   end
   return cues > 0 and "srt" or nil
 end
@@ -137,6 +177,10 @@ end
 ---line; its text is everything after that line. Lines before the timing line
 ---are the SRT index or the WebVTT identifier. In WebVTT a block opening with
 ---`NOTE`, `STYLE` or `REGION` is never a cue.
+---
+---In SRT the first block may have no timing line: the text tail of a cue that
+---a fragment cut in the middle (see `sniff`). It is cue text as a whole, unless
+---it is a lone index line.
 ---@param lines string[]
 ---@param kind "srt"|"vtt"
 ---@return LanguageSubtitleRange[]
@@ -144,6 +188,7 @@ function M.cue_ranges(lines, kind)
   ---@type LanguageSubtitleRange[]
   local ranges = {}
   local i, n = 1, #lines
+  local first_block = true
   while i <= n do
     if lines[i]:match("^%s*$") then
       i = i + 1
@@ -154,6 +199,8 @@ function M.cue_ranges(lines, kind)
       end
       local last = i - 1
       local skip = false
+      local leading = first_block
+      first_block = false
       if kind == "vtt" then
         local head = lines[first]:gsub("^\239\187\191", "")
         skip = opens_with(head, "NOTE")
@@ -170,6 +217,19 @@ function M.cue_ranges(lines, kind)
           if is_timing(lines[t]) then
             timings[#timings + 1] = t
           end
+        end
+        if
+          #timings == 0
+          and leading
+          and kind == "srt"
+          and not (first == last and lines[first]:match("^%s*%d+%s*$"))
+          and not (
+            opens_with(lines[first], "NOTE")
+            or opens_with(lines[first], "STYLE")
+            or opens_with(lines[first], "REGION")
+          )
+        then
+          ranges[#ranges + 1] = { s = first, e = last }
         end
         for k, t in ipairs(timings) do
           local stop = timings[k + 1] and (timings[k + 1] - 2) or last

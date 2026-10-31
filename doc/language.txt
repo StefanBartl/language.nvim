@@ -187,7 +187,10 @@ Subtitles (SRT and WebVTT)
     Subtitle text is recognised by file name (`.srt`, `.vtt`), filetype, or,
     in an unnamed buffer, by a `WEBVTT` header or by being made of cue blocks
     only (each block opens with a timing line, or with an index line followed
-    by one); one prose paragraph, and the text is prose. Only the text
+    by one); one prose paragraph, and the text is prose. A pasted fragment
+    may start in the middle of a cue (its first block, the cue's text tail,
+    is translated, when at least two whole cues follow) and may end with the
+    index of the next cue. Only the text
     lines of each cue are translated; the index, the timing line, the `WEBVTT`
     header and `NOTE`/`STYLE`/`REGION` blocks are copied byte for byte. Tags
     (`<i>`, `<c.class>`, `<v Name>`, `<00:00:01.000>`) and `{\an8}`
