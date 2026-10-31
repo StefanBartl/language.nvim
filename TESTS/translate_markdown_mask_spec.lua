@@ -168,13 +168,32 @@ return function(H)
 
   -- Linear time, measured against the machine ------------------------------------------------
   -- A fixed wall-clock budget turns red on a slow or busy CI runner (macOS took 2.4 s for a case
-  -- that needs 0.2 s here). So the budget is relative: an ordinary text of the same length is
-  -- masked right before, and the case may take LINEAR_FACTOR times as long (never less than
-  -- 2 s). One measurement can be hit by a load spike: the best of three counts. A quadratic scan
-  -- is far above either: 180 kB of unclosed brackets take 84 s without the scan budget (400 times
-  -- the bounded run, 4 000 times the ordinary text).
-  local LINEAR_FACTOR = 50
+  -- that needs 0.2 s here). So the budget is relative: a plain Lua pass over a text of the same
+  -- length (one callback per word, no code of the plugin) is timed right before, and the case
+  -- may take CALIB_FACTOR times as long (never less than 2 s). The calibration must not call
+  -- mask/unmask: a regression that is quadratic in the number of placeholders would slow such a
+  -- reference by the same factor and widen the budget with it. One measurement can be hit by a
+  -- load spike: the best of three counts. Figures here: the calibration takes 3 ms for 180 kB,
+  -- masking an ordinary text of that length 20 ms, the bounded unclosed brackets 0.2 s; without
+  -- the scan budget they take 84 s.
+  local CALIB_FACTOR = 400
   local ORDINARY = "Ein [Link](a.md) und `Code` im Text, siehe https://x.y/z. "
+
+  ---Seconds the machine needs right now for a plain Lua pass over `n` bytes of ordinary text.
+  ---@param n integer
+  ---@return number seconds
+  local function calibration(n)
+    local text = ORDINARY:rep(math.ceil(n / #ORDINARY))
+    local t0 = vim.uv.hrtime()
+    local words = 0
+    local out = text:gsub("%S+", function(w)
+      words = words + 1
+      return w
+    end)
+    local t = (vim.uv.hrtime() - t0) / 1e9
+    H.ok(#out == #text and words > 0)
+    return t
+  end
 
   ---Seconds to mask and unmask `text`.
   ---@param text string
@@ -195,8 +214,7 @@ return function(H)
   local function linear(label, text)
     local best, budget, masked, mk = math.huge, 2, nil, nil
     for _ = 1, 3 do
-      local ref = elapsed(ORDINARY:rep(math.ceil(#text / #ORDINARY)))
-      budget = math.max(2, LINEAR_FACTOR * ref)
+      budget = math.max(2, CALIB_FACTOR * calibration(#text))
       local t
       t, masked, mk = elapsed(text)
       best = math.min(best, t)

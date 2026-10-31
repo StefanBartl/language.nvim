@@ -426,8 +426,10 @@ return function(H)
   local LIMIT_MS = 50
 
   ---The longest gap of the same 1 ms timer while the loop runs ideally sliced busy work (slices of
-  ---`slice.BUDGET_MS`) for `ms`: what the machine itself adds to every gap (a busy CI runner that
-  ---deschedules the process, a GC step), with no code of the plugin involved.
+  ---`slice.BUDGET_MS`) for `ms`, with no code of the plugin involved. Every gap contains one such
+  ---slice, so the value is one ideal slice plus timer granularity (about 15.6 ms on Windows) plus
+  ---what the machine itself adds (a busy CI runner that deschedules the process, a GC step):
+  ---even an idle machine raises the limit by at least `slice.BUDGET_MS` (local figures: 67-92 ms).
   ---@param ms number
   ---@return number worst_ms
   local function machine_noise(ms)
@@ -454,9 +456,10 @@ return function(H)
 
   ---One measurement can be hit by something outside of the code (a GC step, a busy CI machine):
   ---the better of two runs counts. A real stall of 200 ms shows in both. When both are over
-  ---LIMIT_MS, the limit grows by what the machine adds to an ideally sliced loop right then
-  ---(macOS CI once saw 63.8 / 54.7 ms in both runs, then nothing on the rerun): a slow runner is
-  ---not a stall, a block of the whole document (hundreds of ms) still is.
+  ---LIMIT_MS, the limit grows by the worst gap of an ideally sliced loop right then (one slice
+  ---plus granularity plus machine noise, see machine_noise; macOS CI once saw 63.8 / 54.7 ms in
+  ---both runs, then nothing on the rerun): a slow runner is not a stall, a block of the whole
+  ---document (hundreds of ms) still is.
   ---@param lines string[]
   ---@param make_opts fun(): table
   ---@return table r, number worst_ms, number limit_ms
