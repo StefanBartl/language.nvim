@@ -178,6 +178,47 @@ return function(H)
       "srt",
       "sniff: cues without index and a NOTE block"
     )
+    H.eq(
+      subtitle.sniff({ "NOTE x", "", "00:01.000 --> 00:02.000", "Hi" }),
+      "srt",
+      "sniff: a leading NOTE block is not a cut cue, one cue is enough"
+    )
+
+    -- a fragment cut out of an SRT: it starts in the middle of a cue, or ends with the next cue's index
+    local CUT_HEAD = {
+      "and {\\an8}the second line.",
+      "",
+      "3",
+      "00:00:08,000 --> 00:00:09,000",
+      "Third.",
+      "",
+      "4",
+      "00:00:10,000 --> 00:00:11,000",
+      "Fourth.",
+    }
+    local CUT_TAIL = {
+      "1",
+      "00:00:01,000 --> 00:00:03,500",
+      "Hello there.",
+      "",
+      "2",
+    }
+    H.eq(subtitle.sniff(CUT_HEAD), "srt", "sniff: a fragment that starts in the middle of a cue")
+    H.eq(subtitle.sniff(CUT_TAIL), "srt", "sniff: a fragment that ends with the next index")
+    H.eq(
+      subtitle.sniff({ "Agenda", "", "10:30 --> 11:00 standup", "Lunch is at noon." }),
+      nil,
+      "sniff: a paragraph before a single arrow block stays prose"
+    )
+    H.eq(
+      subtitle.sniff({ "Room 4", "", "1", "00:00:01,000 --> 00:00:02,000", "Hi", "", "Bye", "" }),
+      nil,
+      "sniff: only a lone index is tolerated at the end, not prose"
+    )
+    r = subtitle.cue_ranges(CUT_HEAD, "srt")
+    H.eq(#r, 3, "fragment: the cut cue and two whole cues")
+    H.eq(r[1].s .. "-" .. r[1].e, "1-1", "fragment: the leading tail is cue text")
+    H.eq(#subtitle.cue_ranges(CUT_TAIL, "srt"), 1, "fragment: the trailing index is not cue text")
 
     -- translate: SRT ---------------------------------------------------------
     local got = run(marking(), SRT, "srt")
@@ -399,6 +440,33 @@ return function(H)
       vim.api.nvim_buf_get_lines(window._state().output_buf, 0, -1, false)[1],
       "(no subtitle cue text to translate)",
       "window: no cue text is said, not echoed"
+    )
+    -- SRT fragments: the timing lines and indices come out byte-identical, the engine never sees them
+    for name, frag in pairs({ head = CUT_HEAD, tail = CUT_TAIL }) do
+      window.open({ target = "DE", source_lines = frag })
+      window.refresh()
+      vim.wait(500, function()
+        local ob = window._state().output_buf
+        return ob and vim.api.nvim_buf_get_lines(ob, 0, 1, false)[1] ~= "…"
+      end)
+      local shown = vim.api.nvim_buf_get_lines(window._state().output_buf, 0, -1, false)
+      H.eq(#shown, #frag, ("window %s fragment: same line count"):format(name))
+      for i, l in ipairs(frag) do
+        if l:find("-->", 1, true) or l:match("^%d+$") then
+          H.eq(shown[i], l, ("window %s fragment: line %d is byte-identical"):format(name, i))
+        end
+      end
+      for _, l in ipairs(seen) do
+        H.ok(
+          not l:find("-->", 1, true),
+          ("window %s fragment: no timing line reached the engine"):format(name)
+        )
+      end
+    end
+    H.eq(
+      vim.api.nvim_buf_get_lines(window._state().output_buf, 0, -1, false)[3],
+      ">>Hello there.",
+      "window tail fragment: the cue text is translated"
     )
     window.close()
     package.loaded["language.translate.providers.registry"] = nil
