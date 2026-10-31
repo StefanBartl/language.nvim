@@ -166,20 +166,59 @@ return function(H)
     H.eq(mk.toks[2], "b@a_b.x.example")
   end
 
+  -- Linear time, measured against the machine ------------------------------------------------
+  -- A fixed wall-clock budget turns red on a slow or busy CI runner (macOS took 2.4 s for a case
+  -- that needs 0.2 s here). So the budget is relative: an ordinary text of the same length is
+  -- masked right before, and the case may take LINEAR_FACTOR times as long (never less than
+  -- 2 s). One measurement can be hit by a load spike: the best of three counts. A quadratic scan
+  -- is far above either: 180 kB of unclosed brackets take 84 s without the scan budget (400 times
+  -- the bounded run, 4 000 times the ordinary text).
+  local LINEAR_FACTOR = 50
+  local ORDINARY = "Ein [Link](a.md) und `Code` im Text, siehe https://x.y/z. "
+
+  ---Seconds to mask and unmask `text`.
+  ---@param text string
+  ---@return number seconds, string masked, table mk
+  local function elapsed(text)
+    local t0 = vim.uv.hrtime()
+    local masked, mk = mask.mask(text)
+    local back = mask.unmask(masked, mk)
+    local t = (vim.uv.hrtime() - t0) / 1e9
+    H.eq(back, text, "the text still comes back whole")
+    return t, masked, mk
+  end
+
+  ---Assert that `text` is masked in linear time; returns the best time, the masked text, the mask.
+  ---@param label string
+  ---@param text string
+  ---@return number seconds, string masked, table mk
+  local function linear(label, text)
+    local best, budget, masked, mk = math.huge, 2, nil, nil
+    for _ = 1, 3 do
+      local ref = elapsed(ORDINARY:rep(math.ceil(#text / #ORDINARY)))
+      budget = math.max(2, LINEAR_FACTOR * ref)
+      local t
+      t, masked, mk = elapsed(text)
+      best = math.min(best, t)
+      -- in budget, or so far above it that no load spike explains it: no further run
+      if best < budget or best > 10 * budget then
+        break
+      end
+    end
+    local in_budget = best < budget
+    H.ok(in_budget, ("%s (%.2f s, budget %.2f s)"):format(label, best, budget))
+    if not in_budget then
+      -- the next cases would only run into the time limit of the spec file and hide this one
+      error(label .. ": not linear, the remaining checks of this file are skipped", 0)
+    end
+    return best, masked, mk
+  end
+
   -- look-ahead is bounded: a line of unclosed brackets or parentheses is linear -----
   do
-    local function seconds(text)
-      local t0 = vim.uv.hrtime()
-      local masked, mk = mask.mask(text)
-      H.eq(mask.unmask(masked, mk), text, "and the text still comes back whole")
-      return (vim.uv.hrtime() - t0) / 1e9
-    end
-    local t = seconds(string.rep("[a ", 60000))
-    H.ok(t < 2, ("unclosed brackets (%.2f s)"):format(t))
-    t = seconds(string.rep("[a](", 40000))
-    H.ok(t < 2, ("unclosed destinations (%.2f s)"):format(t))
-    t = seconds(string.rep("`` `", 40000))
-    H.ok(t < 2, ("unmatched backtick runs (%.2f s)"):format(t))
+    linear("unclosed brackets", string.rep("[a ", 60000))
+    linear("unclosed destinations", string.rep("[a](", 40000))
+    linear("unmatched backtick runs", string.rep("`` `", 40000))
     local masked = mask.mask("[Text](a.md) und [Mehr](b.md)")
     H.eq(masked, "{1}Text{2} und {3}Mehr{4}", "ordinary links are not affected by the budget")
   end
@@ -190,17 +229,11 @@ return function(H)
     _, mk = mask.mask("Ein [Link](a.md) und `Code` im Text.")
     H.falsy(mk.degraded, "an ordinary unit is not")
 
-    local function seconds(text)
-      local t0 = vim.uv.hrtime()
-      local masked, m = mask.mask(text)
-      H.eq(mask.unmask(masked, m), text, "the text still comes back whole")
-      return (vim.uv.hrtime() - t0) / 1e9
-    end
-    local t = seconds(string.rep("a", 60000) .. " mail me@example.org")
-    H.ok(t < 2, ("a long word before an address (%.2f s)"):format(t))
-    t =
-      seconds("mail me@example.org ![x](data:image/png;base64," .. string.rep("QUJD", 30000) .. ")")
-    H.ok(t < 2, ("an address next to a data URI (%.2f s)"):format(t))
+    linear("a long word before an address", string.rep("a", 60000) .. " mail me@example.org")
+    linear(
+      "an address next to a data URI",
+      "mail me@example.org ![x](data:image/png;base64," .. string.rep("QUJD", 30000) .. ")"
+    )
     local masked = mask.mask("Mail an max.muster@example.org oder _x@y.de, ok")
     H.eq(
       masked,
@@ -211,20 +244,15 @@ return function(H)
   -- Many addresses, many comment openers: the search for the next special character and for
   -- `-->` is not repeated to the end of the unit once per address / opener -------------
   do
-    local function seconds(text)
-      local t0 = vim.uv.hrtime()
-      local masked, m = mask.mask(text)
-      H.eq(mask.unmask(masked, m), text, "the text still comes back whole")
-      return (vim.uv.hrtime() - t0) / 1e9, masked, m
-    end
-    local t, masked, m = seconds(string.rep("foo@bar.com ", 12000))
-    H.ok(t < 2, ("12000 addresses and no other special character (%.2f s)"):format(t))
+    local _, masked, m =
+      linear("12000 addresses and no other special character", string.rep("foo@bar.com ", 12000))
     H.eq(#m.toks, 12000, "every address is masked")
     H.eq(masked:sub(1, 12), "{1} {2} {3} ", "and in order")
-    t = seconds("Wort " .. string.rep("<!-- ", 30000))
-    H.ok(t < 2, ("30000 unclosed comment openers (%.2f s)"):format(t))
-    t = seconds("Wort [" .. string.rep("<!-- ", 20000) .. "](a.md) -->")
-    H.ok(t < 2, ("comment openers whose `-->` lies beyond the link text (%.2f s)"):format(t))
+    linear("30000 unclosed comment openers", "Wort " .. string.rep("<!-- ", 30000))
+    linear(
+      "comment openers whose `-->` lies beyond the link text",
+      "Wort [" .. string.rep("<!-- ", 20000) .. "](a.md) -->"
+    )
     masked = mask.mask("a <!-- note --> b <!-- c --> d")
     H.eq(masked, "a {1} b {2} d", "closed comments are still masked, each by its own `-->`")
     masked = mask.mask("[x <!-- y](a.md) -->")
@@ -234,12 +262,6 @@ return function(H)
   -- no gsub that restarts at every byte of a run of punctuation, no pattern that backtracks
   -- over a name, no search to the end of the run once per candidate ----------------------------
   do
-    local function seconds(text)
-      local t0 = vim.uv.hrtime()
-      local masked, m = mask.mask(text)
-      H.eq(mask.unmask(masked, m), text, "the text still comes back whole")
-      return (vim.uv.hrtime() - t0) / 1e9
-    end
     local rep = string.rep
     local cases = {
       { "`www.` address, a run of `)`, a letter", "www.a.b" .. rep(")", 40000) .. "x" },
@@ -255,8 +277,7 @@ return function(H)
       { "many `[^` and no `]`", rep("[^", 30000) },
     }
     for _, c in ipairs(cases) do
-      local t = seconds(c[2])
-      H.ok(t < 2, ("%s (%.2f s)"):format(c[1], t))
+      linear(c[1], c[2])
     end
 
     -- the trim of the sentence punctuation is what it was

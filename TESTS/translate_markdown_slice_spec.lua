@@ -425,20 +425,54 @@ return function(H)
 
   local LIMIT_MS = 50
 
+  ---The longest gap of the same 1 ms timer while the loop runs ideally sliced busy work (slices of
+  ---`slice.BUDGET_MS`) for `ms`: what the machine itself adds to every gap (a busy CI runner that
+  ---deschedules the process, a GC step), with no code of the plugin involved.
+  ---@param ms number
+  ---@return number worst_ms
+  local function machine_noise(ms)
+    local worst, last = 0, uv.hrtime()
+    local timer = assert(uv.new_timer())
+    timer:start(1, 1, function()
+      local now = uv.hrtime()
+      worst = math.max(worst, now - last)
+      last = now
+    end)
+    local stop_at = uv.hrtime() + ms * 1e6
+    last = uv.hrtime()
+    vim.wait(ms + 5000, function()
+      local slice_end = uv.hrtime() + slice.BUDGET_MS * 1e6
+      while uv.hrtime() < slice_end do
+      end
+      return uv.hrtime() >= stop_at
+    end, 1)
+    worst = math.max(worst, uv.hrtime() - last)
+    timer:stop()
+    timer:close()
+    return worst / 1e6
+  end
+
   ---One measurement can be hit by something outside of the code (a GC step, a busy CI machine):
-  ---the better of two runs counts. A real stall of 200 ms shows in both.
+  ---the better of two runs counts. A real stall of 200 ms shows in both. When both are over
+  ---LIMIT_MS, the limit grows by what the machine adds to an ideally sliced loop right then
+  ---(macOS CI once saw 63.8 / 54.7 ms in both runs, then nothing on the rerun): a slow runner is
+  ---not a stall, a block of the whole document (hundreds of ms) still is.
   ---@param lines string[]
   ---@param make_opts fun(): table
-  ---@return table r, number worst_ms
+  ---@return table r, number worst_ms, number limit_ms
   local function best_of_two(lines, make_opts)
     local r, w = measured(lines, make_opts())
-    if w >= LIMIT_MS then
+    local limit = LIMIT_MS
+    if w >= limit then
       local r2, w2 = measured(lines, make_opts())
       if w2 < w then
         r, w = r2, w2
       end
+      if w >= limit then
+        limit = LIMIT_MS + machine_noise(1000)
+      end
     end
-    return r, w
+    return r, w, limit
   end
 
   local BIG = build(20000)
@@ -479,7 +513,7 @@ return function(H)
         warm = true
       end
       local label = what .. ", " .. mode
-      local r, worst = best_of_two(lines, function()
+      local r, worst, limit = best_of_two(lines, function()
         return vim.tbl_extend("force", extra or {}, {
           target = "EN",
           cache = cached,
@@ -501,8 +535,12 @@ return function(H)
       H.falsy(r.sync, label .. ": cb never runs before translate_markdown has returned")
       H.eq(r.calls, 1, label .. ": cb exactly once")
       H.ok(
-        worst < LIMIT_MS,
-        ("%s: the event loop was blocked for %.1f ms at a time"):format(label, worst)
+        worst < limit,
+        ("%s: the event loop was blocked for %.1f ms at a time (limit %.1f ms)"):format(
+          label,
+          worst,
+          limit
+        )
       )
       H.ok(r.info.slices >= 10, label .. ": the work was handed back " .. r.info.slices .. " times")
       if cached then
@@ -543,7 +581,7 @@ return function(H)
     H.ok(base.ok, "the unsliced reference run")
     for _, mode in ipairs({ "sync engine", "async engine" }) do
       local label = "a table of 8 800 cells, " .. mode
-      local r, worst = best_of_two(TABLE, function()
+      local r, worst, limit = best_of_two(TABLE, function()
         return {
           target = "EN",
           cache = false,
@@ -557,8 +595,12 @@ return function(H)
       H.eq(r.calls, 1, label .. ": cb exactly once")
       H.ok(r.info.slices > 0, label .. ": the work was handed back " .. r.info.slices .. " times")
       H.ok(
-        worst < LIMIT_MS,
-        ("%s: the event loop was blocked for %.1f ms at a time"):format(label, worst)
+        worst < limit,
+        ("%s: the event loop was blocked for %.1f ms at a time (limit %.1f ms)"):format(
+          label,
+          worst,
+          limit
+        )
       )
       deq(r.res, base.res, label .. ": the unsliced result")
     end
