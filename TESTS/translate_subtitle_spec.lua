@@ -6,6 +6,9 @@
 -- reached the engine can be told from one that did not.
 
 return function(H)
+  -- Every spec file shares one editor: put back what this one creates (see H.track).
+  local restore = H.track()
+
   local subtitle = require("language.translate.subtitle")
   local filter = require("language.translate.filter")
   local files = require("language.translate.files")
@@ -335,4 +338,6 @@ return function(H)
   H.eq(vtt_out[10], VTT[10], "files: the timing line with settings is byte-identical")
   H.eq(vtt_out[11], ">>Welcome, <v Roger>friends</v>.", "files: the vtt cue is translated")
   cleanup()
+
+  restore()
 end

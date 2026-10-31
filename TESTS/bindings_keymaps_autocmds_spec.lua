@@ -5,6 +5,9 @@
 -- debugging.nvim's bindings_spec.lua uses.
 
 return function(H)
+  -- Every spec file shares one editor: put back what this one creates (see H.track).
+  local restore = H.track()
+
   local keymaps = require("language.bindings.keymaps")
   local autocmds = require("language.bindings.autocmds")
   local keymap = require("lib.nvim.bindings.keymap")
@@ -146,4 +149,6 @@ return function(H)
   end
 
   config.setup({})
+
+  restore()
 end

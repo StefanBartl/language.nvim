@@ -3,6 +3,9 @@
 -- word so the caller can still read its own arguments.
 
 return function(H)
+  -- Every spec file shares one editor: put back what this one creates (see H.track).
+  local restore = H.track()
+
   local scope = require("language.scope")
 
   local buf = vim.api.nvim_create_buf(false, true)
@@ -70,4 +73,6 @@ return function(H)
     "2-5",
     "a ranged label names the range"
   )
+
+  restore()
 end

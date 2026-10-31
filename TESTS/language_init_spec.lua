@@ -6,6 +6,9 @@
 -- gating flags.
 
 return function(H)
+  -- Every spec file shares one editor: put back what this one creates (see H.track).
+  local restore = H.track()
+
   local language = require("language")
 
   -- A clean slate regardless of what other specs registered first: this spec
@@ -52,4 +55,6 @@ return function(H)
   H.ok(ok4, "setup() with programming_dict/extra_wordlists enabled does not error")
 
   require("language.config").setup({})
+
+  restore()
 end

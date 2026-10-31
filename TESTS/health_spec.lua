@@ -22,6 +22,9 @@
 -- any machine -- not just one that happens to have a given tool on PATH.
 
 return function(H)
+  -- Every spec file shares one editor: put back what this one creates (see H.track).
+  local restore = H.track()
+
   local config = require("language.config")
 
   -- vim.health.* originals, restored at the very end ------------------------
@@ -433,4 +436,6 @@ return function(H)
   package.loaded["lib.nvim.deps.health"] = nil
   package.loaded["language.health"] = nil
   config.setup({})
+
+  restore()
 end

@@ -7,6 +7,9 @@
 -- bindings_spec.lua uses for `:Debug`.
 
 return function(H)
+  -- Every spec file shares one editor: put back what this one creates (see H.track).
+  local restore = H.track()
+
   ---@type table[]
   local spell_calls, translate_calls, window_calls
 
@@ -206,4 +209,6 @@ return function(H)
   package.loaded["language.translate"] = nil
   package.loaded["language.translate.window"] = nil
   package.loaded["language.bindings.usrcmds"] = nil
+
+  restore()
 end

@@ -7,6 +7,9 @@
 -- without one shows up as a bare row in the cheatsheet, so this fails until it is described.
 
 return function(H)
+  -- Every spec file shares one editor: put back what this one creates (see H.track).
+  local restore = H.track()
+
   local ok, composer = pcall(require, "lib.nvim.bindings.usercmd.composer")
   H.ok(ok, "the composer loads")
 
@@ -129,4 +132,6 @@ return function(H)
     scope_text:find("visible", 1, true) ~= nil,
     "TRANSLATE_SCOPE lists the visible scope: " .. scope_text
   )
+
+  restore()
 end

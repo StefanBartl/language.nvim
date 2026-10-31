@@ -8,6 +8,9 @@
 -- why the failure path below has assertions of its own.
 
 return function(H)
+  -- Every spec file shares one editor: put back what this one creates (see H.track).
+  local restore = H.track()
+
   local config = require("language.config")
 
   ---@type string[]
@@ -216,4 +219,6 @@ return function(H)
   package.loaded["language.translate.providers.registry"] = nil
   package.loaded["language.hover"] = nil
   config.setup({})
+
+  restore()
 end

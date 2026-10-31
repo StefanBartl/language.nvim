@@ -13,6 +13,9 @@
 -- a fresh `list.open()`/`refresh()` call actually repopulated it.
 
 return function(H)
+  -- Every spec file shares one editor: put back what this one creates (see H.track).
+  local restore = H.track({ options = { "spell", "spelllang" } })
+
   local config = require("language.config")
   local list = require("language.spell.ui.list")
 
@@ -153,4 +156,6 @@ return function(H)
   package.loaded["language.spell.ui.panel"] = nil
   package.loaded["language.spell"] = nil
   config.setup({})
+
+  restore()
 end

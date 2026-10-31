@@ -8,6 +8,9 @@
 -- checkout (see TESTS/README.md).
 
 return function(H)
+  -- Every spec file shares one editor: put back what this one creates (see H.track).
+  local restore = H.track({ options = { "operatorfunc" } })
+
   local config = require("language.config")
 
   ---@type table[]
@@ -84,4 +87,6 @@ return function(H)
   package.loaded["language.translate"] = nil
   package.loaded["language.translate.motion"] = nil
   config.setup({})
+
+  restore()
 end

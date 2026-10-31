@@ -4,6 +4,9 @@
 -- this suite's CI checkout — see TESTS/README.md) and is left untested.
 
 return function(H)
+  -- Every spec file shares one editor: put back what this one creates (see H.track).
+  local restore = H.track()
+
   local output = require("language.translate.output")
 
   ---@param bufnr integer
@@ -81,4 +84,6 @@ return function(H)
   output.apply("notify", { "a translated note" }, { bufnr = buf, s = 1, e = 1 })
 
   vim.api.nvim_buf_delete(buf, { force = true })
+
+  restore()
 end

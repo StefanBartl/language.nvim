@@ -80,7 +80,14 @@ misleading failures.
 
 Adding one: write `TESTS/<name>_spec.lua` returning `function(H) ... end`, then
 run `scripts/test.sh` (it is discovered by its `_spec.lua` suffix). `H` is the harness — `eq`, `ok`, `falsy`, `contains`,
-`excludes`, `read` and `fixture`.
+`excludes`, `read`, `fixture` and `track`.
+
+All spec files share one editor, and testing.nvim's state guard runs at `error`
+(`.testing.lua`): a spec that leaves a buffer, window, `:Command`, keymap,
+autocmd or changed option behind fails the run. A spec that calls `setup()` or
+creates any of these starts with `local restore = H.track()` (pass
+`{ options = { ... } }` for global options it changes) and ends with
+`restore()`.
 
 ## Coverage
 

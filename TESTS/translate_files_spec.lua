@@ -7,6 +7,9 @@
 -- `ui.kit` itself is out of scope for this suite.
 
 return function(H)
+  -- Every spec file shares one editor: put back what this one creates (see H.track).
+  local restore = H.track()
+
   local files = require("language.translate.files")
   local config = require("language.config")
 
@@ -242,4 +245,6 @@ return function(H)
 
   config.setup({})
   cleanup()
+
+  restore()
 end

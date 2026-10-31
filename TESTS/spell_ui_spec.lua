@@ -8,6 +8,9 @@
 -- optional trouble.nvim.
 
 return function(H)
+  -- Every spec file shares one editor: put back what this one creates (see H.track).
+  local restore = H.track()
+
   local list = require("language.spell.ui.list")
   local highlights = require("language.spell.ui.highlights")
 
@@ -90,4 +93,6 @@ return function(H)
   highlights.clear()
 
   vim.api.nvim_buf_delete(buf, { force = true })
+
+  restore()
 end

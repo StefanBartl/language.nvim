@@ -15,21 +15,20 @@ return {
   -- "none" = all specs in one nvim, "file" = one nvim per spec file
   -- (nothing leaks from one file into the next).
   isolated = "none",
-  -- Guards (see testing.nvim's docs/GUARDS.md). Measured on this suite: fs, scheduled_error, prompt,
-  -- deprecation and process_net are clean with the allowlist below; state is not.
+  -- Guards (see testing.nvim's docs/GUARDS.md). Measured on this suite: every guard is clean with the
+  -- allowlist below.
   guards = {
     fs = "error",
     scheduled_error = "error",
     prompt = "error",
     deprecation = "error",
     process_net = "error",
-    -- Under isolated = "none" the specs leave what setup() and the code under test create: the
-    -- :Spellcheck / :Translate / :TranslateReplace commands, the language_nvim BufDelete autocmd,
-    -- the <leader>Z.. keymaps, the 'operatorfunc' / 'spell' options and a few scratch buffers.
-    -- Real leaks between spec files: reported (warn) instead of failing the run until the specs clean up.
-    -- isolated = "file" is not an option yet: spell_init_spec needs a downloaded spell file for "de" in
-    -- the developer's real stdpath('data'); a hermetic child gets the "Download? [y/N]" prompt and fails.
-    state = "warn",
+    -- The suite leaves no state behind: every spec that runs setup() or creates buffers, windows,
+    -- :Commands, keymaps, autocmds or changes an option wraps itself in H.track() (TESTS/harness.lua),
+    -- which puts all of it back. A spec that leaks again fails the run.
+    -- (isolated = "file" stays off: spell_init_spec needs a downloaded spell file for "de" in the
+    -- developer's real stdpath('data'); a hermetic child gets the "Download? [y/N]" prompt and fails.)
+    state = "error",
   },
   guard_allow = {
     -- The specs create and remove fixture directories TESTS/.fixture-* inside the repository
