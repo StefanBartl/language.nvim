@@ -1,4 +1,5 @@
 ---@module 'language.translate.providers.ai'
+-- handrolled-ok: a run grace period for the session label, not a throttle
 ---@brief Translation through ai.nvim (Claude, Ollama, OpenAI, Gemini, ...).
 ---@description
 --- A soft companion: ai.nvim is never required at load time, only when a
