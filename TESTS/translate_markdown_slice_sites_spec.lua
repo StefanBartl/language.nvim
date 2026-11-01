@@ -1165,4 +1165,27 @@ return function(H)
     end
     H.eq(r.res[3], "A short paragraph.")
   end
+  -- One table row of 5 000 cells is a single line to the scan: it hands the control back inside it.
+  do
+    local cells = {}
+    for c = 1, 5000 do
+      cells[c] = "c" .. c
+    end
+    local dashes = {}
+    for c = 1, 5000 do
+      dashes[c] = "---"
+    end
+    local row = {
+      "| " .. table.concat(cells, " | ") .. " |",
+      "| " .. table.concat(dashes, " | ") .. " |",
+      "| " .. table.concat(cells, " | ") .. " |",
+    }
+    local ticks = 0
+    local seg = segment.segment(row, function()
+      ticks = ticks + 1
+    end)
+    H.ok(ticks >= 3 + 8, "a 5 000-cell row ticks inside the row: " .. ticks)
+    H.ok(#seg.units >= 10000, "every cell is a unit: " .. #seg.units)
+    H.eq(segment.segment(row).tpl[3][2], seg.tpl[3][2], "the result does not depend on the tick")
+  end
 end

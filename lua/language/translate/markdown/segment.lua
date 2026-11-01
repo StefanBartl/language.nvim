@@ -340,7 +340,7 @@ local function delimiter_cells(line, np)
 end
 
 ---Segment a document.
----`tick` (optional) is called after each line, once the state of the scan is complete: it may
+---`tick` (optional) is called after each line (and every 1024 cells of a table row), once the state of the scan is complete: it may
 ---give the control away (`translate_markdown` slices big documents that way) and returns when the
 ---scan goes on. It must not touch the arguments.
 ---
@@ -568,7 +568,11 @@ function M.segment(lines, tick)
     local ps = pipes(rest)
     local parts, ids = { qpfx }, {}
     local from = 1
+    local cells = 0
     local function cell(a, b)
+      -- A very long row is one line to the loop below: hand the control back inside it.
+      cells = cells + 1
+      if tick and cells % 1024 == 0 then tick() end
       local seg_text = rest:sub(a, b)
       local lead, body = seg_text:match("^([ \t]*)(.*)$")
       local content, tail = trim_right(body)
