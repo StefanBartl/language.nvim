@@ -19,7 +19,7 @@ local M = {}
 ---@field output_buf integer|nil
 ---@field output_win integer|nil
 ---@field target string|nil
----@field timer uv.uv_timer_t|nil
+---@field refresh_debounce Lib.Debounce.Handle|nil
 ---@field job Language.Job|nil
 
 ---@type Language.Translate.WinState
@@ -41,11 +41,9 @@ end
 ---Tear down the window and all its resources (idempotent).
 ---@return nil
 function M.close()
-  if state.timer then
-    pcall(function()
-      state.timer:stop()
-      state.timer:close()
-    end)
+  if state.refresh_debounce then
+    state.refresh_debounce.cancel()
+    state.refresh_debounce = nil
   end
   if state.job then
     pcall(state.job.cancel)
@@ -132,22 +130,11 @@ end
 ---Debounced refresh on input change.
 ---@return nil
 local function on_change()
-  --- CDX: `cfg().timeout_ms and 300 or 300` always evaluates to 300 -- the
-  --- debounce is not actually configurable. Likely meant to read a debounce
-  --- setting that does not exist in the config.
-  local delay = cfg().timeout_ms and 300 or 300
-  if not state.timer then
-    state.timer = vim.uv.new_timer()
+  -- The delay is fixed: `translate` has no debounce setting.
+  if not state.refresh_debounce then
+    state.refresh_debounce = require("lib.nvim.debounce").new(M.refresh, 300)
   end
-  -- `new_timer()` can return nil under libuv handle exhaustion; every other
-  -- timer site in this plugin guards it (spell/live.lua, util/job/init.lua,
-  -- spell/providers/cspell_server.lua) and this one should not be the
-  -- exception that lets a live-translate window go silently unrefreshed.
-  if not state.timer then
-    return
-  end
-  state.timer:stop()
-  state.timer:start(delay, 0, vim.schedule_wrap(M.refresh))
+  state.refresh_debounce.call()
 end
 
 ---Update the target language and re-translate.
