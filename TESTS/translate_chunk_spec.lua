@@ -1227,6 +1227,102 @@ return function(H)
     H.contains(rhtml.result, "HTML page", "and says what came back")
   end
 
+  -- Surviving mutants of the first mutation run (see the list of unkillable ones above) -------
+
+  -- 1. White-space-only lines (spaces, tabs) at a block edge are layout like empty ones: an
+  --    engine that trims them must not lose them, and they are never sent. Every separator
+  --    below is a different kind of white space, so a BLANK that only knows "" fails here.
+  do
+    local ws_doc = {
+      "alpha one",
+      "alpha two",
+      "  ",
+      "beta one",
+      "beta two",
+      "\t",
+      "gamma one",
+      " \t ",
+      "",
+      "delta one",
+      "delta two",
+    }
+    local ws_up = vim.tbl_map(string.upper, ws_doc)
+    local ws_blocks = chunk.split(ws_doc, { max_bytes = 30 })
+    local ws_edges = 0
+    for _, b in ipairs(ws_blocks) do
+      if ws_doc[b.last]:match("^%s+$") then
+        ws_edges = ws_edges + 1
+      end
+    end
+    H.ok(ws_edges > 0, "fixture: a block ends on a white-space-only line")
+
+    local pws = trimming({ max_bytes = 30 })
+    local rws_run = run(pws, ws_doc)
+    H.ok(rws_run.ok(), "a document with white-space-only separators is translated")
+    H.eq(#rws_run.result(), #ws_doc, "the line count is preserved against an engine that trims")
+    H.eq(
+      table.concat(rws_run.result(), "\n"),
+      -- upper() of white space is itself: the separators come back byte for byte
+      table.concat(ws_up, "\n"),
+      "the white-space separators stay exactly as they were"
+    )
+    for _, c in ipairs(pws.calls) do
+      H.falsy(c[1]:match("^%s*$"), "no block is sent with a white-space-only first line")
+      H.falsy(c[#c]:match("^%s*$"), "nor with a white-space-only last line")
+    end
+
+    -- blank throughout (only spaces and tabs): not sent at all, lines kept as they are
+    local pall = fake({ max_bytes = 1000 })
+    local rall = run(pall, { " ", "\t", "  " })
+    H.eq(#pall.calls, 0, "white-space-only lines alone are not sent")
+    H.eq(table.concat(rall.result(), "|"), " |\t|  ", "and come back untouched")
+  end
+
+  -- 2. `limits.cost` decides the budget in split(), in the cut of an over-long line (fit) and
+  --    in the packing of its pieces. A cost that doubles the bytes makes every one of them
+  --    visible; the default cost (bytes + 1) would pack and cut differently.
+  do
+    local doubled = function(line)
+      return #line * 2
+    end
+    local bl = chunk.split(
+      { "aaaa", "bbbb", "cccc", "dddd" },
+      { max_bytes = 10, cost = doubled }
+    )
+    H.eq(#bl, 4, "split(): cost 8 per line under a budget of 10 is one line per block")
+    local plain = chunk.split({ "aaaa", "bbbb", "cccc", "dddd" }, { max_bytes = 10 })
+    H.eq(#plain, 2, "(without a cost function the same lines pair up)")
+
+    local long = "word word word word word"
+    local pieces = chunk.split({ long }, { max_bytes = 12, cost = doubled })
+    H.ok(pieces and #pieces == 5, "fit(): the line is cut into the five words the cost allows")
+    for k, b in ipairs(pieces or {}) do
+      H.eq(#b.pieces, 1, ("pack_pieces(): piece block %d holds one piece (cost 8 of 12)"):format(k))
+      H.ok(doubled(b.pieces[1]) <= 12, "every piece fits the budget in cost units")
+    end
+  end
+
+  -- 3. A clause mark (CJK comma) is a cut only when it ENDS inside the budget: the head handed
+  --    to the picker is the budget plus one byte, and a mark that ends on that extra byte is
+  --    over the budget. Budget 11 -> a piece of at most 10 bytes ("，" is 3 bytes).
+  do
+    local inside = chunk.split({ "aaaaaaa，bbb" }, { max_bytes = 11 })
+    H.ok(inside ~= nil, "a clause mark ending exactly at the budget is a boundary")
+    H.eq(
+      table.concat(
+        vim.tbl_map(function(b)
+          return table.concat(b.pieces, "|")
+        end, inside or {}),
+        ";"
+      ),
+      "aaaaaaa，;bbb",
+      "and the line is cut right after it"
+    )
+    local beyond, err = chunk.split({ "aaaaaaaa，bbb" }, { max_bytes = 11 })
+    H.ok(beyond == nil, "a clause mark ending one byte past the budget is no boundary")
+    H.contains(err or "", "no sentence or word boundary", "so the line is refused, not cut inside it")
+  end
+
   package.loaded["language.util.job"] = real_job
   package.loaded["language.translate.providers.registry"] = nil
   package.loaded["language.translate.providers.google"] = nil
