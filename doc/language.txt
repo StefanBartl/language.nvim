@@ -233,6 +233,8 @@ arguments:
     cwd         recursively across the working directory (always async)
     path=<p>    a file OR a directory (recursive)
     selection   a visual/line range (mainly for :Translate)
+    cword       the word under the cursor (:Translate; character-exact through
+                `run_region`, see |language-hover|)
 
 `path=<p>` expands `~` and environment variables only (not Vim's `%`/`#`/
 `<cfile>`/`<cword>` specials, and no shell/backtick command substitution) —
