@@ -368,7 +368,7 @@ function M.wrap(provider)
     end
     local blocks, err = M.split(lines, limits)
     if not blocks then
-      cb(false, ("%s: %s"):format(provider.name, err or "input too large"))
+      cb(false, ("%s: %s"):format(provider.name, err or "input too large"), "input")
       return nil
     end
     local total = #blocks
@@ -380,7 +380,8 @@ function M.wrap(provider)
           provider.name,
           total,
           cap
-        )
+        ),
+        "input"
       )
       return nil
     end

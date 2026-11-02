@@ -34,7 +34,23 @@ pre-composer.
 Google (keyless `gtx` endpoint, default, zero configuration), DeepL
 (`deepl.api_key` or `$DEEPL_API_KEY`), `translate-shell`, or a custom CLI —
 `opts.translate.fallback` is an ordered list tried if the selected engine
-is unavailable.
+is unavailable **or its request fails**.
+
+What the chain means:
+
+- The chain is `engine` followed by `fallback`, minus duplicates and engines that
+  are unavailable (no key, no `curl`, ...). Nothing outside it is ever tried: the
+  text only goes to engines you wrote down yourself. The default `fallback = { "google" }`
+  therefore changes nothing; add `"deepl"` or `"shell"` to get a second engine.
+- A request that fails (timeout, HTTP error such as the 429 of the keyless Google
+  endpoint, a page instead of JSON) moves the whole call on to the next engine of the
+  chain. A hint names the engine that answered; if every engine fails, only the last
+  error is reported.
+- No switch for an error in the input itself (a line that cannot be cut, more requests
+  than `translate.max_blocks`), for a cancel, and never away from the `ai` engine (a
+  policy refusal is final). `translate_markdown` uses the first available engine only:
+  its unit cache is keyed by the engine that translated. A call with `engine = ...`
+  has no fallback chain at all.
 
 - **Module:** `translate/providers/{google,deepl,shell,ai,custom,registry}.lua`
 - **Config:** `opts.translate.engine`, `opts.translate.fallback` (default `{"google"}`), `opts.translate.deepl.api_key`

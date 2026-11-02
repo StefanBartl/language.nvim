@@ -310,7 +310,11 @@ Which providers run per scope is controlled by `spell.providers` (see
                 element in the ANSI code page (`ü` -> 0xFC, CJK -> `?`).
 
 `translate.engine` selects the engine; `translate.fallback` is a chain tried
-when the chosen engine is unavailable (e.g. deepl without a key -> google).
+when the chosen engine is unavailable (e.g. deepl without a key -> google) or
+when its request fails (timeout, HTTP error, no translation in the answer):
+the call then goes on with the next engine of the chain, and a hint names the
+one that answered. Only engines you listed are ever tried; nothing is
+switched for an error of the input, and never away from the `ai` engine.
 
 Large inputs are split on line boundaries (blank lines preferred) into blocks
 that fit the engine, translated one after the other and joined again with the

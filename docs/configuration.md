@@ -46,7 +46,7 @@ require("language").setup({
   },
   translate = {
     engine = "google",           -- "google" (keyless) | "deepl" | "shell" | "ai" | "custom"
-    fallback = { "google" },     -- engine chain used if the selected engine is unavailable
+    fallback = { "google" },     -- engine chain used if the selected engine is unavailable or its request fails (only listed engines are tried)
     default_output = "popup",    -- popup | replace | buffer | vsplit | split | tab | insert | clipboard | notify
     default_target = nil,        -- fixed target language for motion/visual maps; nil = selection
                                  -- (the hover falls back to "EN" instead: it has nowhere to ask from)

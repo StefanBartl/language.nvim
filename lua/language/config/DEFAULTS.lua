@@ -79,7 +79,7 @@ local defaults = {
 
   translate = {
     engine = "google", -- "google"|"deepl"|"shell"|"ai"|<custom>
-    fallback = { "google" }, -- engine fallback chain (graceful degradation)
+    fallback = { "google" }, -- engines tried after `engine` when it is unavailable or its request fails (only these)
     default_output = "popup", -- "popup"|"replace"|"buffer"|"vsplit"|"split"|"tab"|"insert"|"clipboard"|"notify"
     default_input = "selection", -- selection|clipboard|input
     default_langs = { "EN", "DE", "FR", "ZH", "JA" },

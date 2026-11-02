@@ -572,7 +572,7 @@ function M.translate_markdown(lines, opts, cb)
       if opts.engine then
         rcfg = vim.tbl_extend("force", tr, { engine = opts.engine, fallback = {} })
       end
-      provider, perr = reg.resolve(rcfg)
+      provider, perr = reg.resolve(rcfg, { failover = false })
     end
     if not provider and not opts.cache_only then
       finish(false, perr or "no available translate engine")

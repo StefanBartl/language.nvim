@@ -14,7 +14,7 @@
 ---@field cache_id?  fun(cfg: LanguageTranslateCfg): string  -- identity (model, prompt version) that joins the unit cache key of `translate_markdown`
 ---@field blocked?   fun(cfg: LanguageTranslateCfg): string|nil -- why the engine is unusable although configured; the registry then reports it instead of falling back
 
----@alias LanguageTranslateResultCb fun(ok: boolean, result: string[]|string)
+---@alias LanguageTranslateResultCb fun(ok: boolean, result: string[]|string, kind?: "input") -- `kind = "input"` on a failure: the input itself is the problem (too large, too many requests), another engine would not help
 
 --- Translate `lines` to `target` (optionally from `source`, else auto). Invokes
 --- `cb` exactly once with the translated lines, or ok=false + an error message.
