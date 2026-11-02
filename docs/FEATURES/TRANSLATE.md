@@ -455,9 +455,11 @@ not deterministic, so the engine distrusts every answer.
 - **Chunking.** The engine declares `limits` for the chunk wrapper: at most 60
   lines per request and `max_chars` minus the system prompt, counted as JSON.
   `translate.max_blocks` applies as for every engine.
-- **Run label and budget.** Calls within 5 s of each other share one bulk label
-  (one document is many calls), so `concurrency` and `max_total_chars` hold per
-  run; a later run starts a fresh label with a fresh `max_total_chars` budget.
+- **Run label and budget.** Every `translate_markdown` call is one run, and so is
+  every other translate call (its blocks share the run); all requests of a run
+  share one bulk label, so `concurrency` and `max_total_chars` hold per run, however
+  long a pause is in the middle. The next run starts a fresh label with a fresh
+  `max_total_chars` budget, however close it follows.
   The old label is **not** reset: `bulk.reset(label)` would give its characters
   back to ai.nvim's session cap (`config.bulk.max_session_chars`), which must
   keep counting every run of the session.

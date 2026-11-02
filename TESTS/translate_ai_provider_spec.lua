@@ -104,8 +104,10 @@ return function(H)
   H.eq(q.bulk.concurrency, 2, "concurrency from the defaults")
   H.eq(q.bulk.max_total_chars, 500000, "cumulative cap from the defaults")
 
-  -- the label is shared inside one run
-  call(ai, { "again" })
+  -- the label is shared inside one run (the caller names it)
+  fake.requests = {}
+  call(ai, { "first" }, { run_id = "r1" })
+  call(ai, { "again" }, { run_id = "r1" })
   H.eq(fake.requests[2].bulk.label, fake.requests[1].bulk.label, "calls of one run share the label")
 
   -- fenced JSON is tolerated, nothing else ------------------------------------
@@ -267,6 +269,17 @@ return function(H)
     H.ok(#vim.json.decode(req.prompt) <= 60, "no request over 60 elements")
     H.ok(#req.prompt + #req.system <= 6000, "every request fits max_chars")
   end
+  do
+    local labels = {}
+    for _, req in ipairs(fake.requests) do
+      labels[req.bulk.label] = true
+    end
+    H.eq(vim.tbl_count(labels), 1, "all blocks of one chunked call share one run label")
+    local first = fake.requests[1].bulk.label
+    fake.requests = {}
+    call(p, lines)
+    H.ok(fake.requests[1].bulk.label ~= first, "the next chunked call is a run of its own")
+  end
   fake.requests = {}
   local big = {}
   for i = 1, 40 do
@@ -325,6 +338,17 @@ return function(H)
   H.ok(m1.ok, "translate_markdown through the ai engine succeeds")
   H.eq(#m1.res, #doc, "line count kept")
   H.eq(m1.res[3], "EIN ABSATZ MIT TEXT.", "the answer is used")
+  do
+    -- one run per document: two documents translated right after each other get separate budgets
+    local n0 = #fake.requests
+    helpers.run({ "# Eins", "", "Erster Text." }, { target = "EN", cache = false, cfg = cfg })
+    helpers.run({ "# Zwei", "", "Zweiter Text." }, { target = "EN", cache = false, cfg = cfg })
+    H.ok(#fake.requests >= n0 + 2, "both documents went to the engine")
+    H.ok(
+      fake.requests[n0 + 1].bulk.label ~= fake.requests[#fake.requests].bulk.label,
+      "translate_markdown names one run per document"
+    )
+  end
   local first = #fake.requests
   md_run()
   H.eq(#fake.requests, first, "a second run is served from the cache")
@@ -348,18 +372,32 @@ return function(H)
       end,
     }
     ai = ai_mod()
+    -- two runs, however close together: named by the caller, not by a time window
+    local r1 = call(ai, { "a" }, { run_id = "doc-1" })
+    local r2 = call(ai, { "b" }, { run_id = "doc-2" })
+    -- one run, however long the pause between its calls
     local real_hrtime, offset = vim.uv.hrtime, 0
     vim.uv.hrtime = function()
       return real_hrtime() + offset
     end
-    local r1 = call(ai, { "a" })
-    offset = offset + 10 * 1e9
-    local r2 = call(ai, { "b" })
+    local r3 = call(ai, { "c" }, { run_id = "doc-2" })
+    offset = offset + 60 * 1e9
+    local r4 = call(ai, { "d" }, { run_id = "doc-2" })
     vim.uv.hrtime = real_hrtime
-    H.ok(r1.ok and r2.ok, "both runs succeed")
+    H.ok(r1.ok and r2.ok and r3.ok and r4.ok, "all calls succeed")
+    local labels = {}
+    for k = 1, 4 do
+      labels[k] = fake.requests[#fake.requests - 4 + k].bulk.label
+    end
+    H.ok(labels[1] ~= labels[2], "two documents right after each other have budgets of their own")
+    H.eq(labels[3], labels[2], "the same run id keeps the label")
+    H.eq(labels[4], labels[2], "...also after a pause of a minute (no time window)")
+    call(ai, { "e" })
+    call(ai, { "f" })
+    local n = #fake.requests
     H.ok(
-      fake.requests[2].bulk.label ~= fake.requests[1].bulk.label,
-      "a run after the grace period has a label of its own"
+      fake.requests[n].bulk.label ~= fake.requests[n - 1].bulk.label,
+      "calls without a run id are runs of their own"
     )
     H.eq(#resets, 0, "...and the old label is not reset (it would refund the session cap)")
   end

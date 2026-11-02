@@ -335,6 +335,16 @@ local function text_span(lines, first, last)
   return lo, hi
 end
 
+local run_seq = 0
+
+---A fresh id for one translation run. Engines that budget per run (the `ai` engine's bulk
+---label) read it from `cfg.run_id`; the caller of a run sets it, `wrap` does when nobody has.
+---@return string
+function M.new_run_id()
+  run_seq = run_seq + 1
+  return tostring(run_seq)
+end
+
 ---Wrap `provider` so oversized inputs are translated block by block. The
 ---provider's own `translate` is called unchanged for each block.
 ---@param provider LanguageTranslateProvider
@@ -348,6 +358,10 @@ function M.wrap(provider)
 
   ---@type LanguageTranslateFn
   wrapped.translate = function(lines, target, source, cfg, cb)
+    if type(cfg) ~= "table" or cfg.run_id == nil then
+      -- every block of this call belongs to one run
+      cfg = vim.tbl_extend("force", cfg or {}, { run_id = M.new_run_id() })
+    end
     local limits = M.limits_for(provider, cfg)
     if not limits or #lines == 0 then
       return inner(lines, target, source, cfg, cb)

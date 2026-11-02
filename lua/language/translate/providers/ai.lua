@@ -1,5 +1,4 @@
 ---@module 'language.translate.providers.ai'
--- handrolled-ok: a run grace period for the session label, not a throttle
 ---@brief Translation through ai.nvim (Claude, Ollama, OpenAI, Gemini, ...).
 ---@description
 --- A soft companion: ai.nvim is never required at load time, only when a
@@ -18,6 +17,9 @@
 ---     configured `ai` engine either (`blocked`).
 ---   * the bulk label is shared by the calls of one run (a document is many
 ---     calls), so `concurrency` and `max_total_chars` hold for the document.
+---     A run is named by the caller (`cfg.run_id`, set by `translate_markdown`
+---     per document and by the chunk wrapper per translate call), never
+---     guessed from timing.
 ---   * `cache_id` names provider, model, prompt version and glossary/style for
 ---     the unit cache of `translate_markdown`, so a model switch never serves
 ---     old translations.
@@ -40,8 +42,6 @@ local FALLBACK = { max_chars = 6000, concurrency = 2, max_total_chars = 500000 }
 local RESERVE = 400
 -- A larger array makes the model lose count; the chunk wrapper cuts at this.
 local MAX_LINES = 60
--- A call within this many ms of the previous one still belongs to its run.
-local RUN_GRACE_NS = 5 * 1e9
 
 ---Positive integer from config, else `default`.
 ---@param v any
@@ -291,27 +291,23 @@ function M.cache_id(cfg)
 end
 
 -- One bulk label per run, so concurrency and `max_total_chars` hold for a whole
--- document although it arrives as many calls.
-local run = { n = 0, label = nil, active = 0, last_end = 0 }
+-- document although it arrives as many calls. The caller names the run
+-- (`cfg.run_id`); a call without one is a run of its own.
+local standalone = 0
 
+---@param cfg table|nil
 ---@return string
-local function enter_run()
-  local now = vim.uv.hrtime()
-  if run.active == 0 and (not run.label or now - run.last_end > RUN_GRACE_NS) then
-    -- No `bulk.reset(old label)` here: it hands the characters of that run back to the
-    -- session total, which would let every new run start below `max_session_chars` (the
-    -- cost cap of the whole session) however much was sent before. A new label has a
-    -- fresh `max_total_chars` budget of its own anyway.
-    run.n = run.n + 1
-    run.label = ("language.nvim:translate:%d:%d"):format(vim.uv.os_getpid(), run.n)
+local function run_label(cfg)
+  local id = type(cfg) == "table" and cfg.run_id or nil
+  if id == nil then
+    standalone = standalone + 1
+    id = "s" .. standalone
   end
-  run.active = run.active + 1
-  return run.label
-end
-
-local function leave_run()
-  run.active = math.max(0, run.active - 1)
-  run.last_end = vim.uv.hrtime()
+  -- No `bulk.reset(old label)` for a finished run: it hands the characters of that run
+  -- back to the session total, which would let every new run start below
+  -- `max_session_chars` (the cost cap of the whole session) however much was sent before.
+  -- A new label has a fresh `max_total_chars` budget of its own anyway.
+  return ("language.nvim:translate:%d:%s"):format(vim.uv.os_getpid(), tostring(id))
 end
 
 ---@internal
@@ -420,7 +416,7 @@ function M.translate(lines, target, source, cfg, cb)
   local ai = load_ai() --[[@as table]]
   local a = settings(cfg)
   local sig = signature(a)
-  local label = enter_run()
+  local label = run_label(cfg)
 
   local cancelled, finished = false, false
   local handle ---@type table|nil
@@ -432,7 +428,6 @@ function M.translate(lines, target, source, cfg, cb)
       return
     end
     finished = true
-    leave_run()
     if not cancelled then
       cb(ok, result)
     end
@@ -494,7 +489,6 @@ function M.translate(lines, target, source, cfg, cb)
         return
       end
       cancelled = true
-      leave_run()
       if handle and type(handle.kill) == "function" then
         pcall(handle.kill, handle)
       end
